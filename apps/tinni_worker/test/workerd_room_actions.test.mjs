@@ -16,7 +16,7 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
     external: ['cloudflare:workers'],
   });
   const secret = 'isolated-workerd-secret';
-  const mf = new Miniflare({
+  const mf = new Miniflare({ workers: [{ name: 'tinni-action-test',
     modules: true, scriptPath, compatibilityDate: '2026-09-23',
     bindings: { SESSION_SECRET: secret },
     r2Buckets: ['EFFECT_MEDIA'],
@@ -25,7 +25,7 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
       ['FRUIT_GAME','FruitGameStore'], ['FRUIT_PARTY','FruitPartyStore'],
       ['STAFF_AUTH','StaffAuthStore'],
     ].map(([binding,className]) => [binding,{className,useSQLite:true}])),
-  });
+  }] });
   t.after(async () => { await mf.dispose(); rmSync(folder,{recursive:true,force:true}); });
   async function seed(index,createRoom=false) {
     const response = await mf.dispatchFetch('https://test.local/__fixture/user', {
@@ -61,9 +61,9 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
   assert.equal(retry.members.find(x=>x.user_id===guest.user.user_id).mic_enabled,true);
   const wsResponse=await mf.dispatchFetch(
     'https://test.local/room-presence/live?room_id='+roomId+'&auth_token='+encodeURIComponent(guest.token),
-    {headers:{Upgrade:'websocket'}},
+    {headers:{Upgrade:'websocket',authorization:'Bearer '+guest.token}},
   );
-  assert.equal(wsResponse.status,101,await wsResponse.clone().text());
+  if (wsResponse.status !== 101) assert.fail(await wsResponse.text());
   const socket=wsResponse.webSocket;
   socket.accept();
   t.after(()=>socket.close());
