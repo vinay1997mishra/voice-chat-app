@@ -1,3 +1,4 @@
+import { RoomPresenceStore } from '../../src/room_presence.js';
 import worker from '../../src/index.js';
 export { StaffAuthStore, AppDirectoryStore, RoomPresenceStore, FruitGameStore, FruitPartyStore } from '../../src/index.js';
 export default {
@@ -20,3 +21,14 @@ export default {
     return worker.fetch(request, env, ctx);
   },
 };
+
+export class LegacyRoomPresenceStore extends RoomPresenceStore {
+  constructor(ctx, env) {
+    ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS room_runtime_settings(
+        id INTEGER PRIMARY KEY,mic_mode TEXT NOT NULL DEFAULT 'apply',updated_at INTEGER NOT NULL);
+      INSERT OR IGNORE INTO room_runtime_settings(id,mic_mode,updated_at) VALUES(1,'apply',17);
+    `);
+    super(ctx, env);
+  }
+}

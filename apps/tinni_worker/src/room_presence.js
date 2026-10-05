@@ -98,15 +98,7 @@ export class RoomPresenceStore extends DurableObject {
         owner_comments_clear_version INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
-      INSERT OR IGNORE INTO room_runtime_settings (
-        id,
-        mic_mode,
-        public_screen_enabled,
-        comments_clear_version,
-        owner_comments_clear_version,
-        updated_at
-      )
-      VALUES (1, 'apply', 0, 0, 0, 0);
+
 
       CREATE TABLE IF NOT EXISTS room_lucky_numbers (
         id TEXT PRIMARY KEY,
@@ -155,6 +147,20 @@ export class RoomPresenceStore extends DurableObject {
         }
       }
     }
+
+    // Existing rooms may have the original settings table. Add its missing
+    // columns before preparing any INSERT that references newer settings.
+    this.ctx.storage.sql.exec(`
+      INSERT OR IGNORE INTO room_runtime_settings (
+        id,
+        mic_mode,
+        public_screen_enabled,
+        comments_clear_version,
+        owner_comments_clear_version,
+        updated_at
+      )
+      VALUES (1, 'apply', 0, 0, 0, 0);
+    `);
   }
 
   _activeSocketUserIds() {

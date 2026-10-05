@@ -18,7 +18,7 @@ function source(file) {
 function storeClass(file, name) {
   return new Function('DurableObject', 'countryDay', 'premiumGiftCatalog', 'rocketPolicy', 'rocketAllocation', 'rocketDraw', source(file) + '\nreturn ' + name)(DurableObject, countryDay, premiumGiftCatalog, rocketPolicy, rocketAllocation, rocketDraw);
 }
-export function runtime() {
+export function runtime({ legacyRoomSettings = false } = {}) {
   const databases = [];
   const objects = new Map();
   const env = { SESSION_SECRET: 'isolated-test-session-secret',
@@ -29,9 +29,13 @@ export function runtime() {
     FruitGameStore: storeClass('fruit_game.js', 'FruitGameStore'),
     FruitPartyStore: storeClass('fruit_party.js', 'FruitPartyStore'),
   };
-  function context() {
+  function context(binding) {
     const db = new DatabaseSync(':memory:');
     databases.push(db);
+    if (binding === 'ROOM_PRESENCE' && legacyRoomSettings) {
+      db.exec(`CREATE TABLE room_runtime_settings(id INTEGER PRIMARY KEY,mic_mode TEXT NOT NULL DEFAULT 'apply',updated_at INTEGER NOT NULL);
+        INSERT INTO room_runtime_settings(id,mic_mode,updated_at) VALUES(1,'free',17);`);
+    }
     let alarm = null;
     return {
       storage: {
@@ -81,7 +85,7 @@ export function runtime() {
       idFromName: value => value,
       get(id) {
         const key = binding + ':' + id;
-        if (!objects.has(key)) objects.set(key, new classes[name](context(), env));
+        if (!objects.has(key)) objects.set(key, new classes[name](context(binding), env));
         const target = objects.get(key);
         return new Proxy(target, {
           get(object, property) {

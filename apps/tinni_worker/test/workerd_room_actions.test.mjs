@@ -7,7 +7,8 @@ import { join } from 'node:path';
 import { buildSync } from 'esbuild';
 import { Miniflare } from 'miniflare';
 
-test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement', { timeout: 60000 }, async t => {
+for (const legacy of [false,true]) {
+test('real Workers RPC: '+(legacy ? 'legacy settings migration, ' : '')+'room entry, seat controls and WebSocket acknowledgement', { timeout: 60000 }, async t => {
   const folder = mkdtempSync(join(tmpdir(), 'tinni-workerd-'));
   const scriptPath = join(folder, 'entry.mjs');
   buildSync({
@@ -22,7 +23,7 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
     bindings: { SESSION_SECRET: secret },
     r2Buckets: ['EFFECT_MEDIA'],
     durableObjects: Object.fromEntries([
-      ['APP_DIRECTORY','AppDirectoryStore'], ['ROOM_PRESENCE','RoomPresenceStore'],
+      ['APP_DIRECTORY','AppDirectoryStore'], ['ROOM_PRESENCE',legacy ? 'LegacyRoomPresenceStore' : 'RoomPresenceStore'],
       ['FRUIT_GAME','FruitGameStore'], ['FRUIT_PARTY','FruitPartyStore'],
       ['STAFF_AUTH','StaffAuthStore'],
     ].map(([binding,className]) => [binding,{className,useSQLite:true}])),
@@ -119,3 +120,5 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
   const again = await action('/room-presence/seat-take',owner,{room_id:roomId,seat_index:0});
   assert.equal(again.members.find(x=>x.user_id===owner.user.user_id).seat_index,0);
 });
+
+}
