@@ -55,6 +55,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   Timer? _hold;
   int _generation = 0;
   bool _foreground = true;
+  bool _recipientFlight = false;
 
   @override
   void initState() {
@@ -94,7 +95,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   }
 
   void _next() {
-    if (!mounted || _event != null || !_foreground) return;
+    if (!mounted || _event != null || _recipientFlight || !_foreground) return;
     if (!widget.enabled) {
       widget.queue.clear();
       return;
@@ -111,7 +112,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   }
 
   void _resume() {
-    if (_event == null || !_foreground || !widget.enabled) return;
+    if ((_event == null && !_recipientFlight) || !_foreground || !widget.enabled) return;
     _hold?.cancel();
     final token = ++_generation;
     final remaining = Duration(
@@ -120,7 +121,13 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     );
     _motion.forward();
     _hold = Timer(remaining, () {
-      if (mounted && token == _generation) _finish();
+      if (mounted && token == _generation) {
+        if (_recipientFlight) {
+          _finishRecipientFlight();
+        } else {
+          _finish();
+        }
+      }
     });
   }
 
@@ -130,6 +137,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     _generation++;
     _motion.stop();
     _event = null;
+    _recipientFlight = false;
     if (releaseLane) widget.lane?.cancel(this);
   }
 
@@ -137,8 +145,26 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     final event = _event;
     if (!mounted || event == null) return;
     _cancel(releaseLane: false);
+    final countryFlag = event.gift.id.startsWith('flag-');
+    if (countryFlag) {
+      // Keep the screen clear while the existing room flight shrinks to the DP.
+      _recipientFlight = true;
+      _motion.duration = const Duration(milliseconds: 1450);
+      _motion.value = 0;
+    }
     setState(() {});
     widget.onDelivered(event);
+    if (!mounted) return;
+    if (countryFlag) {
+      _resume();
+    } else {
+      widget.lane?.release(this);
+      _next();
+    }
+  }
+
+  void _finishRecipientFlight() {
+    _cancel(releaseLane: false);
     widget.lane?.release(this);
     if (mounted) _next();
   }
@@ -152,7 +178,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
       _hold?.cancel();
       _generation++;
       _motion.stop();
-    } else if (_event != null) {
+    } else if (_event != null || _recipientFlight) {
       _resume();
     } else {
       _next();

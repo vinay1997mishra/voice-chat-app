@@ -348,4 +348,40 @@ void main() {
     queue.dispose();
   });
 
+  testWidgets('queued Rocket cannot hide a shrinking country recipient flight',
+      (tester) async {
+    final queue = GiftSceneQueue(), lane = CinematicLane();
+    final completed = ValueNotifier<int?>(0);
+    final delivered = <GiftSceneEvent>[];
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: Stack(
+      fit: StackFit.expand,
+      children: [
+        GiftSceneOverlay(queue: queue, lane: lane, onDelivered: delivered.add),
+        RocketLaunchOverlay(completed: completed, lane: lane),
+      ],
+    ))));
+    queue.add(GiftSceneEvent(
+      gift: PremiumGiftCatalog.find('flag-in')!, recipients: ['receiver'],
+    ));
+    await tester.pump();
+    final stage = tester.getSize(find.byKey(const Key('country-flag-large-center')));
+    final viewport = tester.getSize(find.byType(Scaffold));
+    expect(stage.height, greaterThan(viewport.height / 2));
+    expect(stage.width, greaterThan(viewport.width * .9));
+    completed.value = 1;
+    await tester.pump(const Duration(seconds: 2));
+    await tester.pump();
+    expect(delivered.single.recipients, ['receiver']);
+    expect(find.byKey(const Key('rocket-nine-second-launch')), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1449));
+    expect(find.byKey(const Key('rocket-nine-second-launch')), findsNothing);
+    await tester.pump(const Duration(milliseconds: 1));
+    await tester.pump();
+    expect(find.byKey(const Key('rocket-nine-second-launch')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox());
+    queue.dispose();
+    lane.dispose();
+    completed.dispose();
+  });
+
 }
