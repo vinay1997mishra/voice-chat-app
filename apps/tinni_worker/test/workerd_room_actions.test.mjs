@@ -17,6 +17,7 @@ test('real Workers RPC: room entry, seat controls and WebSocket acknowledgement'
   });
   const secret = 'isolated-workerd-secret';
   const mf = new Miniflare({
+    rootPath: folder, modulesRoot: folder,
     modules: true, scriptPath, compatibilityDate: '2025-08-29',
     bindings: { SESSION_SECRET: secret },
     r2Buckets: ['EFFECT_MEDIA'],
