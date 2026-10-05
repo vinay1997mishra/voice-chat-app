@@ -82,15 +82,11 @@ void main() {
   setUp(() { _permissions = _Permissions(); });
   testWidgets('HTTP-only seat and mic work, repeated force preserves mic, leave allows rejoin',(tester) async {
     final rtc=_Rtc(), presence=_Presence(), session=_session(rtc,presence);
-    print('Recovery test: opening room');
     await session.open(_room,userId:'me',authToken:'token');
-    print('Recovery test: room opened');
     expect(presence.hasConnectionProblem,false);
     await session.takeMySeat(0);
-    print('Recovery test: seat confirmed');
     expect(session.controller!.mySeat,0);
     await session.toggleMyMic();
-    print('Recovery test: microphone published');
     expect(rtc.publishingMic,true);
     expect(presence.members.single.micMuted,false);
     presence.selfSeatForced=true;presence.selfForcedSeatIndex=0;presence.notifyListeners();

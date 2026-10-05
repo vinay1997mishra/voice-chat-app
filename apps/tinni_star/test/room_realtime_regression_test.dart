@@ -82,14 +82,15 @@ void main() {
     expect(session, contains("throw StateError('Room presence reconnect pending')"));
   });
 
-  test('room reconnect state stays visible and diagnostics are emitted', () {
+  test('real connection failure stays visible and healthy HTTP fallback avoids a permanent warning', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
     final presence =
         File('lib/room/room_presence_service.dart').readAsStringSync();
     final state = File('lib/app/tinni_state.dart').readAsStringSync();
 
     expect(room, contains("Key('room-connection-retrying')"));
-    expect(room, contains("'Room reconnecting…'"));
+    expect(room, contains("presence.hasConnectionProblem"));
+    expect(room, contains("'Voice unavailable • Tap to retry'"));
     expect(room, contains("'Connection problem • retrying…'"));
     expect(presence, contains('bool liveReconnecting = false;'));
     expect(presence, contains("'room_transport_failure'"));
