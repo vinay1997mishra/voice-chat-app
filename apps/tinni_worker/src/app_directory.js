@@ -1,3 +1,4 @@
+import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
 import { premiumGiftCatalog } from './premium_gift_catalog.js';
 import { DurableObject } from "cloudflare:workers";
@@ -219,6 +220,9 @@ function rowToRoom(row) {
             Number(row.receiving_exp || 0),
       ),
     ),
+    rocket_launch_level: Number(row.rocket_launch_level || 0),
+    rocket_launched_at: Number(row.rocket_launched_at || 0),
+    rocket_priority_until: Number(row.rocket_priority_until || 0),
     announcement: row.announcement ? String(row.announcement) : "",
     category: row.category ? String(row.category) : "",
     privacy: row.privacy ? String(row.privacy) : "public",
@@ -4985,6 +4989,9 @@ export class AppDirectoryStore extends DurableObject {
               u.avatar_data_url AS owner_avatar_data_url,
               u.flag_emoji AS owner_flag_emoji,
               COALESCE(pc.member_count, 0) AS member_count,
+              COALESCE(rb.level,0) AS rocket_launch_level,
+              COALESCE(rb.launched_at,0) AS rocket_launched_at,
+              COALESCE(rb.expires_at,0) AS rocket_priority_until,
               COALESCE(pc.member_count, 0) * 500 AS active_user_exp,
               COALESCE(gx.gift_coins, 0) AS sending_exp,
               COALESCE(gx.gift_coins, 0) AS receiving_exp,
@@ -5647,6 +5654,8 @@ export class AppDirectoryStore extends DurableObject {
 
   _ensureRocketTables() {
     this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS rocket_room_boosts (
+        room_id TEXT PRIMARY KEY, level INTEGER NOT NULL, launched_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS rocket_rooms (
         room_id TEXT PRIMARY KEY, total INTEGER NOT NULL DEFAULT 0);
       CREATE TABLE IF NOT EXISTS rocket_contributions (
@@ -5718,6 +5727,21 @@ export class AppDirectoryStore extends DurableObject {
     }
   }
 
+
+  _boostRocketRoom(roomId,level,now) {
+    this._ensureRocketTables();
+    const room=this._roomRow(roomId);
+    if (!room || Number(room.closed || 0)===1) return;
+    const zoneOverrides=this._ownerSetting("country_time_zones",{});
+    const day=countryDay(String(room.country_code || ""),now,zoneOverrides?.[room.country_code] || "");
+    this.ctx.storage.sql.exec(`INSERT INTO rocket_room_boosts(room_id,level,launched_at,expires_at)
+      VALUES(?,?,?,?) ON CONFLICT(room_id) DO UPDATE SET
+      level=CASE WHEN rocket_room_boosts.expires_at<=? THEN excluded.level ELSE MAX(rocket_room_boosts.level,excluded.level) END,
+      launched_at=CASE WHEN rocket_room_boosts.expires_at<=? OR excluded.level>=rocket_room_boosts.level
+        THEN excluded.launched_at ELSE rocket_room_boosts.launched_at END,
+      expires_at=excluded.expires_at`,roomId,level,now,day.resets_at,now,now);
+  }
+
   _recordRocketGift(roomId,senderId,value,now) {
     const previous = Number(this.ctx.storage.sql.exec("SELECT total FROM rocket_rooms WHERE room_id=?",roomId).toArray()[0].total);
     for (const slice of rocketAllocation(previous,value)) {
@@ -5728,6 +5752,7 @@ export class AppDirectoryStore extends DurableObject {
       if (this.ctx.storage.sql.exec("SELECT 1 FROM rocket_completions WHERE room_id=? AND level=?",roomId,slice.level).toArray().length) continue;
       this.ctx.storage.sql.exec("INSERT INTO rocket_completions(room_id,level,completed_at,historical) VALUES(?,?,?,0)",
         roomId,slice.level,now);
+      this._boostRocketRoom(roomId,slice.level,now);
       const room = this._roomRow(roomId);
       this.ctx.storage.sql.exec(`INSERT INTO country_ribbons
         (id,country_code,kind,priority,room_id,user_id,user_name,avatar_data_url,amount,game_key,created_at,expires_at)
@@ -10924,6 +10949,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
     async listRooms() {
+    this._ensureRocketTables();
     this._pruneRoomThemes();
     const onlineCutoff = Date.now() - 90000;
     return this.ctx.storage.sql.exec(
@@ -10938,6 +10964,7 @@ export class AppDirectoryStore extends DurableObject {
                 + (COALESCE(gx.gift_coins, 0) * 2) AS room_experience
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
+         LEFT JOIN rocket_room_boosts rb ON rb.room_id=r.id AND rb.expires_at>?
          LEFT JOIN (
            SELECT room_id, COUNT(*) AS member_count
              FROM app_user_presence
@@ -10955,11 +10982,12 @@ export class AppDirectoryStore extends DurableObject {
          ) gx ON gx.room_id = r.id
         WHERE COALESCE(r.closed, 0) = 0
           AND COALESCE(r.locked, 0) = 0
-        ORDER BY room_experience DESC,
+        ORDER BY COALESCE(rb.level,0) DESC, COALESCE(rb.launched_at,0) DESC,
+                 room_experience DESC,
                  COALESCE(pc.member_count, 0) DESC,
                  r.created_at DESC
         LIMIT 500`,
-      onlineCutoff,
+      Date.now(),onlineCutoff,
     ).toArray().map(rowToRoom);
   }
 

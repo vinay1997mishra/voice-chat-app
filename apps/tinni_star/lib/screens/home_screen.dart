@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -104,6 +105,8 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _notificationVoice = true;
   bool _notificationVibration = true;
   bool _roomFloatingOnly = false;
+  Timer? _rocketRoomRefresh;
+  bool _roomsSyncRunning = false;
 
   @override
   void initState() {
@@ -114,6 +117,9 @@ class _HomeScreenState extends State<HomeScreen> {
         ? 'Select country'
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
+    _rocketRoomRefresh = Timer.periodic(const Duration(seconds: 3), (_) {
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? false)) _syncRooms();
+    });
     _syncPartyRankPreviews();
     _syncNotifications();
     if (account != null) {
@@ -122,6 +128,9 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _syncRooms() async {
+    if (_roomsSyncRunning || !mounted) return;
+    _roomsSyncRunning = true;
+    try {
     await widget.state.refreshAuthenticatedAccount();
     final account = widget.state.auth.current;
     if (account == null) return;
@@ -131,6 +140,7 @@ class _HomeScreenState extends State<HomeScreen> {
     } catch (_) {
       // Keep the last real server snapshot while reconnecting.
     }
+    } finally { _roomsSyncRunning = false; }
   }
 
   Future<void> _syncPartyRankPreviews() async {
@@ -332,6 +342,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
+    _rocketRoomRefresh?.cancel();
     _pageController.dispose();
     super.dispose();
   }

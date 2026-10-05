@@ -33,6 +33,9 @@ class RoomSummary {
     this.activeUserExp = 0,
     this.sendingExp = 0,
     this.receivingExp = 0,
+    this.rocketLaunchLevel = 0,
+    this.rocketLaunchedAt = 0,
+    this.rocketPriorityUntil = 0,
   });
 
   final String id;
@@ -66,6 +69,9 @@ class RoomSummary {
   final int activeUserExp;
   final int sendingExp;
   final int receivingExp;
+  final int rocketLaunchLevel, rocketLaunchedAt, rocketPriorityUntil;
+
+  int rocketPriorityAt(DateTime now) => rocketPriorityUntil > now.millisecondsSinceEpoch ? rocketLaunchLevel : 0;
 
   bool createdWithin(
     Duration age, {
@@ -106,6 +112,9 @@ class RoomSummary {
     int? activeUserExp,
     int? sendingExp,
     int? receivingExp,
+    int? rocketLaunchLevel,
+    int? rocketLaunchedAt,
+    int? rocketPriorityUntil,
   }) =>
       RoomSummary(
         id: id,
@@ -137,6 +146,9 @@ class RoomSummary {
         activeUserExp: activeUserExp ?? this.activeUserExp,
         sendingExp: sendingExp ?? this.sendingExp,
         receivingExp: receivingExp ?? this.receivingExp,
+        rocketLaunchLevel: rocketLaunchLevel ?? this.rocketLaunchLevel,
+        rocketLaunchedAt: rocketLaunchedAt ?? this.rocketLaunchedAt,
+        rocketPriorityUntil: rocketPriorityUntil ?? this.rocketPriorityUntil,
       );
 }
 
@@ -800,10 +812,14 @@ class DiscoveryService {
       activeUserExp: _asInt(row['active_user_exp']),
       sendingExp: _asInt(row['sending_exp']),
       receivingExp: _asInt(row['receiving_exp']),
+      rocketLaunchLevel: _asInt(row['rocket_launch_level']),
+      rocketLaunchedAt: _asInt(row['rocket_launched_at']),
+      rocketPriorityUntil: _asInt(row['rocket_priority_until']),
     );
   }
 
-  List<RoomSummary> recommend({String? country}) {
+  List<RoomSummary> recommend({String? country, DateTime? now}) {
+    final reference = now ?? DateTime.now();
     // Party must only show active, unlocked rooms. Empty rooms stay available
     // to Mine/Recent/Search but are hidden from the public Party feed.
     final visibleRooms =
@@ -813,6 +829,13 @@ class DiscoveryService {
         : visibleRooms.where((room) => room.country == country).toList();
     final sorted = List<RoomSummary>.from(filtered)
       ..sort((a, b) {
+        final aRocket = a.rocketPriorityAt(reference), bRocket = b.rocketPriorityAt(reference);
+        final rocketOrder = bRocket.compareTo(aRocket);
+        if (rocketOrder != 0) return rocketOrder;
+        if (aRocket > 0 && bRocket > 0) {
+          final launchOrder = b.rocketLaunchedAt.compareTo(a.rocketLaunchedAt);
+          if (launchOrder != 0) return launchOrder;
+        }
         final expOrder = b.roomExperience.compareTo(a.roomExperience);
         if (expOrder != 0) return expOrder;
         final onlineOrder = b.online.compareTo(a.online);
