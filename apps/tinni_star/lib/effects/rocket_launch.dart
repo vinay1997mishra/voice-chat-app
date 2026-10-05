@@ -235,7 +235,6 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
   Timer? _launchTimer;
   int? _seen;
   int? _level;
-  bool _holding=false;
   @override void initState() {
     super.initState();
     _seen=widget.completed.value;
@@ -255,7 +254,7 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     for(var level=previous+1;level<=next&&level<=10;level++) {
       _queue.add(level);
     }
-    if(_level==null||_holding) {
+    if(_level==null) {
       _next();
     }
   }
@@ -265,18 +264,13 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     }
     _launchTimer?.cancel();
     if(_queue.isNotEmpty) {
-      setState(() {
-        _level=_queue.removeAt(0);
-        _holding=false;
-      });
+      setState(()=>_level=_queue.removeAt(0));
       _flight.forward(from:0);
       _launchTimer=Timer(const Duration(seconds:9),_next);
       return;
     }
-    if(_level!=null) {
-      setState(()=>_holding=true);
-      _flight.repeat(period:const Duration(milliseconds:900));
-    }
+    setState(()=>_level=null);
+    _flight.stop();
   }
   @override void dispose() {
     _launchTimer?.cancel();
@@ -289,44 +283,35 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     return IgnorePointer(child:RepaintBoundary(child:AnimatedBuilder(
       animation:_flight,builder:(context,child)=>LayoutBuilder(builder:(context,c) {
         final t=_flight.value;
-        // Every Rocket level has its own flight motion. The nine-second
-        // launch uses that level's path, then the latest unlocked Rocket
-        // stays visible with a live flame until the next level launches.
+        // Every Rocket level has its own nine-second flight animation.
+        // If another level is queued it starts next; otherwise the overlay ends.
         final width=math.min(c.maxWidth*.30,140.0);
         final motion=_rocketFlightMotion(_level!,t);
-        final launchY=c.maxHeight*.60-
+        final y=c.maxHeight*.60-
             motion.yFactor*(c.maxHeight*.48);
-        final holdY=c.maxHeight*.10+math.sin(t*math.pi*2)*4;
-        final y=_holding?holdY:launchY;
         final baseLeft=(c.maxWidth-width)/2;
-        final x=_holding?0.0:motion.x;
         final launchThrust=(t/.18).clamp(0.0,1.0)*
             (0.90+0.10*math.sin(t*180))*motion.thrustBoost;
-        final holdThrust=0.92+0.08*math.sin(t*math.pi*2);
-        final thrust=_holding?holdThrust:launchThrust;
-        final atmosphereT=_holding?1.0:t;
         return Stack(key:const Key('rocket-nine-second-launch'),children:[
           Positioned.fill(child:CustomPaint(painter:_LaunchAtmosphere(
-            t:atmosphereT,level:_level!,padY:c.maxHeight*.60+width*1.18))),
-          if(!_holding)
-            Positioned(top:36,left:16,right:16,child:Opacity(
-              opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
-                Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
-                Text('LEVEL $_level • UNIQUE LAUNCH',style:const TextStyle(color:Colors.white,fontSize:13,letterSpacing:3)),
-              ]))),
+            t:t,level:_level!,padY:c.maxHeight*.60+width*1.18))),
+          Positioned(top:36,left:16,right:16,child:Opacity(
+            opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
+              Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
+              Text('LEVEL $_level • UNIQUE LAUNCH',style:const TextStyle(color:Colors.white,fontSize:13,letterSpacing:3)),
+            ]))),
           Positioned(
-            key:_holding?const Key('rocket-holding-flame'):null,
             top:y,
-            left:baseLeft+x,
+            left:baseLeft+motion.x,
             child:Transform.rotate(
-              angle:_holding?0:motion.rotation,
+              angle:motion.rotation,
               child:Transform.scale(
-                scale:_holding?1:motion.scale,
+                scale:motion.scale,
                 child:RocketModel(
                   key:ValueKey('launch-rocket-$_level'),
                   level:_level!,
                   size:width,
-                  thrust:thrust,
+                  thrust:launchThrust,
                 ),
               ),
             ),
