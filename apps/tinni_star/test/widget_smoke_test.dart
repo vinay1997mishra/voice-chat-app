@@ -465,8 +465,13 @@ void main() {
     await tester.tap(
       find.byKey(const Key('room-rocket-floating-button')),
     );
-    await tester.pumpAndSettle();
+    // Reward frames animate continuously; wait for the modal transition.
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
     expect(find.byKey(const Key('room-rocket-panel')), findsOneWidget);
+    for (var rank = 1; rank <= 3; rank++) {
+      expect(find.byKey(Key('rocket-top-$rank-reward')), findsOneWidget);
+    }
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
