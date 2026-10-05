@@ -12,7 +12,16 @@ Future<HttpClientRequest> openBackendRequest(
 }) async {
   var accepting = true;
   try {
-    return await client.openUrl(method, uri).then((request) {
+    final opening = switch (method.toUpperCase()) {
+      'GET' => client.getUrl(uri),
+      'POST' => client.postUrl(uri),
+      'PUT' => client.putUrl(uri),
+      'PATCH' => client.patchUrl(uri),
+      'DELETE' => client.deleteUrl(uri),
+      'HEAD' => client.headUrl(uri),
+      _ => client.openUrl(method, uri),
+    };
+    return await opening.then((request) {
       // Release a request that finishes connecting after its caller timed out.
       if (!accepting) request.abort();
       return request;
@@ -38,10 +47,4 @@ Future<String> readBackendResponse(
   HttpClientResponse response, {
   Duration timeout = backendRequestTimeout,
 }) =>
-    utf8.decoder
-        .bind(response)
-        .timeout(timeout, onTimeout: (sink) {
-          sink.addError(TimeoutException('Server response timed out', timeout));
-          sink.close();
-        })
-        .join();
+    utf8.decoder.bind(response).join().timeout(timeout);
