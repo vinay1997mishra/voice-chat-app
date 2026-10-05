@@ -5,8 +5,9 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/games/fruit_party_game.dart';
 import 'package:tinni_star/games/fruit_party_remote.dart';
 import 'package:tinni_star/screens/casino_fruit_panel.dart';
+class _RealHttp extends HttpOverrides {}
 void main() {
-  test('Fruit Party server Lucky result retains all three payout fruits',() async {
+  test('Fruit Party server Lucky result retains all three payout fruits',()=>HttpOverrides.runWithHttpOverrides(() async {
     final server=await HttpServer.bind(InternetAddress.loopbackIPv4,0);
     final now=DateTime.now().millisecondsSinceEpoch;
     server.listen((request) async {
@@ -29,7 +30,7 @@ void main() {
       expect(remote.history.single.bonusFruits,[FruitPartyKind.lemon,FruitPartyKind.banana,FruitPartyKind.cherry]);
       expect(remote.walletBalance,12345);
     } finally { remote.dispose();await server.close(force:true); }
-  });
+  },_RealHttp()));
   testWidgets('Party Lucky is visible in the real casino panel',(tester) async {
     final source=ValueNotifier<int>(0);
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:CasinoGameDock(
