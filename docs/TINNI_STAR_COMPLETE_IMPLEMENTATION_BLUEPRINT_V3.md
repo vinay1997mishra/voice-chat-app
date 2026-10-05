@@ -1265,3 +1265,15 @@ Unless explicitly changed by Platform Owner:
 - Switching rooms or login sessions closes the previous presence transport before opening its replacement. Closing/disposal invalidates pending connections and prevents new retries.
 - Recovering the same presence snapshot still notifies room controls when connectivity or an error changes. Authoritative HTTP seat placement remains usable during WebSocket recovery.
 - Fruit Jackpot and Fruit Party share an in-flight state refresh, bound response/header/body waits, and refresh disconnected state before a bet. Failed authentication/server responses display their actual error. Bet submissions are never automatically replayed after an ambiguous network failure.
+
+## App entry and confirmed action recovery — October 5, 2026
+
+- Render the app after local session restore; remote configuration refresh runs in the background.
+- Shared backend connections, response headers and response bodies have bounded waits. A timed-out mutation must never be replayed automatically.
+- Confirmed unauthorized account responses expire only the matching current session and reset authenticated navigation. Temporary network errors preserve the login.
+- Gift Festival uses authenticated server gift transactions and a real current-room recipient; only confirmed transactions show success and update the server wallet.
+- Gifts and random room draws are not automatically retried after an ambiguous response. A successful gift transaction remains successful when secondary room visual delivery fails.
+- Retrying acquisition of the same occupied seat returns authoritative state without resetting that user's microphone.
+- Successful Unique ID purchases immediately synchronize the authenticated account, profile and persisted identity. Purchase controls reject concurrent submissions.
+
+- Unique ID and store catalogs use asynchronous Durable Object RPC methods; routes must await catalog/purchase results and must never access remote private storage.

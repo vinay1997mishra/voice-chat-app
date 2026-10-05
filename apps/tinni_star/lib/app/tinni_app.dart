@@ -18,13 +18,17 @@ class TinniStarApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
+    return AnimatedBuilder(
+      animation: state.auth,
+      builder: (context, _) => MaterialApp(
+      key: ValueKey(state.auth.current?.authToken),
       debugShowCheckedModeBanner: false,
       title: 'Tinni Star',
       theme: buildRoyalTheme(),
       home: state.auth.isLoggedIn
           ? TinniShell(state: state)
           : LoginScreen(state: state),
+      ),
     );
   }
 }

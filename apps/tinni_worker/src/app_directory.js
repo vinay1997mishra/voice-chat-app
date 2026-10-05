@@ -8061,6 +8061,12 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  uniqueIdCatalog() {
+    return this.ctx.storage.sql.exec(
+      "SELECT public_id,price_coins,duration_days,assigned_user_id,enabled,updated_at FROM owner_unique_ids WHERE enabled = 1 ORDER BY LENGTH(public_id), public_id"
+    ).toArray();
+  }
+
   purchaseUniqueId(userIdValue, publicIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const requestedId = String(publicIdValue || "").trim();

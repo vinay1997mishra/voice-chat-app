@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 enum LoginProvider { google, facebook, email }
 
 class TinniAccount {
@@ -65,7 +67,7 @@ class TinniAccount {
   }
 }
 
-class AuthService {
+class AuthService extends ChangeNotifier {
   TinniAccount? _current;
 
   TinniAccount? get current => _current;
@@ -76,8 +78,14 @@ class AuthService {
       throw StateError('Authenticated user ID and token are required');
     }
     _current = account;
+    notifyListeners();
   }
 
-  void forcedLogout() => _current = null;
-  void deleteAccount() => _current = null;
+  void forcedLogout() {
+    if (_current == null) return;
+    _current = null;
+    notifyListeners();
+  }
+
+  void deleteAccount() => forcedLogout();
 }

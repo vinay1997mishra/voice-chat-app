@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -40,7 +41,10 @@ Future<void> main() async {
     await state.push.register(state.auth.current!.userId);
   }
 
-  await state.refreshRemoteConfig();
+  // Render the app before optional network configuration can delay entry.
+  runApp(TinniStarApp(state: state));
+  unawaited(state.refreshRemoteConfig());
+  if (restored) unawaited(state.refreshAuthenticatedAccount(force: true));
   state.analytics.event('app_start', <String, Object?>{
     'auth_restored': restored,
   });
@@ -52,5 +56,4 @@ Future<void> main() async {
   await bridge.start();
   state.attachConnectorBridge(bridge);
 
-  runApp(TinniStarApp(state: state));
 }

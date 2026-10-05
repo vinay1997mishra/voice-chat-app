@@ -1554,6 +1554,10 @@ export class RoomPresenceStore extends DurableObject {
     const current = this.ctx.storage.sql.exec(
       "SELECT seat_index FROM room_members WHERE user_id = ? LIMIT 1", userId,
     ).toArray()[0];
+    if (current?.seat_index !== null && current?.seat_index !== undefined &&
+        Number(current.seat_index) === seatIndex) {
+      return { ...this._presenceStateFor(userId), seat_index: seatIndex };
+    }
     if (current?.seat_index !== null && current?.seat_index !== undefined) {
       throw new Error("Leave your current seat first");
     }

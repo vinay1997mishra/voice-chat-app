@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 import 'package:flutter/foundation.dart';
 
 class SocialUser {
@@ -193,7 +195,7 @@ class SocialService {
   void unfollow(String userId) => following.remove(userId);
 
   Future<void> syncFollowing(String authToken) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/social/following'),
     );
     request.headers.set(
@@ -201,7 +203,7 @@ class SocialService {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -220,7 +222,7 @@ class SocialService {
   }
 
   Future<void> syncFriends(String authToken) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/social/friends'),
     );
     request.headers.set(
@@ -228,7 +230,7 @@ class SocialService {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -263,7 +265,7 @@ class SocialService {
   }
 
   Future<void> syncBlocked(String authToken) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/social/blocked'),
     );
     request.headers.set(
@@ -271,7 +273,7 @@ class SocialService {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -294,7 +296,7 @@ class SocialService {
     required String targetUserId,
     required bool value,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/social/block'),
     );
     request.headers.contentType = ContentType.json;
@@ -308,7 +310,7 @@ class SocialService {
         'blocked': value,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -329,7 +331,7 @@ class SocialService {
     required String targetUserId,
     required bool value,
   }) async {
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/social/follow'),
     );
     request.headers.contentType = ContentType.json;
@@ -343,7 +345,7 @@ class SocialService {
         'following': value,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -391,7 +393,7 @@ class SocialService {
   }
 
   Future<List<MessageThread>> syncInbox(String authToken) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/messages/inbox'),
     );
     request.headers.set(
@@ -399,7 +401,7 @@ class SocialService {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -491,7 +493,7 @@ class SocialService {
     required String myUserId,
     required String peerUserId,
   }) async {
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/messages',
         queryParameters: <String, String>{
@@ -505,7 +507,7 @@ class SocialService {
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -570,7 +572,7 @@ class SocialService {
     }
     if (blocked.contains(to)) throw StateError('User is blocked');
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/messages'),
     );
     request.headers.contentType = ContentType.json;
@@ -584,7 +586,7 @@ class SocialService {
         'text': value,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -630,7 +632,7 @@ class SocialService {
       throw StateError('Invalid image');
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/message-media'),
     );
     request.headers.contentType = ContentType.json;
@@ -644,7 +646,7 @@ class SocialService {
         'data_url': dataUrl,
       }),
     );
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -678,7 +680,7 @@ class SocialService {
   }
 
   Future<Map<String, dynamic>> _readJson(HttpClientResponse response) async {
-    final body = await utf8.decoder.bind(response).join();
+    final body = await readBackendResponse(response);
     final trimmed = body.trim();
     if (trimmed.isEmpty) return <String, dynamic>{};
 

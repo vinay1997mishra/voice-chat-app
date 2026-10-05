@@ -153,10 +153,32 @@ jobs:
         run: |
           set -euo pipefail
           base="https://tinni-star-api.mishrajii7991.workers.dev"
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$base/health"
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health"
           echo
-          curl --fail-with-body --silent --show-error --retry 5 --retry-delay 2 "$base/health/deep"
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health/deep"
           echo
+
+      - name: Verify live app provider configuration
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 3 "https://tinni-star-api.mishrajii7991.workers.dev/app-config" -o /tmp/tinni-app-config.json
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          config = json.loads(Path("/tmp/tinni-app-config.json").read_text())
+          assert config.get("ok") is True, "App configuration failed"
+          readiness = {
+              "google": bool(config.get("google_server_client_id")),
+              "facebook": bool(config.get("facebook_configured")),
+              "email_otp": bool(config.get("email_otp_configured")),
+              "livekit": bool(config.get("livekit_configured")),
+              "media_storage": bool(config.get("effect_media_configured")),
+              "image_moderation": bool(config.get("image_moderation_configured")),
+          }
+          print("Provider configuration readiness: " + json.dumps(readiness))
+          Path("/tmp/tinni-app-readiness.json").write_text(json.dumps(readiness, indent=2))
+          PY
 
       - name: Build installable APK
         working-directory: apps/tinni_star

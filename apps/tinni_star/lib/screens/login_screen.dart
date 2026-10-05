@@ -158,20 +158,25 @@ class _LoginScreenState extends State<LoginScreen> {
     if (!_authConfigLoaded) {
       try {
         final config = await _api.loadConfig();
+        String? googleError;
         if (config.googleServerClientId != null) {
-          await GoogleSignIn.instance.initialize(
-            serverClientId: config.googleServerClientId,
-          );
+          try {
+            await GoogleSignIn.instance.initialize(
+              serverClientId: config.googleServerClientId,
+            ).timeout(const Duration(seconds: 15));
+          } catch (error) {
+            googleError = error.toString().replaceFirst('Bad state: ', '');
+          }
         }
         if (!mounted) return false;
         setState(() {
           _authConfigLoaded = true;
-          googleReady = config.googleServerClientId != null;
+          googleReady = config.googleServerClientId != null && googleError == null;
           facebookReady = config.facebookConfigured;
           emailReady = config.emailOtpConfigured;
-          googleSetupError = googleReady
+          googleSetupError = googleError ?? (googleReady
               ? null
-              : 'Google login setup is not configured yet.';
+              : 'Google login setup is not configured yet.');
           facebookSetupError = facebookReady
               ? null
               : 'Facebook login setup is not configured yet.';

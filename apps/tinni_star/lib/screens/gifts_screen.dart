@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../economy/economy.dart';
 import '../effects/effect_queue.dart';
+import '../infra/app_backend_service.dart';
+import 'store_screen.dart';
 import '../ui/royal_theme.dart';
 
 class GiftsScreen extends StatefulWidget {
@@ -15,6 +17,7 @@ class GiftsScreen extends StatefulWidget {
 
 class _GiftsScreenState extends State<GiftsScreen> {
   String category = 'Popular';
+  bool sending = false;
 
   Color _giftColor(GiftDefinition gift, int index) {
     final id = (gift.id + ' ' + gift.name).toLowerCase();
@@ -51,36 +54,85 @@ class _GiftsScreenState extends State<GiftsScreen> {
     }
   }
 
-  List<GiftDefinition> get gifts => const [
+  List<GiftDefinition> get gifts {
+    const all = <GiftDefinition>[
         GiftDefinition(id: 'gold-dragon', name: 'Golden Dragon', price: 5000, effectKind: 'mp4'),
         GiftDefinition(id: 'royal-crown', name: 'Royal Crown', price: 2500, effectKind: 'pag'),
         GiftDefinition(id: 'star-castle', name: 'Star Castle', price: 12000, effectKind: 'mp4'),
-        GiftDefinition(id: 'heart-ring', name: 'Heart Ring', price: 1800, effectKind: 'svga'),
+        GiftDefinition(id: 'cp-heart', name: 'CP Heart', price: 44444, effectKind: 'svga'),
         ...GiftService.catalog,
       ];
+    if (category == 'CP') return all.where((gift) => gift.id == 'cp-heart').toList();
+    if (category == 'Luxury') return all.where((gift) => gift.price >= 1000 && gift.id != 'cp-heart').toList();
+    if (category == 'Normal') return all.where((gift) => gift.price < 1000).toList();
+    return all;
+  }
 
-  void send(GiftDefinition gift) {
-    final tx = widget.state.gifts.send(
-      gift: gift,
-      quantity: 1,
-      maxCombo: 1000,
-      senderId: '10000000',
-      receiverIds: const ['room-owner'],
-    );
-    if (tx != null) {
-      widget.state.effects.enqueue(
-        EffectRequest(
-          id: 'gift-ui-' + widget.state.gifts.sent.length.toString(),
-          kind: EffectKind.gift,
-          asset: gift.effectKind + ':' + gift.id,
-          priority: 60,
-        ),
+  Future<void> send(GiftDefinition gift) async {
+    if (sending) return;
+    final account = widget.state.auth.current;
+    final session = widget.state.roomSession;
+    final room = session.room;
+    if (account == null || room == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Join a voice room and select a recipient to send a gift.')),
       );
+      return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(tx == null ? 'Insufficient coins.' : gift.name + ' sent.')),
+    final members = session.liveMembers.where((member) => member.userId != account.userId).toList();
+    final recipient = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Send gift to'),
+        children: [
+          if (members.isEmpty) const Padding(
+            padding: EdgeInsets.all(16),
+            child: Text('No other users are in this room yet.'),
+          ),
+          for (final member in members) SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, member.userId),
+            child: Text(member.displayName),
+          ),
+        ],
+      ),
     );
-    setState(() {});
+    if (!mounted || recipient == null || sending) return;
+    setState(() => sending = true);
+    try {
+      final response = await session.sendGift(
+        roomId: room.id, authToken: account.authToken,
+        giftId: gift.id, giftName: gift.name, quantity: 1,
+        unitPrice: gift.price, receiverIds: [recipient],
+      );
+      final wallet = response['wallet'];
+      if (wallet is Map) {
+        widget.state.wallet.applyRemote(RemoteWallet.fromServer(
+          wallet.map((key, value) => MapEntry(key.toString(), value)),
+        ));
+      }
+      widget.state.gifts.sent.insert(0, GiftTransaction(
+        gift: gift, quantity: 1, senderId: account.userId,
+        receiverIds: [recipient],
+        totalCost: (response['total_cost'] as num?)?.toInt() ?? gift.price,
+      ));
+      widget.state.effects.enqueue(EffectRequest(
+        id: 'gift-ui-${widget.state.gifts.sent.length}',
+        kind: EffectKind.gift, asset: '${gift.effectKind}:${gift.id}', priority: 60,
+      ));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${gift.name} sent.')),
+        );
+      }
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(widget.state.backend.userSafeError(error))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => sending = false);
+    }
   }
 
   @override
@@ -131,7 +183,13 @@ class _GiftsScreenState extends State<GiftsScreen> {
                         : RoyalPalette.cream,
                     fontWeight: FontWeight.w800,
                   ),
-                  onSelected: (_) => setState(() => category = value),
+                  onSelected: (_) {
+                    if (value == 'Backpack') {
+                      Navigator.push(context, MaterialPageRoute(builder: (_) => StoreScreen(state: widget.state)));
+                    } else {
+                      setState(() => category = value);
+                    }
+                  },
                 );
               },
             ),
@@ -153,7 +211,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                   padding: const EdgeInsets.all(8),
                   gradient: FeaturePalette.glow(color),
                   accentColor: color,
-                  onTap: () => send(gift),
+                  onTap: sending ? null : () => send(gift),
                   child: Column(
                     children: [
                       Expanded(
@@ -247,7 +305,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                     ),
                   ),
                   Spacer(),
-                  Text('Tap any gift to send', style: TextStyle(color: RoyalPalette.muted)),
+                  Text('Select gift and recipient', style: TextStyle(color: RoyalPalette.muted)),
                 ],
               ),
             ),

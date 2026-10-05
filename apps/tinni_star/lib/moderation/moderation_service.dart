@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 class ReportReason {
   const ReportReason(this.key, this.label);
 
@@ -132,7 +134,7 @@ class ModerationService {
       throw StateError('Maximum 5 screenshots are allowed.');
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/app/complaints'),
     );
     request.headers.contentType = ContentType.json;
@@ -151,8 +153,8 @@ class ModerationService {
       }),
     );
 
-    final response = await request.close();
-    final body = await utf8.decoder.bind(response).join();
+    final response = await closeBackendRequest(request);
+    final body = await readBackendResponse(response);
     Map<String, dynamic> data = <String, dynamic>{};
     if (body.trim().isNotEmpty) {
       try {

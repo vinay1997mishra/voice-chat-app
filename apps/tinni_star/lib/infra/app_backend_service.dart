@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'backend_http.dart';
+
 class RemoteRoleWallet {
   const RemoteRoleWallet({
     required this.balance,
@@ -34,6 +36,28 @@ class RemoteWallet {
     this.coinSellerWallet,
     this.merchantWallet,
   });
+
+
+  factory RemoteWallet.fromServer(Map<String, dynamic> row) {
+    return RemoteWallet(
+      coins: _asInt(row['coins']),
+      diamonds: _asInt(row['diamonds']),
+      banned: row['banned'] == true,
+      updatedAt: _asInt(row['updated_at']),
+      diamondWalletVisible: row['diamond_wallet_visible'] == true,
+      isHost: row['is_host'] == true,
+      isAgency: row['is_agency'] == true,
+      isBd: row['is_bd'] == true,
+      diamondUsdCents: _asInt(row['diamond_usd_cents']),
+      commissionUsdCents: _asInt(row['commission_usd_cents']),
+      withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
+      canTransferSettlement: row['can_transfer_settlement'] == true,
+      securityFrozen: row['security_frozen'] == true,
+      freezeReason: row['freeze_reason']?.toString() ?? '',
+      coinSellerWallet: _roleWallet(row['coin_seller_wallet']),
+      merchantWallet: _roleWallet(row['merchant_wallet']),
+    );
+  }
 
   final int coins;
   final int diamonds;
@@ -119,6 +143,7 @@ class AppBackendService {
 
   final Uri apiBase;
   final HttpClient _httpClient;
+  void Function(String token)? onSessionExpired;
   void Function(String name, Map<String, Object?> properties)? diagnosticSink;
 
   void _diagnostic(String name, Map<String, Object?> properties) {
@@ -136,7 +161,8 @@ class AppBackendService {
     var text = error.toString().replaceFirst('Bad state: ', '').trim();
     final lower = text.toLowerCase();
 
-    if (lower.contains('cloudflare_1101') ||
+    if (lower.contains('timeoutexception') ||
+        lower.contains('cloudflare_1101') ||
         lower.contains('server is temporarily unavailable') ||
         lower.contains('socketexception') ||
         lower.contains('connection timed out') ||
@@ -790,24 +816,7 @@ class AppBackendService {
   Future<RemoteWallet> wallet(String token) async {
     final data = await _request('GET', '/wallet', token);
     final row = _map(data['wallet']);
-    return RemoteWallet(
-      coins: _asInt(row['coins']),
-      diamonds: _asInt(row['diamonds']),
-      banned: row['banned'] == true,
-      updatedAt: _asInt(row['updated_at']),
-      diamondWalletVisible: row['diamond_wallet_visible'] == true,
-      isHost: row['is_host'] == true,
-      isAgency: row['is_agency'] == true,
-      isBd: row['is_bd'] == true,
-      diamondUsdCents: _asInt(row['diamond_usd_cents']),
-      commissionUsdCents: _asInt(row['commission_usd_cents']),
-      withdrawableUsdCents: _asInt(row['withdrawable_usd_cents']),
-      canTransferSettlement: row['can_transfer_settlement'] == true,
-      securityFrozen: row['security_frozen'] == true,
-      freezeReason: row['freeze_reason']?.toString() ?? '',
-      coinSellerWallet: _roleWallet(row['coin_seller_wallet']),
-      merchantWallet: _roleWallet(row['merchant_wallet']),
-    );
+    return RemoteWallet.fromServer(row);
   }
 
   Future<RemoteCp?> cpState(String token) async {
@@ -1295,19 +1304,19 @@ class AppBackendService {
         late final HttpClientRequest request;
         switch (verb) {
           case 'POST':
-            request = await _httpClient.postUrl(uri);
+            request = await openBackendRequest(_httpClient, 'POST', uri);
             break;
           case 'PATCH':
-            request = await _httpClient.patchUrl(uri);
+            request = await openBackendRequest(_httpClient, 'PATCH', uri);
             break;
           case 'PUT':
-            request = await _httpClient.putUrl(uri);
+            request = await openBackendRequest(_httpClient, 'PUT', uri);
             break;
           case 'DELETE':
-            request = await _httpClient.deleteUrl(uri);
+            request = await openBackendRequest(_httpClient, 'DELETE', uri);
             break;
           default:
-            request = await _httpClient.getUrl(uri);
+            request = await openBackendRequest(_httpClient, 'GET', uri);
         }
 
         request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $token');
@@ -1318,10 +1327,10 @@ class AppBackendService {
           request.write(jsonEncode(body));
         }
 
-        final response = await request.close().timeout(
+        final response = await closeBackendRequest(request).timeout(
           const Duration(seconds: 20),
         );
-        final text = await utf8.decoder.bind(response).join();
+        final text = await readBackendResponse(response);
         Map<String, dynamic> data = <String, dynamic>{};
 
         if (text.trim().isNotEmpty) {
@@ -1339,6 +1348,10 @@ class AppBackendService {
         }
 
         if (response.statusCode < 200 || response.statusCode >= 300) {
+          if (response.statusCode == HttpStatus.unauthorized) {
+            onSessionExpired?.call(token);
+            throw StateError('Session expired. Please sign in again.');
+          }
           final message = data['error']?.toString() ?? 'Server request failed';
           final safe = userSafeError(StateError(message));
           final retryableStatus = response.statusCode >= 500;

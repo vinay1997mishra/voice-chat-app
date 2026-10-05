@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'backend_http.dart';
+
 import 'package:flutter/foundation.dart';
 
 enum RtcConnectionState { idle, joining, joined, reconnecting, failed }
@@ -166,7 +168,7 @@ class BackendImAdapter implements ImAdapter {
       throw StateError('Authenticated IM session is required');
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-events'),
     );
     request.headers.contentType = ContentType.json;
@@ -184,8 +186,8 @@ class BackendImAdapter implements ImAdapter {
         },
       }),
     );
-    final response = await request.close();
-    final body = await utf8.decoder.bind(response).join();
+    final response = await closeBackendRequest(request);
+    final body = await readBackendResponse(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       String message = 'Room event failed';
       try {

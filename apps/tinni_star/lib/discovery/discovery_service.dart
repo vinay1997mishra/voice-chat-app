@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 class RoomSummary {
   const RoomSummary({
     required this.id,
@@ -215,14 +217,14 @@ class DiscoveryService {
       return;
     }
 
-    final request = await _httpClient.getUrl(apiBase.replace(path: '/rooms'));
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(path: '/rooms'));
     request.headers.set(
       HttpHeaders.authorizationHeader,
       'Bearer $authToken',
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load rooms');
@@ -263,7 +265,7 @@ class DiscoveryService {
       photoDataUrl,
     );
 
-    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms'));
+    final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: '/rooms'));
     request.headers.contentType = ContentType.json;
     request.headers.set(
       HttpHeaders.authorizationHeader,
@@ -279,7 +281,7 @@ class DiscoveryService {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to create room');
@@ -313,7 +315,7 @@ class DiscoveryService {
     final storedPhoto = photoDataUrl == null
         ? null
         : await _storeRoomPhotoIfNeeded(authToken, photoDataUrl);
-    final request = await _httpClient.patchUrl(apiBase.replace(path: '/rooms/settings'));
+    final request = await openBackendRequest(_httpClient, 'PATCH', apiBase.replace(path: '/rooms/settings'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     final body = <String, dynamic>{'room_id': roomId};
@@ -330,7 +332,7 @@ class DiscoveryService {
     if (storedPhoto != null) body['photo_data_url'] = storedPhoto;
     if (seatThemeId != null) body['seat_theme_id'] = seatThemeId;
     request.write(jsonEncode(body));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to update room');
     final room = _roomFromServer(_asMap(data['room']));
@@ -351,11 +353,11 @@ class DiscoveryService {
     required bool invited,
   }) async {
     if (authToken.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms/invite'));
+    final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: '/rooms/invite'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'target_user_id': targetUserId, 'invited': invited}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) throw StateError(data['error']?.toString() ?? 'Unable to update room invite');
   }
@@ -366,7 +368,7 @@ class DiscoveryService {
     required int seatCount,
   }) async {
     if (authToken.trim().isEmpty) throw StateError('Login session is required');
-    final request = await _httpClient.patchUrl(
+    final request = await openBackendRequest(_httpClient, 'PATCH', 
       apiBase.replace(path: '/rooms/seat-count'),
     );
     request.headers.contentType = ContentType.json;
@@ -375,7 +377,7 @@ class DiscoveryService {
       'room_id': roomId,
       'seat_count': seatCount,
     }));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to change room seats');
@@ -401,7 +403,7 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/rooms/lock'),
     );
     request.headers.contentType = ContentType.json;
@@ -416,7 +418,7 @@ class DiscoveryService {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     lastGeneratedRoomPassword = locked
         ? data['room_password']?.toString()
@@ -451,7 +453,7 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/rooms/theme'),
     );
     request.headers.contentType = ContentType.json;
@@ -467,7 +469,7 @@ class DiscoveryService {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -496,7 +498,7 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/room-themes',
         queryParameters: <String, String>{'room_id': roomId},
@@ -508,7 +510,7 @@ class DiscoveryService {
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -556,7 +558,7 @@ class DiscoveryService {
       asset,
     );
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-themes'),
     );
     request.headers.contentType = ContentType.json;
@@ -575,7 +577,7 @@ class DiscoveryService {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -602,7 +604,7 @@ class DiscoveryService {
       return source;
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-theme-media'),
     );
     request.headers.contentType = ContentType.json;
@@ -611,7 +613,7 @@ class DiscoveryService {
       'Bearer $authToken',
     );
     request.write(jsonEncode(<String, dynamic>{'data_url': source}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -635,7 +637,7 @@ class DiscoveryService {
       return source;
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/room-media'),
     );
     request.headers.contentType = ContentType.json;
@@ -644,7 +646,7 @@ class DiscoveryService {
       'Bearer $authToken',
     );
     request.write(jsonEncode(<String, dynamic>{'data_url': source}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(
@@ -666,7 +668,7 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
-    final request = await _httpClient.getUrl(
+    final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/rooms/access',
         queryParameters: <String, String>{'room_id': roomId},
@@ -678,7 +680,7 @@ class DiscoveryService {
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode >= 500) {
       throw StateError(
@@ -704,7 +706,7 @@ class DiscoveryService {
       throw StateError('Login session is required');
     }
 
-    final request = await _httpClient.postUrl(
+    final request = await openBackendRequest(_httpClient, 'POST', 
       apiBase.replace(path: '/rooms/access'),
     );
     request.headers.contentType = ContentType.json;
@@ -719,7 +721,7 @@ class DiscoveryService {
       }),
     );
 
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode >= 500) {
       throw StateError(
@@ -911,7 +913,7 @@ class DiscoveryService {
   void clearRecent() => recentRoomIds.clear();
 
   Future<Map<String, dynamic>> _readJson(HttpClientResponse response) async {
-    final body = await utf8.decoder.bind(response).join();
+    final body = await readBackendResponse(response);
     final trimmed = body.trim();
     if (trimmed.isEmpty) return <String, dynamic>{};
 
@@ -955,12 +957,12 @@ class DiscoveryService {
     required String authToken,
     required String roomId,
   }) async {
-    final request = await _httpClient.getUrl(apiBase.replace(
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(
       path: '/rooms/follow',
       queryParameters: <String, String>{'room_id': roomId},
     ));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load room follow');
@@ -973,11 +975,11 @@ class DiscoveryService {
     required String roomId,
     required bool following,
   }) async {
-    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms/follow'));
+    final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: '/rooms/follow'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'following': following}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to update room follow');
@@ -989,12 +991,12 @@ class DiscoveryService {
     required String authToken,
     required String roomId,
   }) async {
-    final request = await _httpClient.getUrl(apiBase.replace(
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(
       path: '/rooms/membership',
       queryParameters: <String, String>{'room_id': roomId},
     ));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load membership');
@@ -1007,11 +1009,11 @@ class DiscoveryService {
     required String roomId,
     required bool member,
   }) async {
-    final request = await _httpClient.postUrl(apiBase.replace(path: '/rooms/membership'));
+    final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: '/rooms/membership'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'member': member}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to update membership');
@@ -1024,12 +1026,12 @@ class DiscoveryService {
     required String roomId,
     required String period,
   }) async {
-    final request = await _httpClient.getUrl(apiBase.replace(
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(
       path: '/gifts/ranking',
       queryParameters: <String, String>{'room_id': roomId, 'period': period},
     ));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load sending ranking');
@@ -1041,12 +1043,12 @@ class DiscoveryService {
     required String authToken,
     required String roomId,
   }) async {
-    final request = await _httpClient.getUrl(apiBase.replace(
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(
       path: '/lucky-pouch',
       queryParameters: <String, String>{'room_id': roomId},
     ));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to load Lucky Pouch');
@@ -1060,11 +1062,11 @@ class DiscoveryService {
     required int users,
     required int coins,
   }) async {
-    final request = await _httpClient.postUrl(apiBase.replace(path: '/lucky-pouch/open'));
+    final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: '/lucky-pouch/open'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     request.write(jsonEncode(<String, dynamic>{'room_id': roomId, 'users': users, 'coins': coins}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to open Lucky Pouch');
@@ -1076,11 +1078,11 @@ class DiscoveryService {
     required String authToken,
     required String roomId,
   }) async {
-    final request = await _httpClient.postUrl(apiBase.replace(path: '/lucky-pouch/claim'));
+    final request = await openBackendRequest(_httpClient, 'POST', apiBase.replace(path: '/lucky-pouch/claim'));
     request.headers.contentType = ContentType.json;
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
     request.write(jsonEncode(<String, dynamic>{'room_id': roomId}));
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw StateError(data['error']?.toString() ?? 'Unable to claim Lucky Pouch');
@@ -1089,9 +1091,9 @@ class DiscoveryService {
   }
 
   Future<List<Map<String, dynamic>>> countryRibbons(String authToken) async {
-    final request = await _httpClient.getUrl(apiBase.replace(path: '/ribbons'));
+    final request = await openBackendRequest(_httpClient, 'GET', apiBase.replace(path: '/ribbons'));
     request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
-    final response = await request.close();
+    final response = await closeBackendRequest(request);
     final data = await _readJson(response);
     if (response.statusCode < 200 || response.statusCode >= 300) return const [];
     final raw = data['ribbons'];

@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'dart:io';
 
+import '../infra/backend_http.dart';
+
 enum CallState { idle, ringing, connected, ended, rejected }
 
 enum CallMedia { voice, video }
@@ -363,8 +365,8 @@ class CallService {
       query: rawUri.hasQuery ? rawUri.query : null,
     );
     final request = method == 'GET'
-        ? await _httpClient.getUrl(uri)
-        : await _httpClient.postUrl(uri);
+        ? await openBackendRequest(_httpClient, 'GET', uri)
+        : await openBackendRequest(_httpClient, 'POST', uri);
     request.headers.set(
       HttpHeaders.authorizationHeader,
       'Bearer $authToken',
@@ -374,8 +376,8 @@ class CallService {
       request.headers.contentType = ContentType.json;
       request.write(jsonEncode(body));
     }
-    final response = await request.close();
-    final raw = await utf8.decoder.bind(response).join();
+    final response = await closeBackendRequest(request);
+    final raw = await readBackendResponse(response);
     Map<String, dynamic> data = <String, dynamic>{};
     if (raw.trim().isNotEmpty) {
       try {
