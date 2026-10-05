@@ -98,3 +98,36 @@ test('locked empty room gets voice credentials and owner controls without public
   const unlocked=await r.request('/room-presence/seat-lock',owner.token,{room_id:room.id,seat_index:0,locked:false});
   assert.equal(unlocked.status,200);
 });
+
+test('Ludo moves obey six entry, capture, safe cells, exact finish and winner rules',async t=>{
+  const r=runtime();t.after(r.close);
+  const red=await r.user(1),green=await r.user(2);
+  const room=await r.directory.createRoom(red.user_id,{title:'Rules',seat_count:12});
+  for(const user of [red,green]) {
+    await r.request('/room-presence/join',user.token,{room_id:room.id});
+    await r.request('/ludo/state?room_id='+room.id,user.token);
+  }
+  function configure(tokens,rolled) {
+    const loaded=r.directory._loadLudoState(room.id);
+    loaded.state={...loaded.state,current_player:'red',winner:null,rolled,
+      tokens:{red:[-1,-1,-1,-1],green:[-1,-1,-1,-1],yellow:[-1,-1,-1,-1],blue:[-1,-1,-1,-1],...tokens}};
+    r.directory._saveLudoState(room.id,loaded.state,loaded.version);
+  }
+  async function move(){
+    const result=await r.request('/ludo/move',red.token,{room_id:room.id,token_index:0});
+    assert.equal(result.status,200,JSON.stringify(result.data));return result.data;
+  }
+  configure({},6);
+  let state=await move();assert.equal(state.tokens.red[0],0);assert.equal(state.current_player,'red');assert.equal(state.rolled,null);
+  configure({red:[10,-1,-1,-1],green:[1,-1,-1,-1]},4);
+  state=await move();assert.equal(state.tokens.red[0],14);assert.equal(state.tokens.green[0],-1);
+  configure({red:[7,-1,-1,-1],green:[47,-1,-1,-1]},1);
+  state=await move();assert.equal(state.tokens.red[0],8);assert.equal(state.tokens.green[0],47);
+  configure({red:[56,57,57,57]},2);
+  const overshoot=await r.request('/ludo/move',red.token,{room_id:room.id,token_index:0});
+  assert.equal(overshoot.status,400);assert.match(overshoot.data.error,/cannot move/);
+  configure({red:[56,57,57,57]},1);
+  state=await move();assert.equal(state.winner,'red');assert.equal(state.tokens.red[0],57);
+  const finished=await r.request('/ludo/roll',green.token,{room_id:room.id});
+  assert.equal(finished.data.winner,'red');
+});

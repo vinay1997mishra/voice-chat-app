@@ -12,6 +12,7 @@ import 'package:tinni_star/room/room_presence_service.dart';
 
 class _Rtc implements RtcAdapter {
   int failures = 0, joins = 0;
+  Completer<void>? micGate;
   @override RtcConnectionState state = RtcConnectionState.idle;
   @override bool publishingMic = false;
   final _levels = ValueNotifier<Map<String,double>>({});
@@ -24,6 +25,7 @@ class _Rtc implements RtcAdapter {
   @override Future<void> leave() async { state=RtcConnectionState.idle;publishingMic=false; }
   @override Future<void> setMicPublished(bool enabled) async {
     if(state!=RtcConnectionState.joined) throw StateError('offline');
+    if (enabled && micGate != null) await micGate!.future;
     publishingMic=enabled;
   }
   @override Future<void> setRemoteAudioEnabled(bool enabled) async {}
@@ -59,11 +61,11 @@ class _Presence extends RoomPresenceService {
   @override Future<void> leave({required String roomId,required String authToken}) async {}
 }
 const _room=RoomSummary(id:'room',title:'Test',country:'IN',online:1,ownerId:'me');
-ActiveRoomSession _session(_Rtc rtc,_Presence presence)=>ActiveRoomSession(
+ActiveRoomSession _session(_Rtc rtc,_Presence presence,{DateTime Function()? now})=>ActiveRoomSession(
   runtime:FunctionPackRuntime(signatureVerifier:const DevelopmentSignatureVerifier()),
   realtime:RealtimeCoordinator(rtc:rtc,im:LocalImAdapter()),
   foregroundService:const RoomForegroundServiceBridge(),
-  permissions:const RoomPermissionBridge(),presence:presence);
+  permissions:const RoomPermissionBridge(),presence:presence,nowProvider:now??DateTime.now);
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -110,7 +112,7 @@ void main() {
   });
   testWidgets('failed voice connects automatically without leaving the room',(tester) async {
     final rtc=_Rtc()..failures=1;
-    final presence=_Presence(),session=_session(rtc,presence);
+    final presence=_Presence(),session=_session(rtc,presence,now:tester.binding.clock.now);
     await session.open(_room,userId:'me',authToken:'token');
     expect(session.connected,false);expect(session.backendSessionActive,true);
     await tester.pump(const Duration(seconds:3));await tester.pump();
@@ -129,4 +131,17 @@ void main() {
     expect(session.connected,true);expect(rtc.joins,1);
     await session.close();session.dispose();presence.dispose();
   });
+  testWidgets('moderation during microphone creation cannot publish a late unmuted track',(tester) async{
+    final rtc=_Rtc(),presence=_Presence(),session=_session(rtc,presence);
+    await session.open(_room,userId:'me',authToken:'token');
+    await session.takeMySeat(0);
+    rtc.micGate=Completer<void>();
+    final enabling=session.toggleMyMic();
+    await tester.pump();
+    presence.mutedSeats.add(0);presence.notifyListeners();await tester.pump();
+    rtc.micGate!.complete();await enabling;await tester.pump();
+    expect(rtc.publishingMic,false);expect(session.controller!.micState,MicState.muted);
+    await session.close();session.dispose();presence.dispose();
+  });
+
 }

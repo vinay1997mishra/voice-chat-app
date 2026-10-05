@@ -146,7 +146,7 @@ jobs:
 
       - name: Test
         working-directory: apps/tinni_star
-        run: flutter test
+        run: flutter test --reporter expanded --timeout 45s
 
       - name: Upload game layout previews
         if: always()

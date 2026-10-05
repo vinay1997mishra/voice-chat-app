@@ -19,6 +19,7 @@ class ActiveRoomSession extends ChangeNotifier {
     required this.permissions,
     required this.presence,
     this.enablePresenceFallbackTimer = true,
+    this.nowProvider = DateTime.now,
     this.familyTagProvider,
     this.hostTagProvider,
     this.agencyNameProvider,
@@ -35,6 +36,7 @@ class ActiveRoomSession extends ChangeNotifier {
   final RoomPermissionBridge permissions;
   final RoomPresenceService presence;
   final bool enablePresenceFallbackTimer;
+  final DateTime Function() nowProvider;
   final String? Function()? familyTagProvider;
   final String? Function()? hostTagProvider;
   final String? Function()? agencyNameProvider;
@@ -233,7 +235,7 @@ class ActiveRoomSession extends ChangeNotifier {
       connected = realtime.rtc.state == RtcConnectionState.joined;
       connectionError = (connected ? 'Microphone update failed: ' : 'Voice connection failed: ') +
           error.toString().replaceFirst('Bad state: ', '');
-      _nextVoiceAttempt = DateTime.now().add(Duration(seconds: _voiceRetrySeconds));
+      _nextVoiceAttempt = nowProvider().add(Duration(seconds: _voiceRetrySeconds));
       _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 30).toInt();
     } finally {
       _voiceAttemptRunning = false;
@@ -245,6 +247,7 @@ class ActiveRoomSession extends ChangeNotifier {
   }
 
   void _startRecoveryMonitors() {
+    if (!enablePresenceFallbackTimer) return;
     _voiceTimer?.cancel();
     _fallbackStateTimer?.cancel();
     _voiceTimer = Timer.periodic(const Duration(seconds: 3), (_) async {
@@ -270,7 +273,7 @@ class ActiveRoomSession extends ChangeNotifier {
       }
       if (voiceState == RtcConnectionState.reconnecting ||
           !_voicePermissionGranted ||
-          (_nextVoiceAttempt?.isAfter(DateTime.now()) ?? false)) { return; }
+          (_nextVoiceAttempt?.isAfter(nowProvider()) ?? false)) { return; }
       await retryVoice(requestPermission: false);
     });
     _fallbackStateTimer = Timer.periodic(const Duration(seconds: 4), (_) async {
