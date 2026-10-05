@@ -125,6 +125,110 @@ class RocketLaunchOverlay extends StatefulWidget {
   final bool enabled;
   @override State<RocketLaunchOverlay> createState()=>_RocketLaunchOverlayState();
 }
+class _RocketFlightMotion {
+  const _RocketFlightMotion({
+    required this.x,
+    required this.yFactor,
+    required this.rotation,
+    required this.scale,
+    required this.thrustBoost,
+  });
+
+  final double x;
+  final double yFactor;
+  final double rotation;
+  final double scale;
+  final double thrustBoost;
+}
+
+_RocketFlightMotion _rocketFlightMotion(int level,double t) {
+  final tier=level.clamp(1,10);
+  final wave=math.sin(t*math.pi*2);
+  final wave2=math.sin(t*math.pi*4);
+  switch(tier) {
+    case 1:
+      return _RocketFlightMotion(
+        x:0,
+        yFactor:t,
+        rotation:0,
+        scale:1,
+        thrustBoost:1,
+      );
+    case 2:
+      return _RocketFlightMotion(
+        x:wave*8,
+        yFactor:Curves.easeIn.transform(t),
+        rotation:wave*.015,
+        scale:1+.02*math.sin(t*math.pi),
+        thrustBoost:1.04,
+      );
+    case 3:
+      return _RocketFlightMotion(
+        x:wave*16,
+        yFactor:Curves.easeInCubic.transform(t),
+        rotation:wave*.035,
+        scale:1+.03*math.sin(t*math.pi*2),
+        thrustBoost:1.08,
+      );
+    case 4:
+      return _RocketFlightMotion(
+        x:wave2*12,
+        yFactor:Curves.fastOutSlowIn.transform(t),
+        rotation:wave2*.045,
+        scale:1+.04*math.sin(t*math.pi*3),
+        thrustBoost:1.12,
+      );
+    case 5:
+      return _RocketFlightMotion(
+        x:(wave+wave2*.45)*22,
+        yFactor:Curves.easeInExpo.transform(t),
+        rotation:wave*.07,
+        scale:1+.05*math.sin(t*math.pi*4),
+        thrustBoost:1.18,
+      );
+    case 6:
+      return _RocketFlightMotion(
+        x:wave*25,
+        yFactor:Curves.easeInQuint.transform(t),
+        rotation:t*math.pi*.45,
+        scale:1+.04*wave.abs(),
+        thrustBoost:1.24,
+      );
+    case 7:
+      return _RocketFlightMotion(
+        x:wave2*18+math.sin(t*math.pi*8)*5,
+        yFactor:Curves.easeInCirc.transform(t),
+        rotation:wave2*.09,
+        scale:1+.06*math.sin(t*math.pi).abs(),
+        thrustBoost:1.30,
+      );
+    case 8:
+      return _RocketFlightMotion(
+        x:math.sin(t*math.pi*3)*32,
+        yFactor:Curves.easeInOutCubicEmphasized.transform(t),
+        rotation:math.sin(t*math.pi*3)*.11,
+        scale:1+.07*math.sin(t*math.pi*2).abs(),
+        thrustBoost:1.38,
+      );
+    case 9:
+      return _RocketFlightMotion(
+        x:(wave*28)+(wave2*14),
+        yFactor:Curves.easeInExpo.transform(t),
+        rotation:(wave+wave2*.4)*.13,
+        scale:1+.08*math.sin(t*math.pi*3).abs(),
+        thrustBoost:1.48,
+      );
+    default:
+      return _RocketFlightMotion(
+        x:math.sin(t*math.pi*4)*36*(1-t*.45),
+        yFactor:Curves.easeInQuint.transform(t),
+        rotation:t*math.pi*2+wave*.12,
+        scale:1+.10*math.sin(t*math.pi*4).abs(),
+        thrustBoost:1.60,
+      );
+  }
+}
+
 class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTickerProviderStateMixin {
   late final AnimationController _flight;
   final _queue=<int>[];
@@ -185,16 +289,19 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
     return IgnorePointer(child:RepaintBoundary(child:AnimatedBuilder(
       animation:_flight,builder:(context,child)=>LayoutBuilder(builder:(context,c) {
         final t=_flight.value;
-        // The first nine seconds are the launch. After that the unlocked
-        // Rocket remains visible and keeps a live flame/hover animation.
-        final ascent=((t-.20)/.80).clamp(0.0,1.0);
-        final rise=ascent*ascent;
+        // Every Rocket level has its own flight motion. The nine-second
+        // launch uses that level's path, then the latest unlocked Rocket
+        // stays visible with a live flame until the next level launches.
         final width=math.min(c.maxWidth*.30,140.0);
-        final launchY=c.maxHeight*.60-rise*(c.maxHeight*.48);
+        final motion=_rocketFlightMotion(_level!,t);
+        final launchY=c.maxHeight*.60-
+            motion.yFactor*(c.maxHeight*.48);
         final holdY=c.maxHeight*.10+math.sin(t*math.pi*2)*4;
         final y=_holding?holdY:launchY;
+        final baseLeft=(c.maxWidth-width)/2;
+        final x=_holding?0.0:motion.x;
         final launchThrust=(t/.18).clamp(0.0,1.0)*
-            (0.90+0.10*math.sin(t*180));
+            (0.90+0.10*math.sin(t*180))*motion.thrustBoost;
         final holdThrust=0.92+0.08*math.sin(t*math.pi*2);
         final thrust=_holding?holdThrust:launchThrust;
         final atmosphereT=_holding?1.0:t;
@@ -205,17 +312,23 @@ class _RocketLaunchOverlayState extends State<RocketLaunchOverlay> with SingleTi
             Positioned(top:36,left:16,right:16,child:Opacity(
               opacity:(1-t).clamp(0.0,1.0),child:Column(children:[
                 Text('ROCKET $_level / 10',style:const TextStyle(color:Color(0xFFFFD479),fontSize:25,fontWeight:FontWeight.w900,letterSpacing:3)),
-                const Text('100% • LAUNCH',style:TextStyle(color:Colors.white,fontSize:13,letterSpacing:4)),
+                Text('LEVEL $_level • UNIQUE LAUNCH',style:const TextStyle(color:Colors.white,fontSize:13,letterSpacing:3)),
               ]))),
           Positioned(
             key:_holding?const Key('rocket-holding-flame'):null,
             top:y,
-            left:(c.maxWidth-width)/2,
-            child:RocketModel(
-              key:ValueKey('launch-rocket-$_level'),
-              level:_level!,
-              size:width,
-              thrust:thrust,
+            left:baseLeft+x,
+            child:Transform.rotate(
+              angle:_holding?0:motion.rotation,
+              child:Transform.scale(
+                scale:_holding?1:motion.scale,
+                child:RocketModel(
+                  key:ValueKey('launch-rocket-$_level'),
+                  level:_level!,
+                  size:width,
+                  thrust:thrust,
+                ),
+              ),
             ),
           ),
         ]);
