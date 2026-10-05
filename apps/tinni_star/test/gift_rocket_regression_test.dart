@@ -94,7 +94,9 @@ void main() {
         reason: 'Missing Rocket target: $target',
       );
     }
-    expect(room.contains("Key('room-rocket-ten-stages')"), true);
+    expect(room.contains("Key('room-rocket-level-scroll')"), true);
+    expect(room.contains('ListView.builder'), true);
+    expect(room.contains('thumbVisibility: true'), true);
     expect(room.contains('_rocketProgressState'), true);
     expect(
       room.contains(
