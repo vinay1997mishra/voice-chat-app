@@ -82,3 +82,20 @@ test('real gift launch is global, waits seven seconds, grants top frame and coin
  assert.equal(r.directory.settleRocketLaunches(banner.created_at+8000),0);
  assert.equal(r.directory.getWallet(a.user_id).coins,400000);
 });
+
+test('public ID change preserves rocket contribution, earned frame, medal and paid coin ledger',async t=>{
+ const r=runtime();t.after(r.close);
+ const a=await r.user(1101),room=await r.directory.createRoom(a.user_id,{title:'ID migration',seat_count:12});
+ const d=r.directory,sql=d.ctx.storage.sql;
+ d._ensureRocketRoom(room.id);
+ sql.exec('INSERT INTO rocket_contributions(room_id,level,user_id,sending) VALUES(?,1,?,8000000)',room.id,a.user_id);
+ sql.exec('INSERT INTO rocket_completions(room_id,level,completed_at,historical) VALUES(?,1,0,0)',room.id);
+ d.settleRocketLaunches(7000);
+ const old=a.user_id;
+ d._changeUserId(old,'99999999');
+ assert.equal(d.getWallet('99999999').coins,400000);
+ assert.equal(d._rocketRanking(room.id,1)[0].user_id,'99999999');
+ assert.ok(d.listUserMedals('99999999').some(m=>m.name==='Rocket 1'));
+ assert.ok(d.inventoryState('99999999').owned.some(x=>x.item_id==='rocket-l1-top1'));
+ assert.equal(sql.exec('SELECT COUNT(*) AS n FROM rocket_rewards WHERE user_id=?',old).toArray()[0].n,0);
+});

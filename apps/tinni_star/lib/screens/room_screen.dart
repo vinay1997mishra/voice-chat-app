@@ -821,11 +821,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     setState(() => _ribbonQueue.removeWhere((row) => row['id']?.toString() == id));
   }
 
-  void _enterRibbonRoom(Map<String, dynamic> ribbon) {
+  Future<void> _enterRibbonRoom(Map<String, dynamic> ribbon) async {
     final roomId = ribbon['room_id']?.toString() ?? '';
     RoomSummary? target;
     for (final room in widget.state.discovery.rooms) {
       if (room.id == roomId) { target = room; break; }
+    }
+    if (target == null) {
+      final account = widget.state.auth.current;
+      if (account == null) return;
+      try { await widget.state.discovery.syncRooms(account.authToken); } catch (_) {}
+      if (!mounted) return;
+      for (final room in widget.state.discovery.rooms) {
+        if (room.id == roomId) { target = room; break; }
+      }
     }
     if (target == null || target.id == widget.room.id) return;
     Navigator.of(context).pushReplacement(

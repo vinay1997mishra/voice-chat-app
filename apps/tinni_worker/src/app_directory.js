@@ -3755,6 +3755,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   _changeUserId(oldIdValue, newIdValue) {
+    this._ensureRocketTables();
     const oldId = this._resolveOwnerUserId(oldIdValue);
     const newId = String(newIdValue || "").trim();
     if (!oldId || !newId) throw new Error("Current and new user ID are required");
@@ -3817,6 +3818,7 @@ export class AppDirectoryStore extends DurableObject {
       ["app_room_invites","user_id"], ["app_recent_rooms","user_id"],
       ["app_user_presence","user_id"], ["room_realtime_events","user_id"],
       ["gift_transactions","sender_id"], ["gift_transactions","receiver_id"],
+      ["rocket_contributions","user_id"], ["rocket_rewards","user_id"], ["rocket_audience","user_id"],
       ["lucky_gift_results","sender_id"], ["lucky_gift_results","receiver_id"],
       ["lucky_gift_daily","user_id"], ["lucky_gift_sessions","user_id"],
       ["lucky_gift_settlements","user_id"], ["room_gift_owner_daily","owner_id"],

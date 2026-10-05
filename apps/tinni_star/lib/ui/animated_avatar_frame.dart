@@ -166,10 +166,10 @@ class _AvatarFramePainter extends CustomPainter {
     final variant = int.parse(match.group(3)!);
     final accent = isTop
         ? [const Color(0xFFFFD166), const Color(0xFFD9E7F3), const Color(0xFFFFAA79)][(variant - 1).clamp(0, 2)]
-        : Color.lerp(const Color(0xFF63D9FF), const Color(0xFFAD8CFF), (variant % 10) / 9)!;
+        : HSVColor.fromAHSV(1, 180 + (variant - 1) * 5, .5 + (variant % 3) * .1, 1).toColor();
     final center = size.center(Offset.zero);
     final radius = size.width * .38;
-    final angle = t * math.pi * 2;
+    final angle = t * math.pi * 2 + (isTop ? 0 : variant * math.pi / 15);
     final rings = isTop ? 2 + level ~/ 3 : 1 + level ~/ 5;
     for (var i = 0; i < rings; i++) {
       final r = radius + i * size.width * .027;
@@ -181,7 +181,7 @@ class _AvatarFramePainter extends CustomPainter {
           transform: GradientRotation(i.isEven ? angle : -angle),
         ).createShader(Rect.fromCircle(center: center, radius: r)));
     }
-    final count = isTop ? 6 + level * 2 : 4 + level ~/ 2;
+    final count = isTop ? 6 + level * 2 : 4 + level ~/ 2 + variant % 3;
     for (var i = 0; i < count; i++) {
       final a = i * math.pi * 2 / count + (isTop ? angle * .3 : 0);
       final p = center + Offset(math.cos(a), math.sin(a)) * (radius * 1.10);
