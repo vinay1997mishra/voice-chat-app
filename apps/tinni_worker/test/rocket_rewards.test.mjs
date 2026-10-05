@@ -58,3 +58,27 @@ test('seven-second server window excludes late joins and payout is exactly once'
  assert.equal(d.settleRocketLaunches(launch+999999),0);
  assert.equal(sql.exec("SELECT COUNT(*) AS count FROM wallet_transactions WHERE kind='rocket_reward'").toArray()[0].count,ledger);
 });
+
+test('real gift launch is global, waits seven seconds, grants top frame and coins once',async t=>{
+ const r=runtime();t.after(r.close);
+ const a=await r.user(1001),b=await r.user(1002);
+ const room=await r.directory.createRoom(a.user_id,{title:'Global launch',seat_count:12});
+ r.directory.getWallet(a.user_id);
+ r.directory._creditNormalWalletAuthorized(a.user_id,8000000,'test_fixture');
+ const sent=await r.request('/gifts/send',a.token,{room_id:room.id,gift_id:'hot-biryani',quantity:160,receiver_ids:[b.user_id]});
+ assert.equal(sent.status,201,JSON.stringify(sent.data));
+ assert.equal(sent.data.wallet.coins,0);
+ const us=r.directory.countryRibbons('US'),inr=r.directory.countryRibbons('IN');
+ const banner=us.find(row=>row.kind==='rocket_launch');
+ assert.ok(banner);
+ assert.ok(inr.some(row=>row.id===banner.id));
+ assert.equal(banner.expires_at-banner.created_at,9000);
+ assert.equal(r.directory.settleRocketLaunches(banner.created_at+6999),0);
+ assert.equal(r.directory.settleRocketLaunches(banner.created_at+7000),1);
+ assert.equal(r.directory.getWallet(a.user_id).coins,400000);
+ r.directory.equipFrame(a.user_id,'rocket-l1-top1');
+ assert.equal(r.directory.inventoryState(a.user_id).equipped_frame_id,'rocket-l1-top1');
+ assert.throws(()=>r.directory.equipFrame(b.user_id,'rocket-l1-top1'),/not owned/);
+ assert.equal(r.directory.settleRocketLaunches(banner.created_at+8000),0);
+ assert.equal(r.directory.getWallet(a.user_id).coins,400000);
+});

@@ -4,6 +4,7 @@ import '../app/tinni_state.dart';
 import '../economy/economy.dart';
 import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
+import '../ui/animated_avatar_frame.dart';
 import '../ui/premium_effects.dart';
 import 'unique_id_store_screen.dart';
 
@@ -170,7 +171,15 @@ class _StoreScreenState extends State<StoreScreen> {
   }
 
   List<StoreItem> get _visibleItems {
-    final items = _catalogs[_category.kind] ?? const <StoreItem>[];
+    final items = <StoreItem>[...?_catalogs[_category.kind]];
+    if (_category.kind == 'frame') {
+      final listed = items.map((item) => item.id).toSet();
+      for (final id in widget.state.inventory.owned) {
+        if (!id.startsWith('rocket-l') || listed.contains(id)) continue;
+        final name = id.replaceFirst('rocket-l', 'Rocket ').replaceFirst('-top', ' Top ').replaceFirst('-member', ' Audience ');
+        items.add(StoreItem(id: id, name: name, price: 0, type: 'Frame', kind: 'frame', durationDays: 0, assetUrl: ''));
+      }
+    }
     if (!_inventoryOnly) return items;
     return items
         .where((item) => widget.state.inventory.owned.contains(item.id))
@@ -355,7 +364,9 @@ class _StoreScreenState extends State<StoreScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              if (PremiumEffectStyle.isPremiumId(item.id))
+              if (item.id.startsWith('rocket-l'))
+                AnimatedAvatarFrame(frameId: item.id, size: 160, child: const Icon(Icons.person, size: 82, color: Colors.white))
+              else if (PremiumEffectStyle.isPremiumId(item.id))
                 PremiumEffectPreview(
                   effectId: item.id,
                   title: item.name,
@@ -385,7 +396,7 @@ class _StoreScreenState extends State<StoreScreen> {
               ),
               const SizedBox(height: 4),
               Text(
-                _validity(item) + ' • ' + item.price.toString() + ' coins',
+                _validity(item) + ' • ' + item.id.startsWith('rocket-l') ? 'Rocket reward' : item.price.toString() + ' coins',
                 style: const TextStyle(color: RoyalPalette.muted),
               ),
               const SizedBox(height: 16),
@@ -649,7 +660,9 @@ class _StoreScreenState extends State<StoreScreen> {
                                 child: Column(
                                   mainAxisAlignment: MainAxisAlignment.center,
                                   children: [
-                                    if (PremiumEffectStyle.isPremiumId(item.id))
+                                    if (item.id.startsWith('rocket-l'))
+                                      AnimatedAvatarFrame(frameId: item.id, size: 52, child: const Icon(Icons.person, color: Colors.white))
+                                    else if (PremiumEffectStyle.isPremiumId(item.id))
                                       PremiumEffectThumbnail(
                                         effectId: item.id,
                                         title: item.name,

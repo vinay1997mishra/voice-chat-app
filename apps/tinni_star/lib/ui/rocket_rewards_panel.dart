@@ -25,8 +25,8 @@ class RocketRewardsPanel extends StatelessWidget {
           } else if (source != null && source.startsWith('https://')) {
             image = NetworkImage(source);
           }
-          final avatar = image != null ? Image(image: image, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.person, color: Colors.white)) : source != null && source.startsWith('https://')
-              ? Image.network(source, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.person, color: Colors.white))
+          final avatar = image != null
+              ? Image(image: image, fit: BoxFit.cover, errorBuilder: (_, _, _) => const Icon(Icons.person, color: Colors.white))
               : const Icon(Icons.person, color: Colors.white);
           final rank = index + 1;
           final frame = row?['frame_id'] as String? ?? 'rocket-l$level-top$rank';

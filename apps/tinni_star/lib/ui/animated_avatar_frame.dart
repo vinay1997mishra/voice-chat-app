@@ -159,10 +159,7 @@ class _AvatarFramePainter extends CustomPainter {
 
 
   void _paintRocketFrame(Canvas canvas, Size size) {
-    final match = RegExp(r'^rocket-l(\d+)-(top|member)(\d+)(covariant _AvatarFramePainter oldDelegate) =>
-      oldDelegate.t != t || oldDelegate.id != id;
-}
-).firstMatch(id);
+    final match = RegExp(r'^rocket-l(\d+)-(top|member)(\d+)$').firstMatch(id);
     if (match == null) return;
     final level = int.parse(match.group(1)!).clamp(1, 10);
     final isTop = match.group(2) == 'top';
