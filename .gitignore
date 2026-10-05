@@ -25,3 +25,11 @@ key.properties
 *.iml
 .DS_Store
 Thumbs.db
+
+# Cinematic media is distributed as a verified release bundle.
+cinematic-preview/
+cinematic-package/
+tools/cinematic/flags/
+apps/tinni_star/assets/cinematic/*.mp4
+apps/tinni_star/assets/cinematic/*.png
+apps/tinni_star/assets/cinematic/manifest.json

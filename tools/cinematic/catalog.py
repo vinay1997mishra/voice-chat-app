@@ -112,13 +112,14 @@ def render_shard(opt):
         folder = base / spec["id"]
         movie = folder / (spec["id"]+".mp4")
         print(f"Scene {index+1}/{len(specs)}: {spec['id']}", flush=True)
-        subprocess.run(["xvfb-run", "-a", opt.blender, "--background", "--threads", "4",
+        subprocess.run(["xvfb-run", "-a", opt.blender, "--background", "--python-exit-code", "1", "--threads", "4",
                         "--python", str(HERE / "render.py"), "--", "--scene", spec["id"],
                         "--output", str(base), "--samples", str(opt.samples)], check=True, timeout=2400)
         subprocess.run([
             "ffmpeg", "-v", "error", "-y", "-framerate", str(FPS),
             "-i", str(folder / "frame-%04d.png"), "-an", "-c:v", "libx264",
             "-preset", "slow", "-crf", "27", "-maxrate", "150k", "-bufsize", "300k",
+            "-vf", f"fade=t=in:st=0:d=0.15,fade=t=out:st={spec['duration']-.35}:d=0.35",
             "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(movie),
         ], check=True, timeout=180)
         verify_scene(folder, spec)

@@ -19,6 +19,7 @@ parser.add_argument("--output", default="cinematic-preview")
 parser.add_argument("--samples", type=int, default=8)
 parser.add_argument("--poster-only", action="store_true")
 parser.add_argument("--geometry-only", action="store_true")
+parser.add_argument("--poster-frame", type=int)
 args = parser.parse_args(sys.argv[sys.argv.index("--") + 1:])
 spec = next(s for s in CATALOG["scenes"] if s["id"] == args.scene)
 rng = random.Random(int(hashlib.sha256(args.scene.encode()).hexdigest()[:8], 16))
@@ -34,6 +35,7 @@ scene.render.fps = CATALOG["fps"]
 scene.render.image_settings.file_format = "PNG"
 scene.render.image_settings.color_mode = "RGB"
 scene.render.image_settings.compression = 12
+scene.world.color = (.012, .019, .038)
 scene.world.use_nodes = True
 scene.world.node_tree.nodes["Background"].inputs["Color"].default_value = (.012, .019, .038, 1)
 scene.world.node_tree.nodes["Background"].inputs["Strength"].default_value = .3
@@ -614,6 +616,150 @@ def opera():
         points = [(x-.14, -.17, 1.08), (x, -.18, 1.02 if x < 0 else 1.17), (x+.14, -.17, 1.08)]
         tube("Opera expression", points, .02, black, root)
 
+def national_monument(code):
+    """Small named landmark models below the flag, all attached to one plinth."""
+    named = {"ae", "au", "bd", "br", "ca", "cn", "eg", "fr", "gb", "in",
+             "it", "jp", "kr", "np", "pk", "ru", "sa", "tr", "us", "za"}
+    if code not in named:
+        return
+    p = empty("National landmark " + code.upper())
+    p.parent = root
+    p.scale = (.38, .38, .38)
+    p.location = (.05, -.64, .22)
+    if code in ("in", "pk", "sa", "kr"):
+        before = set(bpy.data.objects)
+        palace(temple=code == "kr")
+        for o in set(bpy.data.objects)-before:
+            if o.parent == root:
+                o.parent = p
+        if code == "pk":
+            for x in [-.48, .48]:
+                sphere("Mosque side dome", (x, -.05, 1.58), (.30, .30, .31), ivory, p)
+        elif code == "in":
+            for x in [-1, 1]:
+                for y in [-.6, .6]:
+                    cone("Taj minaret", .11, .08, 1.9, (x, y, 1.06), ivory, p)
+                    sphere("Minaret dome", (x, y, 2.07), (.14, .14, .12), gold, p)
+    elif code == "fr":
+        for side in [-1, 1]:
+            for depth in [-1, 1]:
+                tube("Eiffel lattice leg", [(side*.85, depth*.65, .1),
+                     (side*.43, depth*.34, 1.15), (side*.12, depth*.10, 2.5)], .075, gold, p)
+        for z, width in [(.65, 1.2), (1.15, .87), (1.9, .43)]:
+            box("Eiffel viewing deck", (0, 0, z), (width, width*.8, .12), gold, p)
+        for i in range(5):
+            z = .35+i*.32
+            w = .72-i*.11
+            tube("Eiffel cross brace", [(-w, -.36, z), (w, -.36, z+.32)], .026, gold, p)
+            tube("Eiffel cross brace", [(w, -.36, z), (-w, -.36, z+.32)], .026, gold, p)
+        cone("Eiffel antenna", .07, 0, .4, (0, 0, 2.65), gold, p)
+    elif code == "ae":
+        for i in range(8):
+            cone("Burj tier", .35-i*.037, .35-i*.037, .35,
+                 ((i%3-1)*.045, 0, .2+i*.3), silver, p, 6)
+        cone("Burj needle", .055, 0, .65, (0, 0, 2.73), silver, p)
+    elif code == "gb":
+        box("Elizabeth Tower", (0, 0, 1.1), (.72, .65, 2.1), gold, p)
+        face = sphere("Big Ben clock face", (0, -.34, 1.8), (.25, .025, .25), ivory, p)
+        for i in range(12):
+            a = i*TAU/12
+            sphere("Clock hour", (.20*math.sin(a), -.373, 1.8+.20*math.cos(a)),
+                   (.018, .012, .018), black, p, 8)
+        tube("Clock hands", [(0, -.38, 2), (0, -.38, 1.8), (.13, -.38, 1.8)], .016, black, p)
+        cone("Tower gothic spire", .5, 0, .6, (0, 0, 2.44), black, p, 4)
+    elif code == "bd":
+        for i in range(7):
+            x = (i-3)*.22
+            h = 2.1-abs(i-3)*.3
+            box("National memorial blade", (x, 0, h/2), (.09, .45, h), silver, p)
+    elif code == "eg":
+        for x, r in [(-.72, .70), (.50, .53), (1.24, .35)]:
+            cone("Giza pyramid", r, 0, r*1.6, (x, 0, r*.8), gold, p, 4).rotation_euler.z = math.pi/4
+    elif code == "it":
+        for layer in range(3):
+            z = .3+layer*.36
+            ring("Colosseum facade", 1.0, (0, 0, z), ivory, p, .07)
+            for i in range(24):
+                a = i*TAU/24
+                cone("Colosseum arch pier", .045, .045, .34,
+                     (math.cos(a), .75*math.sin(a), z+.18), ivory, p)
+                tube("Roman arch", [(math.cos(a)-.07, .75*math.sin(a), z+.2),
+                     (math.cos(a), .75*math.sin(a), z+.32),
+                     (math.cos(a)+.07, .75*math.sin(a), z+.2)], .022, ivory, p)
+        cone("Roman arena", .88, .88, .06, (0, 0, .12), gold, p)
+    elif code == "cn":
+        for i in range(11):
+            x = (i-5)*.25
+            y = .18*math.sin(i*.7)
+            box("Great Wall rampart", (x, y, .45), (.27, .35, .55), ivory, p)
+            box("Wall battlement", (x, y-.13, .81), (.15, .08, .17), gold, p)
+        for x in [-1, 0, 1]:
+            box("Great Wall watchtower", (x, 0, .7), (.45, .50, .9), ivory, p)
+            cone("Watchtower roof", .45, 0, .30, (x, 0, 1.31), gold, p, 4).rotation_euler.z = math.pi/4
+    elif code == "au":
+        box("Opera House platform", (0, 0, .18), (2.4, 1.1, .18), ivory, p)
+        for i in range(5):
+            x = (i-2)*.38
+            shell = sphere("Opera sail shell", (x, .04*(i%2), .67),
+                           (.25, .55, .63), ivory, p)
+            shell.rotation_euler.y = -.45+i*.13
+    elif code in ("jp", "np", "za"):
+        if code == "za":
+            box("Table Mountain plateau", (0, 0, .63), (2.4, .9, 1), green, p)
+            box("Flat mountain summit", (0, 0, 1.15), (2.3, .86, .08), ivory, p)
+        else:
+            for x, r in [(0, 1), (.85, .55), (-.85, .48)]:
+                cone("Mount Fuji" if code == "jp" else "Himalayan peak", r, 0, r*1.75,
+                     (x, .13*abs(x), r*.875), blue, p, 12 if code == "jp" else 5)
+                cone("Snow summit", r*.35, 0, r*.61,
+                     (x, .13*abs(x), r*1.45), ivory, p, 12 if code == "jp" else 5)
+    elif code == "ru":
+        for i in range(6):
+            a = i*TAU/6
+            x, y = .76*math.cos(a), .55*math.sin(a)
+            h = 1+(i%3)*.18
+            cone("Saint Basil tower", .22, .22, h, (x, y, h/2), red, p)
+            sphere("Colourful onion dome", (x, y, h+.18), (.28, .28, .32), palette[i%5], p)
+            cone("Onion dome tip", .15, 0, .3, (x, y, h+.50), gold, p)
+    elif code == "us":
+        box("Liberty pedestal", (0, 0, .28), (.65, .65, .5), ivory, p)
+        cone("Liberty robe", .30, .13, 1.1, (0, 0, 1.1), green, p)
+        sphere("Liberty head", (0, 0, 1.83), (.14, .12, .18), green, p)
+        tube("Raised torch arm", [(0, 0, 1.55), (-.28, 0, 1.85), (-.38, 0, 2.30)], .06, green, p)
+        cone("Liberty torch", .065, .12, .22, (-.38, 0, 2.40), gold, p)
+        sphere("Liberty torch flame", (-.38, 0, 2.6), (.075, .075, .16), hot, p)
+        box("Liberty tablet", (.19, -.04, 1.36), (.17, .08, .30), green, p)
+        for i in range(7):
+            a = math.pi*.1+i*math.pi*.8/6
+            tube("Liberty crown ray", [(.13*math.cos(a), 0, 1.91+.13*math.sin(a)),
+                 (.24*math.cos(a), 0, 1.91+.24*math.sin(a))], .018, green, p)
+    elif code == "tr":
+        for i in range(6):
+            x = (i-2.5)*.35
+            cone("Cappadocia fairy chimney", .18, .08, .8+(i%3)*.2,
+                 (x, .13*(i%2), .5), gold, p)
+            cone("Fairy chimney cap", .22, 0, .35, (x, .13*(i%2), 1+(i%3)*.15), ivory, p)
+            sphere("Cappadocia balloon", (x, .12, 1.9+(i%3)*.15), (.18, .18, .24), palette[i%5], p)
+            box("Balloon basket", (x, .12, 1.55+(i%3)*.15), (.1, .1, .08), gold, p)
+    elif code == "ca":
+        for i in range(6):
+            x = (i-2.5)*.23
+            tube("Maple Falls water", [(x, 0, 1.25), (x, -.1, .65), (x, -.35, .1)], .04, cyan, p)
+        for side in [-1, 1]:
+            cone("Maple tree trunk", .045, .03, .65, (side*.9, 0, .35), gold, p)
+            for i in range(5):
+                a = i*TAU/5
+                sphere("Autumn maple leaves", (side*.9+.15*math.cos(a), .05, .85+.15*math.sin(a)),
+                       (.18, .08, .18), red, p)
+    elif code == "br":
+        for i in range(13):
+            a = i*math.pi/12
+            tube("Carnival feather", [(0, .12, .5), (.9*math.cos(a), .12, .8+math.sin(a))], .035, palette[i%5], p)
+            sphere("Feather tip", (.9*math.cos(a), .12, .8+math.sin(a)), (.09, .045, .17), palette[i%5], p)
+        sphere("Carnival mask", (0, -.04, .8), (.45, .12, .24), gold, p)
+        for x in [-.18, .18]:
+            sphere("Mask eye", (x, -.16, .83), (.09, .02, .065), black, p)
+
 def country():
     code = args.scene[5:]
     texture = HERE / "flags" / (code + ".png")
@@ -623,6 +769,7 @@ def country():
     nodes = cloth.node_tree.nodes
     image = nodes.new("ShaderNodeTexImage")
     image.image = bpy.data.images.load(str(texture))
+    nodes.active = image
     cloth.node_tree.links.new(image.outputs["Color"], nodes["Principled BSDF"].inputs["Base Color"])
     verts, faces = [], []
     nx, nz = 24, 12
@@ -656,28 +803,7 @@ def country():
     cone("Gold flag mast", .026, .026, 2.6, (-1.04, 0, 1.3), gold, root)
     sphere("Mast finial", (-1.04, 0, 2.64), (.07,)*3, gold, root)
     cone("National monument plinth", 1.15, 1.05, .25, (0, 0, .15), ivory, root)
-    if code in ("in", "pk", "bd", "kr", "sa", "ru"):
-        # A small architectural tableau below the flag.
-        monument = empty("National architectural tableau")
-        monument.parent = root
-        previous = root
-        # All geometry is scaled as a group to stay below the waving flag.
-        before = set(bpy.data.objects)
-        palace(temple=code in ("kr", "bd"))
-        for o in set(bpy.data.objects)-before:
-            if o.parent == previous:
-                o.parent = monument
-        monument.scale = (.32, .32, .32)
-        monument.location = (.1, -.5, .24)
-    elif code == "eg":
-        for x in [-.55, .15, .65]:
-            cone("Egyptian pyramid", .40, 0, .67, (x, -.6, .50), gold, root, 4).rotation_euler.z = math.pi/4
-    elif code in ("fr", "ae", "gb", "us"):
-        heights = {"fr": .72, "ae": .88, "gb": .73, "us": .68}
-        cone("National landmark tower", .24, .06, heights[code], (.1, -.55, .6), gold, root, 4)
-        cone("Landmark spire", .055, 0, .3, (.1, -.55, 1.06), silver, root)
-    elif code in ("np", "jp", "za", "ca"):
-        cone("National mountain", .62, 0, .7, (.1, -.5, .6), ivory if code in ("np", "jp") else green, root, 5)
+    national_monument(code)
 
 def exhaust(parent, x, y, z, radius):
     for mat, length, width in [(fire, 1.55, 1), (hot, .83, .47)]:
@@ -847,7 +973,9 @@ if args.geometry_only:
         raise RuntimeError("Scene has insufficient modeled geometry")
     raise SystemExit(0)
 
-poster_frame = 48 if builder == "rocket" else min(48, scene.frame_end)
+poster_frame = args.poster_frame or (48 if builder == "rocket" else min(48, scene.frame_end))
+if not 1 <= poster_frame <= scene.frame_end:
+    raise ValueError("Poster frame lies outside the movie")
 scene.frame_set(poster_frame)
 scene.render.filepath = str(out / "poster.png")
 bpy.ops.render.render(write_still=True)

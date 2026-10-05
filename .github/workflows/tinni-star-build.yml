@@ -12,6 +12,11 @@ on:
       - 'apps/tinni_star/**'
       - '.github/workflows/tinni-star-build.yml'
   workflow_dispatch:
+  workflow_call:
+    inputs:
+      source_sha:
+        required: true
+        type: string
 
 concurrency:
   group: tinni-star-${{ github.event.pull_request.number || github.ref }}
@@ -28,6 +33,30 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.source_sha || github.sha }}
+
+      - name: Check and install the verified cinematic catalog
+        id: cinematic
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PINNED_SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          if [ ! -f tools/cinematic/bundle-lock.json ]; then
+            if [ -n "$PINNED_SOURCE_SHA" ]; then
+              echo "Expected cinematic bundle pin is missing."
+              exit 1
+            fi
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "App checks continue; APK packaging waits for the verified cinematic bundle." >> "$GITHUB_STEP_SUMMARY"
+          else
+            tag="$(python3 -c "import json; print(json.load(open('tools/cinematic/bundle-lock.json'))['release_tag'])")"
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern cinematic-assets.zip --dir /tmp/tinni-cinematic-bundle
+            python3 tools/cinematic/catalog.py install --archive /tmp/tinni-cinematic-bundle/cinematic-assets.zip
+            python3 tools/cinematic/catalog.py validate
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -211,10 +240,12 @@ jobs:
           PY
 
       - name: Build installable APK
+        if: steps.cinematic.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: flutter build apk --release --split-per-abi
 
       - name: Verify built APK signing certificate
+        if: steps.cinematic.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: |
           APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
@@ -223,6 +254,7 @@ jobs:
           "$APKSIGNER" verify --print-certs "$APK" | grep -F "8f6be8da2c2509bf2a248f72b81391e6b05e860e"
 
       - name: Upload Tinni Star ARM64 APK
+        if: steps.cinematic.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-ARM64
@@ -230,6 +262,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Tinni Star split APKs
+        if: steps.cinematic.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Split-APKs
@@ -237,6 +270,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build separate Tinni Star Final APK
+        if: steps.cinematic.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: |
           python3 - <<'PY'
@@ -257,6 +291,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-*-release.apk build/final-apks/
 
       - name: Verify separate APK identity and signing
+        if: steps.cinematic.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: |
           APK="build/final-apks/app-arm64-v8a-release.apk"
@@ -267,6 +302,7 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -F "application-label:'Tinni Star Final'"
 
       - name: Upload one Tinni Star Final ARM64 APK
+        if: steps.cinematic.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Final-ARM64
@@ -274,6 +310,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload separate Tinni Star Final APKs
+        if: steps.cinematic.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Final-Separate-APKs
@@ -281,6 +318,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload provider readiness report
+        if: steps.cinematic.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Final-Provider-Readiness
@@ -288,9 +326,10 @@ jobs:
           if-no-files-found: error
 
       - name: Publish direct signed update APK
-        if: github.event_name == 'push' && github.ref == 'refs/heads/tinnistar'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/tinnistar' && steps.cinematic.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          APK_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
         shell: bash
         run: |
           set -euo pipefail
@@ -302,5 +341,5 @@ jobs:
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "/tmp/$file" --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$tag" "/tmp/$file" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" --title "Tinni Star Final $version" --notes-file /tmp/tinni-release-notes.md
+            gh release create "$tag" "/tmp/$file" --repo "$GITHUB_REPOSITORY" --target "$APK_SOURCE_SHA" --title "Tinni Star Final $version" --notes-file /tmp/tinni-release-notes.md
           fi

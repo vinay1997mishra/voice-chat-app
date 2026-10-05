@@ -6,6 +6,10 @@ on:
       source_sha:
         required: true
         type: string
+    outputs:
+      apk_source_sha:
+        description: Exact app source with the verified movie bundle pinned
+        value: ${{ jobs.publish.outputs.apk_source_sha }}
 
 permissions:
   actions: read
@@ -15,6 +19,8 @@ jobs:
   publish:
     if: github.ref == 'refs/heads/tinnistar'
     runs-on: ubuntu-latest
+    outputs:
+      apk_source_sha: ${{ steps.pin.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -61,3 +67,42 @@ jobs:
             gh release create "$tag" cinematic-package/cinematic-assets.zip cinematic-package/cinematic-assets.sha256 cinematic-package/assets/manifest.json cinematic-package/reviews/*.jpg --target "$SOURCE_SHA" --prerelease --title "Tinni cinematic catalog ${SOURCE_SHA:0:12}" --notes-file /tmp/cinematic-notes.md
           fi
           echo "Cinematic bundle: https://github.com/$GITHUB_REPOSITORY/releases/tag/$tag" >> "$GITHUB_STEP_SUMMARY"
+      - name: Pin verified bundle for the Android build
+        id: pin
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha }}
+        run: |
+          set -euo pipefail
+          # The review commit belongs only on the review branch.
+          git checkout --detach "$SOURCE_SHA"
+          actual="$(git ls-remote origin refs/heads/tinnistar | cut -f1)"
+          test "$actual" = "$SOURCE_SHA"
+          python3 - "$SOURCE_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          source = sys.argv[1]
+          manifest = json.loads(Path("cinematic-package/assets/manifest.json").read_text())
+          assert manifest["source_commit"] == source
+          checksum = Path("cinematic-package/cinematic-assets.sha256").read_text().split()[0]
+          lock = {
+              "schema": 1, "source_commit": source,
+              "release_tag": "cinematic-" + source[:12],
+              "zip_sha256": checksum,
+              "source_fingerprint": manifest["source_fingerprint"],
+              "scene_count": manifest["scene_count"],
+          }
+          Path("tools/cinematic/bundle-lock.json").write_text(json.dumps(lock, indent=2) + "\n")
+          spec = Path("apps/tinni_star/pubspec.yaml")
+          text = spec.read_text()
+          import re
+          match = re.search(r"(?m)^version: (\d+)\.(\d+)\.(\d+)\+(\d+)$", text)
+          assert match, "Unexpected APK version format"
+          major, minor, patch, number = map(int, match.groups())
+          version = f"version: {major}.{minor}.{patch+1}+{number+1}"
+          spec.write_text(text[:match.start()] + version + text[match.end():])
+          PY
+          git add tools/cinematic/bundle-lock.json apps/tinni_star/pubspec.yaml
+          git commit -m "Pin verified cinematic movie catalog for the Android APK"
+          git push origin HEAD:refs/heads/tinnistar
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
