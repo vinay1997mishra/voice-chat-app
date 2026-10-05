@@ -236,7 +236,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final summary = Map<String, dynamic>.from(raw);
     if (summary['room_id']?.toString() != widget.room.id) return false;
     if (_giftInt(summary['lifetime_total']) <
-        _giftInt(_lastRoomSendingSummary['lifetime_total'])) return true;
+        _giftInt(_lastRoomSendingSummary['lifetime_total'])) { return true; }
     _lastRoomSendingSummary = {..._lastRoomSendingSummary, ...summary};
     final completed = completedRocketStages(_giftInt(summary['lifetime_total']));
     if (_rocketCompleted.value == null || completed > _rocketCompleted.value!) {

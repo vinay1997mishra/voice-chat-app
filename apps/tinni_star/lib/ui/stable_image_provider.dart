@@ -1,4 +1,3 @@
-import 'dart:collection';
 import 'dart:convert';
 import 'package:flutter/painting.dart';
 
@@ -8,7 +7,7 @@ class StableImageProviderCache {
   StableImageProviderCache({this.maxEntries = 128, this.maxSourceBytes = 12 * 1024 * 1024});
   final int maxEntries;
   final int maxSourceBytes;
-  final _images = LinkedHashMap<String, ImageProvider?>();
+  final _images = <String, ImageProvider?>{};
   int _sourceBytes = 0;
   int get length => _images.length;
   int get sourceBytes => _sourceBytes;

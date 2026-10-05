@@ -285,7 +285,7 @@ class ActiveRoomSession extends ChangeNotifier {
       final roomId = room?.id;
       final token = _activeAuthToken;
       if (roomId == null || token == null ||
-          (_nextFallbackPoll?.isAfter(nowProvider()) ?? false)) return;
+          (_nextFallbackPoll?.isAfter(nowProvider()) ?? false)) { return; }
       _fallbackRefreshRunning = true;
       try {
         await presence.refresh(roomId: roomId, authToken: token);
