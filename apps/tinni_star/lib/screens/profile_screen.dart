@@ -40,6 +40,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
+    widget.state.pageEntries.addListener(_onPageEntered);
     _loadOwnerTags();
     _loadEconomyState();
     _loadAccountStats();
@@ -48,9 +50,27 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void didUpdateWidget(covariant ProfileScreen oldWidget) {
     super.didUpdateWidget(oldWidget);
-    _loadOwnerTags();
-    _loadEconomyState();
-    _loadAccountStats();
+    if (oldWidget.state != widget.state) {
+      oldWidget.state.realtimeChanges.removeListener(_onLiveChanged);
+      oldWidget.state.pageEntries.removeListener(_onPageEntered);
+      widget.state.realtimeChanges.addListener(_onLiveChanged);
+      widget.state.pageEntries.addListener(_onPageEntered);
+      _loadEconomyState();
+      _loadAccountStats();
+    }
+  }
+
+  void _onLiveChanged() { if (mounted) setState(() {}); }
+  void _onPageEntered() { if (widget.state.pageEntries.value == 3) _refreshPage(); }
+  Future<void> _refreshPage() async {
+    await widget.state.refreshAuthenticatedAccount(force: true);
+    await Future.wait([_loadEconomyState(), _loadAccountStats()]);
+  }
+  @override
+  void dispose() {
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
+    widget.state.pageEntries.removeListener(_onPageEntered);
+    super.dispose();
   }
 
   Future<void> _loadAccountStats() async {
@@ -746,7 +766,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           child: CustomPaint(
             painter: const _MineGoldenStarsPainter(),
+            child: RefreshIndicator(
+            onRefresh: _refreshPage,
             child: ListView(
+            physics: const AlwaysScrollableScrollPhysics(),
             key: const Key('reference-mine-list'),
             padding: const EdgeInsets.fromLTRB(12, 8, 12, 18),
             children: [
@@ -1299,6 +1322,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ]),
             ],
+          ),
           ),
           ),
         ),

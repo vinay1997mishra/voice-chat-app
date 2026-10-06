@@ -86,6 +86,17 @@ class SocialService {
       ValueNotifier<Map<String, dynamic>?>(null);
   final ValueNotifier<Map<String, dynamic>?> roomEvents =
       ValueNotifier<Map<String, dynamic>?>(null);
+  final ValueNotifier<Map<String, dynamic>?> accountEvents =
+      ValueNotifier<Map<String, dynamic>?>(null);
+  Timer? _accountRead;
+  bool _roomsWanted = false;
+  void watchRooms(bool enabled) {
+    _roomsWanted = enabled;
+    if (messageEventsConnected) _messageSocket!.add(jsonEncode({
+      'type': 'subscribe_rooms', 'enabled': enabled,
+    }));
+  }
+
   bool get messageEventsConnected => _messageSocket?.readyState == WebSocket.open;
   int _messageReconnectFailures = 0;
   WebSocket? _messageSocket;
@@ -123,6 +134,8 @@ class SocialService {
   }
 
   Future<void> disconnectMessageEvents() async {
+    _accountRead?.cancel();
+    _accountRead = null;
     _messageEventsWanted = false;
     _messageAuthToken = null;
     _messageConnectTimeout?.cancel();
@@ -189,6 +202,7 @@ class SocialService {
       }
       socket.pingInterval = const Duration(seconds: 60);
       _messageSocket = socket;
+      if (_roomsWanted) socket.add(jsonEncode({'type': 'subscribe_rooms', 'enabled': true}));
       _messageSocketSubscription = socket.listen(
         _handleMessageSocketData,
         onDone: _handleMessageSocketClosed,
@@ -214,7 +228,19 @@ class SocialService {
         (key, value) => MapEntry(key.toString(), value),
       );
       _messageReconnectFailures = 0;
-      if (event['type'] == 'country_ribbon' || event['type'] == 'ribbons_snapshot') {
+      if (event['type'] == 'account_state') {
+        accountEvents.value = Map<String, dynamic>.from(event);
+        return;
+      }
+      if (event['type'] == 'account_changed') {
+        _accountRead ??= Timer(const Duration(milliseconds: 250), () {
+          _accountRead = null;
+          if (messageEventsConnected) _messageSocket!.add(jsonEncode({'type': 'account_state'}));
+        });
+        return;
+      }
+      if (event['type'] == 'country_ribbon' || event['type'] == 'ribbons_snapshot' ||
+          event['type'] == 'rooms_snapshot' || event['type'] == 'room_updated') {
         roomEvents.value = Map<String, dynamic>.from(event);
         return;
       }
@@ -224,8 +250,39 @@ class SocialService {
       } else if (count != null) {
         _setUnreadMessages(int.tryParse(count.toString()) ?? 0);
       }
+      if (event['type'] == 'message_received' && event['message'] is Map) {
+        applyMessageEvent(Map<String, dynamic>.from(event['message'] as Map));
+      }
       messageEvents.value = Map<String, dynamic>.from(event);
     } catch (_) {}
+  }
+
+  void markLiveConversationSeen(String peerUserId) {
+    if (messageEventsConnected) _messageSocket!.add(jsonEncode({
+      'type': 'messages_seen', 'peer_user_id': peerUserId,
+    }));
+  }
+
+  void applyMessageEvent(Map<String, dynamic> row) {
+    final id = row['id']?.toString();
+    final from = row['from']?.toString() ?? '';
+    final to = row['to']?.toString() ?? '';
+    if (id == null || id.isEmpty || from.isEmpty || to.isEmpty) return;
+    final message = ChatMessage(
+      id: id, from: from, to: to, text: row['text']?.toString() ?? '',
+      kind: row['message_kind']?.toString() ?? 'text',
+      mediaUrl: row['media_url']?.toString(),
+      createdAt: DateTime.fromMillisecondsSinceEpoch((row['created_at'] as num?)?.toInt() ?? 0),
+    );
+    if (directMessages.any((item) => item.id == id)) return;
+    directMessages.add(message);
+    final index = messageThreads.indexWhere((thread) => thread.userId == from);
+    final old = index < 0 ? null : messageThreads.removeAt(index);
+    messageThreads.insert(0, MessageThread(
+      userId: from, displayName: old?.displayName ?? row['from_name']?.toString() ?? from,
+      avatarDataUrl: old?.avatarDataUrl, isFriend: old?.isFriend ?? friends.contains(from),
+      lastMessage: message, unreadCount: (old?.unreadCount ?? 0) + 1,
+    ));
   }
 
   void _handleMessageSocketClosed() {
@@ -777,6 +834,8 @@ class SocialService {
     unreadMessages.dispose();
     messageEvents.dispose();
     roomEvents.dispose();
+    accountEvents.dispose();
+    _accountRead?.cancel();
     _messageReconnectTimer?.cancel();
     _httpClient.close(force: true);
   }

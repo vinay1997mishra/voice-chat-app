@@ -1,3 +1,4 @@
+import { openGameSocket, handleGameMessage, notifyGameChanged } from '../../src/game_live.js';
 import { countryDay } from '../../src/country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from '../../src/rocket_rewards.js';
 import { premiumGiftCatalog } from '../../src/premium_gift_catalog.js';
@@ -16,7 +17,7 @@ function source(file) {
     .replace(/export (?=(?:async )?(?:class|function|const|let) )/g, '');
 }
 function storeClass(file, name) {
-  return new Function('DurableObject', 'countryDay', 'premiumGiftCatalog', 'rocketPolicy', 'rocketAllocation', 'rocketDraw', source(file) + '\nreturn ' + name)(DurableObject, countryDay, premiumGiftCatalog, rocketPolicy, rocketAllocation, rocketDraw);
+  return new Function('DurableObject', 'countryDay', 'premiumGiftCatalog', 'rocketPolicy', 'rocketAllocation', 'rocketDraw', 'openGameSocket', 'handleGameMessage', 'notifyGameChanged', source(file) + '\nreturn ' + name)(DurableObject, countryDay, premiumGiftCatalog, rocketPolicy, rocketAllocation, rocketDraw, openGameSocket, handleGameMessage, notifyGameChanged);
 }
 export function runtime({ legacyRoomSettings = false } = {}) {
   const databases = [];

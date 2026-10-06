@@ -1332,3 +1332,15 @@ The user's latest timing and privacy instructions supersede earlier general cine
 - Every successful Lucky send renews the Combo to exactly nine seconds. Taps, failed requests and requests in flight do not renew the existing deadline. Nine seconds without a successful send hides the control.
 - Same gift and the same receiver set within the active window retain the Lucky session and selected quantity. A different gift, different receiver set, expired window or non-Lucky send ends continuation.
 - Center HUD and queued multiplier effects use the authenticated server result and shared room timeline. The Lucky RNG, maximum configured multiplier, prize pool, prices, sender payouts, recipient eligibility, Host-only Diamonds and Lucky 10% Rocket/social value continue to use their existing server rules.
+
+
+## 2026-10-06 — Realtime without automatic page refresh
+Latest user instruction: remove automatic page polling and unnecessary blinking; load pages on entry and allow pull-to-refresh. Preserve room entry, seats/emojis, frame/entry effects, voice, messages, wallet and DP updates.
+- Authenticated hibernating game sockets deliver server state and coalesce change notifications; game mutations stay on validated HTTP actions.
+- Existing inbox socket also delivers private wallet/profile state. Wallet invalidations contain no financial values; snapshots use the authenticated attachment identity.
+- Incoming messages apply their supplied payload directly. Seen acknowledgements travel on the existing socket.
+- Home polling removed. Visited tabs retain state; first entry is lazy, and later entry/pull refreshes explicitly. Profile changes no longer trigger reloads on every parent rebuild.
+- Public room updates and room-member profile changes push to subscribed viewers. Voice continues through LiveKit.
+- No unattended empty-game alarm chain; overdue stake-bearing rounds settle before a sparse recent-result history is rebuilt. Permanent bets, wallet and company records remain intact.
+- Transient room-event retention reduced to 50; session revocation checks no longer write cleanup on every authenticated request.
+- Free-tier request and SQL quotas remain distinct; this change does not guarantee unlimited users or report unconnected dashboard usage.

@@ -7,8 +7,6 @@ import '../ui/casino_fruit_art.dart';
 const casinoBetAmounts = <int>[5000, 25000, 100000, 500000, 2000000, 10000000];
 const _board = <String?>['lemon', 'cherry', 'kiwi', 'strawberry', null,
   'watermelon', 'banana', 'raspberry', 'plum'];
-const _track = <String>['lemon', 'cherry', 'kiwi', 'watermelon',
-  'plum', 'raspberry', 'banana', 'strawberry'];
 const _gold = Color(0xFFFFD580);
 const _cream = Color(0xFFFFF2D4);
 
@@ -91,7 +89,8 @@ class CasinoGameDock extends StatelessWidget {
 class CasinoFruitPanel extends StatefulWidget {
   const CasinoFruitPanel({super.key, required this.title, required this.gameId,
     required this.source, required this.snapshot, required this.refresh,
-    required this.bet, this.onClose, this.party = false});
+    required this.bet, this.onClose, this.party = false,
+    this.liveConnected, this.connectLive, this.disconnectLive});
   final String title;
   final String gameId;
   final Listenable source;
@@ -100,6 +99,9 @@ class CasinoFruitPanel extends StatefulWidget {
   final Future<String?> Function(String fruit, int amount) bet;
   final VoidCallback? onClose;
   final bool party;
+  final bool Function()? liveConnected;
+  final Future<void> Function()? connectLive;
+  final VoidCallback? disconnectLive;
 
   @override
   State<CasinoFruitPanel> createState() => _CasinoFruitPanelState();
@@ -113,7 +115,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   String? _pendingFruit;
   String _frame = '';
   bool _active = true;
-  int _spinTick = 0;
   int _failures = 0;
   int? _refreshedBoundary;
 
@@ -123,6 +124,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     widget.source.addListener(_onServerChanged);
     WidgetsBinding.instance.addObserver(this);
     _startClock();
+    unawaited(widget.connectLive?.call());
     unawaited(_refresh());
   }
 
@@ -140,8 +142,10 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     _active = state == AppLifecycleState.resumed;
     _clock?.cancel();
     _poll?.cancel();
+    if (!_active) widget.disconnectLive?.call();
     if (_active) {
       _startClock();
+      unawaited(widget.connectLive?.call());
       unawaited(_refresh());
     }
   }
@@ -152,17 +156,15 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
       if (!mounted || !_active) { return; }
       final view = widget.snapshot();
       if (!view.connected) { return; }
-      _spinTick++;
       final seconds = _seconds(view.spinning ? view.spinRemaining : view.remaining);
-      final moving = _moving(view);
       final result = _revealed(view)?.round;
-      final frame = '$seconds:$moving:$result';
+      final frame = '$seconds:${view.spinning}:$result';
       if (frame != _frame) {
         _frame = frame;
         setState(() {});
       }
       // Refresh the authoritative phase as soon as a round expires.
-      if (view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
+      if (widget.connectLive == null && view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
         _refreshedBoundary = view.round;
         unawaited(_refresh());
       }
@@ -181,7 +183,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     // Do not race a wallet/state read against an in-flight transaction.
     if (_pendingFruit != null) {
       _poll?.cancel();
-      _poll = Timer(const Duration(seconds: 2), () => unawaited(_refresh()));
+      if (widget.connectLive == null) {
+        _poll = Timer(const Duration(seconds: 2), () => unawaited(_refresh()));
+      }
       return Future<void>.value();
     }
     final operation = _runRefresh();
@@ -201,8 +205,10 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
       if (mounted && _active) {
         _failures = widget.snapshot().connected ? 0 : (_failures + 1).clamp(1, 3).toInt();
         setState(() {});
-        _poll = Timer(Duration(seconds: _failures == 0 ? 2 : 2 + _failures * 2),
-          () => unawaited(_refresh()));
+        if (widget.connectLive == null) {
+          _poll = Timer(Duration(seconds: _failures == 0 ? 2 : 2 + _failures * 2),
+            () => unawaited(_refresh()));
+        }
       }
     }
   }
@@ -211,19 +217,13 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   void dispose() {
     _clock?.cancel();
     _poll?.cancel();
+    widget.disconnectLive?.call();
     widget.source.removeListener(_onServerChanged);
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
   int _seconds(Duration value) => math.max(0, (value.inMilliseconds + 999) ~/ 1000);
-  String? _moving(CasinoSnapshot view) {
-    if (!view.connected || (!view.bettingOpen && !view.spinning)) { return null; }
-    final tick = view.spinning ? _spinTick
-      : math.max(0, view.roundDuration - view.remaining.inMilliseconds) ~/ 300;
-    return _track[tick % _track.length];
-  }
-
   CasinoResult? _revealed(CasinoSnapshot view) {
     if (view.spinning || view.history.isEmpty) { return null; }
     final latest = view.history.first;
@@ -287,7 +287,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   Widget build(BuildContext context) {
     final view = widget.snapshot();
     final result = _revealed(view);
-    final moving = _moving(view);
     final seconds = _seconds(view.spinning ? view.spinRemaining : view.remaining);
     final disabledMotion = MediaQuery.disableAnimationsOf(context);
     final status = _pendingFruit != null ? 'Submitting bet…'
@@ -382,7 +381,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                       final fruit = view.fruits.firstWhere((fruit) => fruit.key == key);
                       final bonus = result?.bonus.contains(key) == true;
                       return _FruitTile(
-                        fruit: fruit, moving: moving == key, bonus: bonus,
+                        fruit: fruit, moving: false, bonus: bonus,
                         winner: result?.fruit == key && result?.lucky != true,
                         pending: _pendingFruit == key, disableMotion: disabledMotion,
                         onTap: view.bettingOpen && _pendingFruit == null

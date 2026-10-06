@@ -101,6 +101,7 @@ class TinniState {
       profile.clear();
       unawaited(_clearExpiredSession());
     };
+    social.accountEvents.addListener(_onLiveAccount);
     roomPresence.diagnosticSink = analytics.event;
     roomPresence.onSessionExpired = (token) => backend.onSessionExpired?.call(token);
     crashReporter = BackendCrashReporter(
@@ -174,6 +175,27 @@ class TinniState {
   }
 
   final bool roomPresenceFallbackTimerEnabled;
+  final ValueNotifier<int> realtimeChanges = ValueNotifier<int>(0);
+  final ValueNotifier<int> pageEntries = ValueNotifier<int>(0);
+  void _onLiveAccount() {
+    final event = social.accountEvents.value;
+    final account = auth.current;
+    if (event == null || account == null) return;
+    final user = event['user'];
+    if (user is! Map || user['user_id']?.toString() != account.userId) return;
+    final remote = event['wallet'];
+    if (remote is Map) wallet.applyRemote(RemoteWallet.fromServer(Map<String, dynamic>.from(remote)));
+    final next = TinniAccount.fromServer(Map<String, dynamic>.from(user), token: account.authToken);
+    if (next.displayName != account.displayName || next.avatarDataUrl != account.avatarDataUrl ||
+        next.signature != account.signature || next.countryCode != account.countryCode ||
+        next.age != account.age || next.gender != account.gender) {
+      auth.setAuthenticatedAccount(next);
+      profile.loadFromAccount(next);
+      unawaited(authPersistence?.save(next));
+    }
+    realtimeChanges.value++;
+  }
+
 
   final ValueNotifier<String> languagePreference =
       ValueNotifier<String>('English');

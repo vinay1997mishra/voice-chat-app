@@ -1,4 +1,5 @@
 import { DurableObject } from "cloudflare:workers";
+import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 
 export const PARTY_ROUND_MS = 21000;
 export const PARTY_RESULT_SPIN_MS = 5000;
@@ -87,6 +88,18 @@ function dayKey(ms) {
 }
 
 export class FruitPartyStore extends DurableObject {
+  fetch(request) { return openGameSocket(this, request, "fruit-party"); }
+  webSocketMessage(socket, message) { return handleGameMessage(this, socket, message); }
+  webSocketClose() {}
+  webSocketError() {}
+
+  _notifyPhase(now) {
+    const phaseKey = roundIdAt(now) + ":" + (now >= bettingEndAt(roundIdAt(now)));
+    if (this._livePhaseKey === phaseKey) return;
+    this._livePhaseKey = phaseKey;
+    notifyGameChanged(this, "fruit-party");
+  }
+
   constructor(ctx, env) {
     super(ctx, env);
     this.env = env;
@@ -252,6 +265,7 @@ export class FruitPartyStore extends DurableObject {
       this._setMeta("started_round", currentRound);
     }
     await this._sync(now);
+    this._notifyPhase(now);
   }
 
   async _sync(now = Date.now()) {
@@ -260,21 +274,30 @@ export class FruitPartyStore extends DurableObject {
     const lastRaw = this._meta("last_settled_round");
     let next = lastRaw === null ? startedRound : Number(lastRaw) + 1;
 
-    let processed = 0;
-    while (
-      (
-        next < currentRound ||
-        (
-          next === currentRound &&
-          now >= bettingEndAt(currentRound)
-        )
-      ) &&
-      processed < 100
-    ) {
-      await this._settle(next);
-      this._setMeta("last_settled_round", next);
-      next += 1;
-      processed += 1;
+    const eligible = now >= bettingEndAt(currentRound) ? currentRound : currentRound - 1;
+    // Read overdue stake-bearing rounds directly after a long idle interval.
+    // Never discard a bet, payout, ledger or settled financial result.
+    const overdue = this.ctx.storage.sql.exec(
+      "SELECT DISTINCT round_id FROM party_bets WHERE round_id >= ? AND round_id <= ? ORDER BY round_id LIMIT 101",
+      next, eligible,
+    ).toArray();
+    for (const row of overdue.slice(0, 100)) await this._settle(Number(row.round_id));
+    if (overdue.length > 100) {
+      this._setMeta("last_settled_round", Number(overdue[99].round_id));
+      await this.ctx.storage.setAlarm(now + 1000);
+      return;
+    }
+    for (let round = Math.max(next, eligible - 6); round <= eligible; round++) {
+      await this._settle(round);
+    }
+    if (next <= eligible) this._setMeta("last_settled_round", eligible);
+    const pending = this.ctx.storage.sql.exec(
+      "SELECT round_id FROM party_bets WHERE round_id > ? LIMIT 1", eligible,
+    ).toArray().length > 0;
+    const watching = (this.ctx.getWebSockets?.("game:fruit-party") || []).length > 0;
+    if (!watching && !pending) {
+      if (await this.ctx.storage.getAlarm() !== null) await this.ctx.storage.deleteAlarm();
+      return;
     }
 
     const nextAlarm =
@@ -552,6 +575,7 @@ export class FruitPartyStore extends DurableObject {
       now,
     );
 
+    notifyGameChanged(this, "fruit-party");
     return this.state(userId);
   }
 }

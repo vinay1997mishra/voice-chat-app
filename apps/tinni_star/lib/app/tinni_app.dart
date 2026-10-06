@@ -44,16 +44,26 @@ class TinniShell extends StatefulWidget {
 
 class _TinniShellState extends State<TinniShell> {
   int index = 0;
+  final _visited = <int>{0};
 
   @override
   void initState() {
     super.initState();
     widget.state.refreshAccountPreferences();
+    widget.state.social.retainMessageEvents();
+    final token = widget.state.auth.current?.authToken;
+    if (token != null) widget.state.social.connectMessageEvents(token);
+  }
+
+  @override
+  void dispose() {
+    widget.state.social.releaseMessageEvents();
+    super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
+    final pages = <Widget>[
       HomeScreen(state: widget.state),
       DiscoverScreen(state: widget.state),
       MessagesScreen(state: widget.state),
@@ -68,7 +78,10 @@ class _TinniShellState extends State<TinniShell> {
           final session = widget.state.roomSession;
           return Column(
             children: [
-              Expanded(child: IndexedStack(index: index, children: pages)),
+              Expanded(child: IndexedStack(index: index, children: [
+                for (var page = 0; page < pages.length; page++)
+                  _visited.contains(page) ? pages[page] : const SizedBox.shrink(),
+              ])),
               if (session.hasRoom && session.minimized)
                 _MiniRoomBar(
                   state: widget.state,
@@ -127,7 +140,9 @@ class _TinniShellState extends State<TinniShell> {
               widget.state.analytics.event('navigation_tab', <String, Object?>{
                 'tab': labels[value],
               });
-              setState(() => index = value);
+              if (index == value) return;
+              setState(() { index = value; _visited.add(value); });
+              widget.state.pageEntries.value = value;
             },
             destinations: [
               NavigationDestination(

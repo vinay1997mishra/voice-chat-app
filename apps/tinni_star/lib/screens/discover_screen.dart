@@ -22,7 +22,23 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   _DiscoverMode mode = _DiscoverMode.all;
 
   @override
+  void initState() {
+    super.initState();
+    widget.state.pageEntries.addListener(_onPageEntered);
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
+    _refresh();
+  }
+  void _onPageEntered() { if (widget.state.pageEntries.value == 1) _refresh(); }
+  void _onLiveChanged() {
+    if (mounted) setState(() {
+      if (search.text.trim().isNotEmpty) results = widget.state.discovery.search(search.text.trim());
+    });
+  }
+
+  @override
   void dispose() {
+    widget.state.pageEntries.removeListener(_onPageEntered);
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
     search.dispose();
     super.dispose();
   }

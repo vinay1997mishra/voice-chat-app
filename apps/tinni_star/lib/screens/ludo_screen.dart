@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../games/ludo_game.dart';
+import '../games/game_live_connection.dart';
 import '../room/room_presence_service.dart';
 
 class LudoScreen extends StatefulWidget {
@@ -20,7 +21,11 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
   String? _myColor, _errorText;
   bool _ready = false, _busy = false, _foreground = true;
   int _version = 0;
-  Timer? _poll;
+  late final _live = GameLiveConnection(
+    apiBase: widget.state.backend.apiBase, path: '/ludo/live', roomId: widget.roomId,
+    onState: (data) { if (mounted && _foreground) setState(() => _apply(data)); },
+    onStatus: () { if (mounted) setState(() {}); },
+  );
   Future<void>? _pending;
 
   @override
@@ -29,21 +34,19 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_presenceChanged);
     unawaited(_refresh());
-    _startPoll();
+    unawaited(_connectLive());
   }
 
   void _presenceChanged() { if (mounted) setState(() {}); }
-  void _startPoll() {
-    _poll?.cancel();
-    _poll = Timer.periodic(const Duration(seconds: 2), (_) {
-      if (_foreground && !_busy) unawaited(_refresh());
-    });
+  Future<void> _connectLive() async {
+    final account = widget.state.auth.current;
+    if (account != null) await _live.connect(account.authToken);
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     _foreground = state == AppLifecycleState.resumed;
-    if (_foreground) { unawaited(_refresh()); _startPoll(); }
-    else { _poll?.cancel(); }
+    if (_foreground) { unawaited(_refresh()); unawaited(_connectLive()); }
+    else { _live.disconnect(); }
   }
 
   void _apply(Map<String, dynamic> data) {
@@ -283,7 +286,7 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    _poll?.cancel();
+    _live.disconnect();
     WidgetsBinding.instance.removeObserver(this);
     widget.state.roomSession.removeListener(_presenceChanged);
     final account = widget.state.auth.current;

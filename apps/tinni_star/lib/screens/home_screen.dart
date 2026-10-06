@@ -1,5 +1,4 @@
 import 'dart:async';
-import '../infra/request_budget.dart';
 import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
@@ -107,7 +106,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _notificationVoice = true;
   bool _notificationVibration = true;
   bool _roomFloatingOnly = false;
-  Timer? _rocketRoomRefresh;
   bool _roomsSyncRunning = false;
 
   @override
@@ -120,13 +118,9 @@ class _HomeScreenState extends State<HomeScreen> {
         : account.flagEmoji + ' ' + account.countryName;
     _syncRooms();
     widget.state.social.retainMessageEvents();
+    widget.state.social.watchRooms(true);
+    widget.state.pageEntries.addListener(_onPageEntered);
     widget.state.social.roomEvents.addListener(_onRoomEvent);
-    _rocketRoomRefresh = Timer.periodic(RequestBudget.homeRefresh, (_) {
-      if (mounted && WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed &&
-          (ModalRoute.of(context)?.isCurrent ?? false)) {
-        _syncRooms(refreshAccount: false);
-      }
-    });
     _syncPartyRankPreviews();
     _syncNotifications();
     if (account != null) {
@@ -134,9 +128,17 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  void _onPageEntered() { if (widget.state.pageEntries.value == 0) unawaited(_refreshHomePage()); }
+
   void _onRoomEvent() {
     if (!mounted) return;
     final event = widget.state.social.roomEvents.value;
+    if (event?['type'] == 'rooms_snapshot' || event?['type'] == 'room_updated') {
+      widget.state.discovery.applyLiveEvent(event!);
+      setState(() {});
+      widget.state.realtimeChanges.value++;
+      return;
+    }
     final rows = event?['ribbons'];
     final ribbons = rows is List ? rows.whereType<Map>() :
         [if (event?['ribbon'] is Map) event!['ribbon'] as Map];
@@ -372,7 +374,8 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   void dispose() {
-    _rocketRoomRefresh?.cancel();
+    widget.state.pageEntries.removeListener(_onPageEntered);
+    widget.state.social.watchRooms(false);
     widget.state.social.roomEvents.removeListener(_onRoomEvent);
     unawaited(widget.state.social.releaseMessageEvents());
     _pageController.dispose();

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../infra/backend_http.dart';
+import 'game_live_connection.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -22,6 +23,17 @@ class FruitPartyRemoteService extends ChangeNotifier {
   final Duration requestTimeout;
   Future<void>? _syncFuture;
   bool _disposed = false;
+  int _latestServerTime = 0;
+  late final _live = GameLiveConnection(apiBase: apiBase, path: '/fruit-party/live',
+    onState: (data) {
+      if (_disposed) return;
+      _applyState(data, clientMidpointMs: DateTime.now().millisecondsSinceEpoch);
+      connected = true;
+      lastError = null;
+    }, onStatus: () { if (!_disposed) notifyListeners(); });
+  bool get liveConnected => _live.connected;
+  Future<void> connectLive(String token) => _disposed ? Future<void>.value() : _live.connect(token);
+  void disconnectLive() => _live.disconnect();
 
   bool connected = false;
   bool loading = false;
@@ -184,6 +196,8 @@ class FruitPartyRemoteService extends ChangeNotifier {
     required int clientMidpointMs,
   }) {
     final serverTime = _asInt(data['server_time']);
+    if (serverTime > 0 && serverTime < _latestServerTime) return;
+    _latestServerTime = serverTime;
     _serverOffsetMs = serverTime - clientMidpointMs;
 
     final round = _asMap(data['round']);
@@ -302,6 +316,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _live.disconnect();
     _httpClient.close(force: true);
     super.dispose();
   }

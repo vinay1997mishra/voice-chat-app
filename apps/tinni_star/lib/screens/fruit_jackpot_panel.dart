@@ -17,6 +17,12 @@ class FruitJackpotPanel extends StatelessWidget {
       party: false,
       source: game,
       onClose: onClose,
+      liveConnected: () => game.liveConnected,
+      connectLive: () async {
+        final account = state.auth.current;
+        if (account != null) await game.connectLive(account.authToken);
+      },
+      disconnectLive: game.disconnectLive,
       snapshot: () => CasinoSnapshot(
         connected: game.connected, loading: game.loading,
         bettingOpen: game.bettingOpen, spinning: game.inResultSpin,
