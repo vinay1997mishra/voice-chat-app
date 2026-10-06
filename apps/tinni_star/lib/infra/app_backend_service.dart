@@ -35,11 +35,13 @@ class RemoteWallet {
     this.freezeReason = '',
     this.coinSellerWallet,
     this.merchantWallet,
+    this.userId,
   });
 
 
   factory RemoteWallet.fromServer(Map<String, dynamic> row) {
     return RemoteWallet(
+      userId: row['user_id']?.toString(),
       coins: _asInt(row['coins']),
       diamonds: _asInt(row['diamonds']),
       banned: row['banned'] == true,
@@ -59,6 +61,7 @@ class RemoteWallet {
     );
   }
 
+  final String? userId;
   final int coins;
   final int diamonds;
   final bool banned;

@@ -118,6 +118,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
     if (mounted) setState(() {});
   }
 
+  Future<void> _loadIdentityTags() async {
+    final account = widget.state.auth.current;
+    if (account == null || _isInbox) return;
+    try {
+      final tagData = await widget.state.backend.userTagsAndMedals(account.authToken, _targetUserId);
+      final rows = tagData['identity_tags'];
+      targetIdentityTags = rows is List
+          ? rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false)
+          : const <Map<String, dynamic>>[];
+    } catch (_) {}
+  }
+
   Future<void> _load() async {
     final account = widget.state.auth.current;
     if (account == null) {
@@ -145,7 +157,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           peerUserId: _targetUserId,
         );
       }
-      if (!_isInbox) await _loadInviteStatuses();
+      if (!_isInbox) { await _loadInviteStatuses(); await _loadIdentityTags(); }
       await _checkIncoming();
       if (mounted) {
         setState(() {
@@ -177,7 +189,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           peerUserId: _targetUserId,
         );
       }
-      if (!_isInbox) await _loadInviteStatuses();
+      if (!_isInbox) { await _loadInviteStatuses(); await _loadIdentityTags(); }
       await _checkIncoming();
       if (mounted) setState(() {});
     } catch (_) {

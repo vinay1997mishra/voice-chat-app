@@ -17,3 +17,6 @@ Cloudflare Workers Free has 100,000 requests/day. Durable Object Free requests, 
 Sources: https://developers.cloudflare.com/workers/platform/limits/ and https://developers.cloudflare.com/durable-objects/platform/pricing/
 
 Regression checks cover private identity scoping, per-room game notifications, no idle panel HTTP reads, real socket handshakes, wallet push, revocation read-only behaviour, overdue settlement and idle alarms. Release packaging must continue to validate the independently pinned gift-media bundle.
+
+## Closing a funded game
+Both Fruit games now use the main Coins wallet. Funded stakes keep their server alarm and recover after interrupted reservation delivery. Winning credits and their permanent audit entries are replay-safe. Pending payout delivery retries without viewers; it is removed after acknowledgment. Latest personal results use two bounded account rows per user and the existing private socket, rather than polling or an ever-growing notification feed. Historical financial records remain intact.

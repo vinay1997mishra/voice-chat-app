@@ -57,7 +57,7 @@ class CasinoSnapshot {
     required this.bettingOpen, required this.spinning, required this.remaining,
     required this.spinRemaining, required this.roundDuration, required this.round,
     required this.balance, required this.mine, required this.winnings,
-    required this.fruits, required this.history, this.jackpot, this.error});
+    required this.fruits, required this.history, this.jackpot, this.error, this.lastBetResult});
   final bool connected;
   final bool loading;
   final bool bettingOpen;
@@ -73,6 +73,7 @@ class CasinoSnapshot {
   final List<CasinoResult> history;
   final int? jackpot;
   final String? error;
+  final Map<String, dynamic>? lastBetResult;
 }
 
 /// Shared bottom-half placement for room and standalone game routes.
@@ -267,6 +268,16 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
             Text(widget.title + ' • Recent results', style: const TextStyle(color: _gold,
               fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
+            if (view.lastBetResult != null) ListTile(
+              key: const Key('game-last-personal-bet'),
+              title: Text('Your last bet • Round ' + view.lastBetResult!['round_id'].toString(),
+                style: const TextStyle(color: _gold)),
+              subtitle: Text(
+                'Bet ' + (view.lastBetResult!['bet_coins'] ?? 0).toString() + ' coins • ' +
+                ((view.lastBetResult!['winning_coins'] as num?)?.toInt() ?? 0).toString() + ' winning coins • ' +
+                (view.lastBetResult!['outcome'] == 'win' ? 'Won' : 'Lost'),
+                style: const TextStyle(color: _cream)),
+            ),
             if (view.history.isEmpty) const Text('No settled rounds yet.',
               style: TextStyle(color: _cream)),
             for (final result in view.history.take(20)) ListTile(

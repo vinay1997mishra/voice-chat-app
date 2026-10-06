@@ -177,6 +177,9 @@ class TinniState {
   final bool roomPresenceFallbackTimerEnabled;
   final ValueNotifier<int> realtimeChanges = ValueNotifier<int>(0);
   final ValueNotifier<int> pageEntries = ValueNotifier<int>(0);
+  final ValueNotifier<List<Map<String, dynamic>>> gameResults =
+      ValueNotifier<List<Map<String, dynamic>>>(const []);
+  final Set<String> _seenGameResultIds = {};
   void _onLiveAccount() {
     final event = social.accountEvents.value;
     final account = auth.current;
@@ -199,6 +202,13 @@ class TinniState {
       auth.setAuthenticatedAccount(next);
       profile.loadFromAccount(next);
       unawaited(authPersistence?.save(next));
+    }
+    final rows = event['game_results'];
+    if (rows is List) {
+      final unseen = rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row))
+          .where((row) => row['user_id']?.toString() == account.userId &&
+              _seenGameResultIds.add(row['id']?.toString() ?? '')).toList();
+      if (unseen.isNotEmpty) gameResults.value = unseen;
     }
     realtimeChanges.value++;
   }

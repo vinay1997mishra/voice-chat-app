@@ -260,6 +260,14 @@ class SocialService {
     } catch (_) {}
   }
 
+  void acknowledgeGameResult(Map<String, dynamic> result) {
+    if (messageEventsConnected) {
+      _messageSocket!.add(jsonEncode({
+        'type': 'game_result_seen', 'game_key': result['game_key'], 'round_id': result['round_id'],
+      }));
+    }
+  }
+
   void markLiveConversationSeen(String peerUserId) {
     if (messageEventsConnected) {
       _messageSocket!.add(jsonEncode({'type': 'messages_seen', 'peer_user_id': peerUserId}));

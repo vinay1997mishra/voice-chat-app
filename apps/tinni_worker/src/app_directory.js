@@ -3,6 +3,7 @@ import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
 import { premiumGiftCatalog } from './premium_gift_catalog.js';
 import { DurableObject } from "cloudflare:workers";
+import { fruitMultiplier } from "./game_results.js";
 
 const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
@@ -728,6 +729,19 @@ export class AppDirectoryStore extends DurableObject {
         expires_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS main_game_bets (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, game_key TEXT NOT NULL,
+        round_id INTEGER NOT NULL, fruit_key TEXT NOT NULL, amount INTEGER NOT NULL,
+        room_id TEXT NOT NULL, created_at INTEGER NOT NULL, settled_at INTEGER,
+        winning_coins INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_main_game_pending ON main_game_bets(game_key,settled_at,round_id);
+      CREATE INDEX IF NOT EXISTS idx_main_game_user ON main_game_bets(user_id,game_key,round_id);
+      CREATE TABLE IF NOT EXISTS latest_game_results (
+        user_id TEXT NOT NULL, game_key TEXT NOT NULL, round_id INTEGER NOT NULL,
+        payload TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(user_id, game_key)
+      );
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 0,
@@ -10001,6 +10015,128 @@ export class AppDirectoryStore extends DurableObject {
     }
   }
 
+  reserveMainGameBet(input) {
+    const userId = String(input?.user_id || "").trim(), gameKey = String(input?.game_key || "");
+    if (!userId || !["fruit_jackpot","fruit_party"].includes(gameKey) ||
+        !Number.isSafeInteger(input.round_id) || ![5000,25000,100000,500000,2000000,10000000].includes(input.amount) ||
+        !fruitMultiplier(gameKey,input.fruit_key) || !String(input.room_id || "").trim() ||
+        !String(input.id || "").startsWith(gameKey + ":" + userId + ":")) throw new Error("Invalid main wallet bet");
+    return this.ctx.storage.transactionSync(() => {
+      const old = this.ctx.storage.sql.exec("SELECT * FROM main_game_bets WHERE id=?",input.id).toArray()[0];
+      if (old) {
+        if (old.user_id !== userId || old.game_key !== gameKey || old.fruit_key !== input.fruit_key ||
+            Number(old.amount) !== input.amount || old.room_id !== input.room_id) throw new Error("Bet request ID was already used");
+        return old;
+      }
+      const now = Date.now();
+      if (Math.floor(now / 26000) !== input.round_id || now >= input.round_id * 26000 + 21000) {
+        throw new Error("Betting is locked while the result is spinning");
+      }
+      const user = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id=?",userId).toArray()[0];
+      const wallet = this.getWallet(userId), controls = this._userControls(userId);
+      if (!user || controls.banned || controls.device_banned || wallet.banned) throw new Error("Wallet is unavailable");
+      this._debitNormalWalletAuthorized(userId,input.amount,"game_bet");
+      this.ctx.storage.sql.exec(
+        "INSERT INTO main_game_bets(id,user_id,game_key,round_id,fruit_key,amount,room_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
+        input.id,userId,gameKey,input.round_id,input.fruit_key,input.amount,input.room_id,now,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,'game_bet',?,0,?,?,?)",
+        crypto.randomUUID(),userId,-input.amount,input.id,gameKey + " • Round " + input.round_id,now,
+      );
+      return {...input,created_at:now};
+    });
+  }
+
+  pendingMainGameBets(gameKey, afterId = "") {
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM main_game_bets WHERE game_key=? AND settled_at IS NULL AND id>? ORDER BY id LIMIT 500",
+      String(gameKey),String(afterId),
+    ).toArray();
+  }
+
+  mainGameWallet(userId, gameKey) {
+    const wallet = this.getWallet(userId), start = Math.floor(Date.now() / 86400000) * 86400000;
+    const today = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(winning_coins),0) AS winnings FROM main_game_bets WHERE user_id=? AND game_key=? AND settled_at>=?",
+      String(userId),String(gameKey),start,
+    ).toArray()[0];
+    return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0)};
+  }
+
+  recordGameResults(results) {
+    if (!Array.isArray(results) || results.length > 500) throw new Error("Invalid game receipts");
+    const changed = new Set();
+    this.ctx.storage.transactionSync(() => {
+      for (const result of results) {
+        const userId = String(result?.user_id || "").trim();
+        const gameKey = String(result?.game_key || "");
+        if (!userId || !["fruit_jackpot", "fruit_party"].includes(gameKey) ||
+            !Number.isSafeInteger(result.round_id) || !Number.isSafeInteger(result.winning_coins) ||
+            result.winning_coins < 0 || !Number.isSafeInteger(result.bet_coins) || result.bet_coins <= 0) {
+          throw new Error("Invalid game receipt");
+        }
+        const mainBets = Array.isArray(result.main_bets) ? result.main_bets : [];
+        let newlyPaid = 0;
+        const uniqueIds = new Set();
+        for (const item of mainBets) {
+          if (uniqueIds.has(item.id)) throw new Error("Duplicate payout bet");
+          uniqueIds.add(item.id);
+          const bet = this.ctx.storage.sql.exec("SELECT * FROM main_game_bets WHERE id=?",String(item.id)).toArray()[0];
+          if (!bet || bet.user_id !== userId || bet.game_key !== gameKey || Number(bet.round_id) !== result.round_id) {
+            throw new Error("Game payout identity mismatch");
+          }
+          const winners = Array.isArray(result.bonus_fruits) && result.bonus_fruits.length
+            ? result.bonus_fruits : [result.fruit_key];
+          const expected = winners.includes(bet.fruit_key) ? Number(bet.amount) * fruitMultiplier(gameKey,bet.fruit_key) : 0;
+          if (item.winning_coins !== expected) throw new Error("Game payout amount mismatch");
+          if (bet.settled_at !== null) {
+            if (Number(bet.winning_coins) !== expected) throw new Error("Settled game payout cannot change");
+            continue;
+          }
+          newlyPaid += expected;
+          this.ctx.storage.sql.exec(
+            "UPDATE main_game_bets SET winning_coins=?,settled_at=? WHERE id=? AND settled_at IS NULL",
+            expected,result.settled_at,item.id,
+          );
+        }
+        let receipt = result;
+        if (mainBets.length) {
+          // Reserved coins and payout are audited in the same main-wallet database.
+          // A frozen wallet retains earned coins until the existing freeze is lifted.
+          const guard = this._normalWalletGuard(userId), now = Date.now();
+          if (newlyPaid > 0) {
+            this.ctx.storage.sql.exec("UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?",newlyPaid,now,userId);
+            this.ctx.storage.sql.exec("UPDATE wallet_coin_guards SET expected_coins=expected_coins+?,updated_at=? WHERE user_id=?",newlyPaid,now,userId);
+            this.ctx.storage.sql.exec(
+              "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,'game_win',?,0,?,?,?)",
+              crypto.randomUUID(),userId,newlyPaid,result.id,gameKey + " • Round " + result.round_id,now,
+            );
+            changed.add(userId);
+          }
+          receipt = {...result,main_bets:undefined,wallet_balance:guard.coins + newlyPaid,wallet_type:"main"};
+        }
+        const old = this.ctx.storage.sql.exec(
+          "SELECT round_id FROM latest_game_results WHERE user_id=? AND game_key=?", userId, gameKey,
+        ).toArray()[0];
+        if (old && Number(old.round_id) >= result.round_id) continue;
+        this.ctx.storage.sql.exec(
+          "INSERT INTO latest_game_results(user_id,game_key,round_id,payload,seen) VALUES(?,?,?,?,0) " +
+          "ON CONFLICT(user_id,game_key) DO UPDATE SET round_id=excluded.round_id,payload=excluded.payload,seen=0",
+          userId, gameKey, result.round_id, JSON.stringify(receipt),
+        );
+        changed.add(userId);
+      }
+    });
+    for (const userId of changed) this._notifyAccountChanged(userId);
+  }
+
+  pendingGameResults(userId) {
+    return this.ctx.storage.sql.exec(
+      "SELECT payload FROM latest_game_results WHERE user_id=? AND seen=0", String(userId),
+    ).toArray().map(row => JSON.parse(row.payload));
+  }
+
   async _sendAccountState(socket, attachment) {
     const user = await this.getUserById(attachment.userId);
     if (!user || user.controls?.banned || user.controls?.device_banned) {
@@ -10008,7 +10144,8 @@ export class AppDirectoryStore extends DurableObject {
       return;
     }
     socket.send(JSON.stringify({ type: "account_state", user,
-      wallet: this.getWallet(attachment.userId), server_time: Date.now() }));
+      wallet: this.getWallet(attachment.userId), game_results: this.pendingGameResults(attachment.userId),
+      server_time: Date.now() }));
   }
 
   _notifyRoomChanged(roomId) {
@@ -10083,6 +10220,13 @@ export class AppDirectoryStore extends DurableObject {
       attachment.lastAccountRead = Date.now();
       socket.serializeAttachment(attachment);
       await this._sendAccountState(socket, attachment);
+      return;
+    }
+    if (event.type === "game_result_seen") {
+      this.ctx.storage.sql.exec(
+        "UPDATE latest_game_results SET seen=1 WHERE user_id=? AND game_key=? AND round_id=? AND seen=0",
+        attachment.userId, String(event.game_key || ""), Number(event.round_id),
+      );
       return;
     }
     if (event.type === "messages_seen") {

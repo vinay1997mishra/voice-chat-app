@@ -43,7 +43,12 @@ class WalletService {
       '\$' + (withdrawableUsdCents / 100).toStringAsFixed(2);
 
   int _remoteUpdatedAt = 0;
+  String? _remoteUserId;
   void applyRemote(RemoteWallet remote) {
+    if (remote.userId != null && remote.userId != _remoteUserId) {
+      _remoteUserId = remote.userId;
+      _remoteUpdatedAt = 0;
+    }
     if (remote.updatedAt > 0 && remote.updatedAt < _remoteUpdatedAt) return;
     if (remote.updatedAt > _remoteUpdatedAt) _remoteUpdatedAt = remote.updatedAt;
     coins = remote.coins;

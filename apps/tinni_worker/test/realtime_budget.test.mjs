@@ -15,11 +15,11 @@ function socket(attachment) {
 test('game snapshots use the socket identity and invalidations reveal no private wallet', async t => {
   const r = runtime(); t.after(r.close);
   const party = r.direct('FRUIT_PARTY', 'private-party');
-  party._ensureWallet('alice'); party._ensureWallet('bob');
-  party.ctx.storage.sql.exec('UPDATE party_wallets SET balance=12345 WHERE user_id=?', 'alice');
-  party.ctx.storage.sql.exec('UPDATE party_wallets SET balance=98765 WHERE user_id=?', 'bob');
-  const a = socket({userId:'alice',gameKey:'fruit-party'});
-  const b = socket({userId:'bob',gameKey:'fruit-party'});
+  const alice = await r.user(1), bob = await r.user(2);
+  r.directory._creditNormalWalletAuthorized(alice.user_id,12345);
+  r.directory._creditNormalWalletAuthorized(bob.user_id,98765);
+  const a = socket({userId:alice.user_id,gameKey:'fruit-party'});
+  const b = socket({userId:bob.user_id,gameKey:'fruit-party'});
   await handleGameMessage(party,a,JSON.stringify({type:'state',user_id:'bob'}));
   await handleGameMessage(party,b,JSON.stringify({type:'state',user_id:'alice'}));
   assert.equal(a.events.at(-1).state.wallet_balance,12345);

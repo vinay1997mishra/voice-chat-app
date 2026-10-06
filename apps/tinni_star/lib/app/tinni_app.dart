@@ -50,6 +50,8 @@ class _TinniShellState extends State<TinniShell> {
   void initState() {
     super.initState();
     widget.state.refreshAccountPreferences();
+    widget.state.gameResults.addListener(_showGameResults);
+    if (widget.state.gameResults.value.isNotEmpty) _showGameResults();
     widget.state.social.retainMessageEvents();
     final token = widget.state.auth.current?.authToken;
     if (token != null) widget.state.social.connectMessageEvents(token);
@@ -57,8 +59,33 @@ class _TinniShellState extends State<TinniShell> {
 
   @override
   void dispose() {
+    widget.state.gameResults.removeListener(_showGameResults);
     widget.state.social.releaseMessageEvents();
     super.dispose();
+  }
+
+  void _showGameResults() {
+    final results = List<Map<String, dynamic>>.from(widget.state.gameResults.value);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      for (final result in results) {
+        final title = result['game_key'] == 'fruit_party' ? 'Fruit Party' : 'Fruit Jackpot';
+        final won = (result['winning_coins'] as num?)?.toInt() ?? 0;
+        final bet = (result['bet_coins'] as num?)?.toInt() ?? 0;
+        final credited = result['wallet_type'] == 'main' ? 'main wallet' : 'game wallet';
+        final message = won > 0
+            ? '$title: Won $won coins • Bet $bet • Added to your $credited'
+            : '$title: Lost • Bet $bet coins';
+        messenger.showSnackBar(SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(label: 'OK', onPressed: () {}),
+        )).closed.then((_) {
+          if (mounted) widget.state.social.acknowledgeGameResult(result);
+        });
+      }
+    });
   }
 
   @override

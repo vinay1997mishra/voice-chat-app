@@ -1348,3 +1348,13 @@ Latest user instruction: remove automatic page polling and unnecessary blinking;
 Build note: Android installs the existing hash-pinned released media using its immutable generation-source checkout, then validates the current app catalog. Renderer development no longer blocks an unrelated transport APK. Idle mic-wave motion stops when there is no voice activity.
 
 Realtime refresh release: app version 0.5.49+68. Fruit boards and Ludo also support pull-to-refresh. Game connection disposal cancels a pending HTTP upgrade and its timer; the release has a regression for leaving during an unfinished connection.
+
+## 2026-10-06 — One main coin wallet and bets after closing the game
+
+Latest explicit user instruction: Fruit Jackpot and Fruit Party debit the user's main total Coins wallet, and credit winnings into that same wallet. Game or app closure must not cancel a funded bet.
+
+- New bets use the main wallet and its coin guard, frozen/banned checks and permanent debit ledger. Separate historical game balances are retained for auditing; their old starting grants are never copied into spendable main coins.
+- Every bet carries a unique request ID. Duplicate delivery cannot debit twice or create a second stake. A durable game alarm exists before funds are reserved, and games recover reserved stakes after interruption.
+- Server round settlement saves its receipt and payout delivery queue atomically. Main wallet credits, guard updates, bet settlement markers and permanent winning ledger entries commit together. Failed delivery retries without a game viewer and cannot duplicate credits.
+- The latest personal win/lose result arrives privately through the account socket, including after app reconnect, and remains available in game history. A seen acknowledgement suppresses later repeats. Public game invalidations never include another player's balance.
+- Keep intentional game visuals, bet amounts, multipliers, Lucky selection and unrelated financial rules. Idle refresh remains disabled.

@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import '../infra/backend_http.dart';
 import 'game_live_connection.dart';
@@ -43,6 +44,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
   int totalBet = 0;
   int activePlayers = 0;
   int walletBalance = 0;
+  Map<String, dynamic>? lastBetResult;
   int todayWinnings = 0;
   int betLockMs = 0;
   int roundDurationMs = 21000;
@@ -151,6 +153,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
       );
       request.write(
         jsonEncode(<String, Object>{
+          'request_id': List.generate(16, (_) => math.Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join(),
           'fruit_key': fruit.name,
           'amount': amount,
           'room_id': roomId,
@@ -218,6 +221,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
     activePlayers = _asInt(round['active_players']);
 
     walletBalance = _asInt(data['wallet_balance']);
+    lastBetResult = data['last_bet_result'] is Map ? _asMap(data['last_bet_result']) : null;
     todayWinnings = _asInt(data['today_winnings']);
 
     final rawMyBets = _asMap(data['my_bets']);
