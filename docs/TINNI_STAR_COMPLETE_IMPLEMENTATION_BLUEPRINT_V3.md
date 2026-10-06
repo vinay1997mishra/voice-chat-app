@@ -1380,7 +1380,9 @@ Latest explicit instructions: save as much of the free SQL storage and daily req
 
 ## 2026-10-06 — Sender DP identity and private profile navigation
 
-- Room All messages and every private conversation message show the sender DP alongside the body without repeating sender names.
+- Room All messages show the sender DP first on the left. To its right, show the sender name with official identity tags beside it, then that sender's medals on the next row, then the message text underneath. Use the same ID-resolved sender for the DP, name, tags, medals and profile action.
+- Every new room message automatically scrolls the list so the newest message body is visible, including after the reader has scrolled to older messages.
+- Every private conversation message shows the sender DP alongside the body without repeating sender names; the private header name remains tappable.
 - Resolve room DPs, identity tags and profile actions only by the message sender's stable User ID. Duplicate, changed or reserved display names such as You and System must never select another account.
 - If a room sender has left, keep the message's known DP snapshot or a neutral placeholder; never infer the current user's DP from the sender name. Messages without a sender ID cannot borrow a live member's identity or open that member's profile.
 - The private conversation header name opens that exact peer User ID's public profile. Current public DP/name changes use the existing authenticated profile WebSocket subscription; persisted phone chat history keeps message content and excludes DP copies.

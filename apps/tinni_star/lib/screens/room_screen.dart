@@ -665,31 +665,35 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildRoomComment(RoomMessage message) {
     final member = _roomCommentMember(message);
+    final senderKey = message.userId ?? message.author;
+    final name = member?.displayName ?? message.author;
     final tags = member?.ownerTags ?? const <OwnerTag>[];
-    final children = <InlineSpan>[];
+    final medals = member?.ownerMedals ?? const <OwnerTag>[];
 
-    for (final tag in tags) {
+    Widget badge(OwnerTag tag, {required bool medal}) {
       final label = _roomCommentTagLabel(tag);
-      if (label.isEmpty) continue;
       final color = _ownerTagColor(tag.colorHex);
-      children.add(
-        WidgetSpan(
-          alignment: PlaceholderAlignment.middle,
-          child: Container(
-            key: Key(
-              'room-comment-tag-' +
-                  (member?.userId ?? 'unknown') +
-                  '-' +
-                  label,
-            ),
-            margin: const EdgeInsets.only(right: 5),
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(
-              color: color.withValues(alpha: 0.16),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color, width: 0.9),
-            ),
-            child: Text(
+      return Container(
+        key: Key(
+          (medal ? 'room-comment-medal-' : 'room-comment-tag-') +
+              (member?.userId ?? 'unknown') +
+              '-' +
+              label,
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: 0.16),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color, width: 0.9),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (medal) ...[
+              Icon(Icons.workspace_premium_rounded, color: color, size: 14),
+              const SizedBox(width: 3),
+            ],
+            Text(
               label,
               style: TextStyle(
                 color: color,
@@ -698,20 +702,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 fontWeight: FontWeight.w900,
               ),
             ),
-          ),
+          ],
         ),
       );
     }
-
-    children.add(
-      TextSpan(
-        text: message.text,
-        style: const TextStyle(
-          color: RoyalPalette.cream,
-          fontSize: 12,
-        ),
-      ),
-    );
 
     final account = widget.state.auth.current;
     final avatarSource = member != null ? member.avatarDataUrl
@@ -719,19 +713,19 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ? account?.avatarDataUrl : message.avatarDataUrl;
     final avatar = stableImageProvider(avatarSource);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 7),
+      padding: const EdgeInsets.only(bottom: 9),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           GestureDetector(
             onTap: member != null ? () => _showUserProfile(member)
-                : message.userId == null ? null : () {
+                : message.userId == null || message.userId!.isEmpty ? null : () {
                     Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
                       ChatUserProfileScreen(state: widget.state, userId: message.userId!,
-                        displayName: message.author, avatarDataUrl: avatarSource)));
+                        displayName: name, avatarDataUrl: avatarSource)));
                   },
             child: CircleAvatar(
-              key: Key('room-comment-dp-${message.userId ?? message.author}'),
+              key: Key('room-comment-dp-$senderKey'),
               radius: 14, backgroundColor: RoyalPalette.panel,
               backgroundImage: avatar,
               child: avatar == null ? Icon(message.author == 'System'
@@ -739,8 +733,55 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             ),
           ),
           const SizedBox(width: 7),
-          Expanded(child: Text.rich(TextSpan(children: children),
-            style: const TextStyle(fontSize: 12, height: 1.25))),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 5,
+                  runSpacing: 4,
+                  children: [
+                    Text(
+                      name,
+                      key: Key('room-comment-name-$senderKey'),
+                      style: const TextStyle(
+                        color: FeaturePalette.message,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 12,
+                      ),
+                    ),
+                    for (final tag in tags)
+                      if (_roomCommentTagLabel(tag).isNotEmpty)
+                        badge(tag, medal: false),
+                  ],
+                ),
+                if (medals.any((tag) => _roomCommentTagLabel(tag).isNotEmpty))
+                  Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Wrap(
+                      spacing: 5,
+                      runSpacing: 4,
+                      children: [
+                        for (final medal in medals)
+                          if (_roomCommentTagLabel(medal).isNotEmpty)
+                            badge(medal, medal: true),
+                      ],
+                    ),
+                  ),
+                const SizedBox(height: 4),
+                Text(
+                  message.text,
+                  key: Key('room-comment-text-$senderKey'),
+                  style: const TextStyle(
+                    color: RoyalPalette.cream,
+                    fontSize: 12,
+                    height: 1.25,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
