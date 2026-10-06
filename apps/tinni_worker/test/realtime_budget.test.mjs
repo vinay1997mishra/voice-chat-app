@@ -127,3 +127,23 @@ test('role dollar balances push privately through the same account snapshot',asy
   await r.directory._sendAccountState(client,client.attachment);
   assert.equal(client.events.at(-1).wallet.merchant_wallet.usd_cents,12345);
 });
+
+for(const [binding,prefix] of [['FRUIT_GAME','fruit'],['FRUIT_PARTY','party']]) {
+  test(binding+' bounds empty history while retaining financial results',async t=>{
+    const r=runtime();t.after(r.close);const game=r.direct(binding,'history-budget');
+    for(let round=1;round<=80;round++) {
+      if(round===1) game.ctx.storage.sql.exec(
+        'INSERT INTO '+prefix+'_bets(id,round_id,user_id,fruit_key,amount,room_id,created_at) VALUES(?,?,?,?,?,?,?)',
+        'financial-bet',round,'a','lemon',5000,'room',Date.now(),
+      );
+      await game._settle(round);
+    }
+    const empty=game.ctx.storage.sql.exec('SELECT round_id FROM '+prefix+'_results WHERE total_bet=0').toArray();
+    assert.ok(empty.length<=20);
+    assert.equal(game.ctx.storage.sql.exec('SELECT round_id FROM '+prefix+'_results WHERE round_id=1 AND total_bet=5000').toArray().length,1);
+    assert.equal(game.ctx.storage.sql.exec('SELECT id FROM '+prefix+'_bets WHERE id=?','financial-bet').toArray().length,1);
+    const count=game.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM '+prefix+'_results').one().n;
+    await game._settle(80);
+    assert.equal(game.ctx.storage.sql.exec('SELECT COUNT(*) AS n FROM '+prefix+'_results').one().n,count);
+  });
+}

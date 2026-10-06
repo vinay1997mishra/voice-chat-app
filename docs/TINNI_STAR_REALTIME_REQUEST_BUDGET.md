@@ -20,3 +20,5 @@ Regression checks cover private identity scoping, per-room game notifications, n
 
 ## Closing a funded game
 Both Fruit games now use the main Coins wallet. Funded stakes keep their server alarm and recover after interrupted reservation delivery. Winning credits and their permanent audit entries are replay-safe. Pending payout delivery retries without viewers; it is removed after acknowledgment. Latest personal results use two bounded account rows per user and the existing private socket, rather than polling or an ever-growing notification feed. Historical financial records remain intact.
+
+Empty-result history converges to the latest 20 rounds. Indexed pruning removes at most two old zero-stake rows per actual new settlement, avoiding an unrestricted cleanup write burst. Stake-bearing results and permanent financial records are retained.
