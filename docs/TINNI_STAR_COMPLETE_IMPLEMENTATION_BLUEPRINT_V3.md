@@ -308,7 +308,7 @@ For every future intentional feature/layout change:
 - **Room Lock uses a server-generated 5-digit code.** When the room owner turns Lock on, backend generates, hashes/saves, and returns a random 5-digit room password. The owner's Room Lock control displays that code in the same lock setting area. Visitors use that code to enter. The room owner bypasses their own room password and can unlock without entering it. Turning Lock off invalidates/hides the displayed code.
 - **CP reference conversion is fixed to the requested economies:** reference app 45,000 coins = USD 1; Tinni 2,000,000 coins = USD 1; scale factor 44.444...x. Reference CP Heart 1,000 becomes **44,444 Tinni coins** and reference CP Invite 50,000 becomes **2,222,222 Tinni coins**.
 - **CP Invite** is the confession/invitation flow and may be sent only when neither side already has an active/pending CP flow. Active CP appears on the ID/Profile CP card with the two avatars, heart/CP identity, level/intimacy/day information, and an All my CP entry to the CP area.
-- **CP intimacy rules:** regular gifts use 100% of the normalized reference-coin intimacy value; Lucky gifts use 10%; same-day mutual CP gifting gives the eligible gift a 1.2x exchange multiplier; known first level threshold is Lv.1 -> Lv.2 at 200K intimacy; level-cycle duration is 7 days; after 3 consecutive days without intimacy, decay starts on day 4 at 5% per day until activity resumes. Do not invent later level thresholds that were not supplied; keep later thresholds owner-configurable.
+- **CP/VS progress:** the latest CP + VS specification below supersedes legacy normalized intimacy, Lucky contribution, exchange bonus and decay rules.
 
 
 ## LOCKED — Owner Full ID drill-down and zero-default Staff Panels
@@ -1387,3 +1387,19 @@ Latest explicit instructions: save as much of the free SQL storage and daily req
 - If a room sender has left, keep the message's known DP snapshot or a neutral placeholder; never infer the current user's DP from the sender name. Messages without a sender ID cannot borrow a live member's identity or open that member's profile.
 - The private conversation header name opens that exact peer User ID's public profile. Current public DP/name changes use the existing authenticated profile WebSocket subscription; persisted phone chat history keeps message content and excludes DP copies.
 - Release 0.5.52+71 retains the existing authenticated private-photo access, storage retention, wallet, gift and room behavior. Replacement anime movies and external provider/device validation remain pending; an APK build alone does not complete those dependencies.
+
+## CP + VS final separation — October 6, 2026
+
+Latest user specification: CP is a couple bond; VS is a rivalry. They coexist with separate relationships, gift categories, progress ledgers, levels, badges, rankings and themes. VS user-facing surfaces never use Partner.
+
+- CP accepts/rejects a request and permits one active couple per account. VS accepts/rejects a challenge independently.
+- CP progress comes only from paid CP gifts exchanged inside the accepted couple. VS progress comes only from paid VS gifts exchanged inside the accepted rivalry. Normal/Luxury/Lucky gifts never raise either.
+- Eligible progress is the confirmed server coin value, including quantity and actual charged price. The economy reference is 2,000,000 coins; level requirements follow the existing pattern at 100x scale. Legacy progress is converted once at 100x; it remains a historical starting balance. New contributions have immutable category/progress/pair snapshots.
+- Existing supplied code defines only the 200K legacy threshold, now 20M at 100x. Later thresholds must be supplied or set independently through cp_coin_thresholds and vs_coin_thresholds. The user's 3M/6M/12M/20M examples do not establish a complete level-number mapping; do not fabricate additional steps.
+- Atomic server gifting verifies wallet, debits coins, records transactions and eligible progress, calculates levels and saves a sender-scoped idempotency receipt. Reusing an ID with different payload fails. Replays do not repeat room visuals or social credit.
+- CP and VS rankings use persisted server relationship progress. Disconnect requires intentional UI confirmation and a matching current pair key; completed history is retained.
+- CP uses red/pink/gold, hearts, bond entrance, particles and premium level evolution. VS uses black/red/purple/silver, VS clash, electricity, sparks and aggressive level evolution, with no hearts.
+- Each page shows both identities, current level, total and next-level progress, start date and elapsed days. Profiles and room seats expose the relevant identity/level.
+- Owner Panel has separate CP and VS sections with name, category, price, poster, MP4, order, preview and enable/disable. Videos upload only through the protected main-owner endpoint into managed R2 storage. Android never exposes upload/edit controls.
+- The app refreshes approved catalogs without an APK rebuild. Media metadata travels with confirmed gift events. A bounded player failure or reduced-motion mode uses an independent lightweight visual and never alters wallet/progress.
+- Premium cinematic assets are owner-provided; source work and automated tests cannot certify unuploaded videos or hardware decoding.

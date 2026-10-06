@@ -265,10 +265,11 @@ void main() {
     expect(gifts.contains('price: 2222222'), true);
     expect(profile.contains("Key('profile-cp-card')"), true);
     expect(cp.contains('2,222,222 Tinni coins'), true);
-    expect(cp.contains('5% per day'), true);
-    expect(worker.contains('reference_coins_per_usd: 45000'), true);
+    expect(cp.contains('CP progress does not decay'), true);
+    expect(worker.contains('scale_factor: 100'), true);
     expect(worker.contains('tinni_coins_per_usd: 2000000'), true);
-    expect(worker.contains('lucky_gift_intimacy_percent: 10'), true);
-    expect(worker.contains('Math.floor(intimacy * 95 / 100)'), true);
+    expect(worker.contains('cp_gift_progress'), true);
+    expect(worker.contains('vs_gift_progress'), true);
+    expect(worker.contains('Math.floor(intimacy * 95 / 100)'), false);
   });
 }
