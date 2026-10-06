@@ -5356,6 +5356,19 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  activeRoomForUser(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return null;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT room_id,last_seen,room_socket_connected FROM app_user_presence WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!row?.room_id) return null;
+    const socketConnected = Number(row.room_socket_connected || 0) === 1;
+    const recentlySeen = Date.now() - Number(row.last_seen || 0) <= 120000;
+    return socketConnected || recentlySeen ? String(row.room_id) : null;
+  }
+
   touchPresence(
     userIdValue,
     roomIdValue,
