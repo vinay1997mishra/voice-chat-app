@@ -128,6 +128,9 @@ class SocialService {
   Future<void> connectMessageEvents(String authToken) async {
     final token = authToken.trim();
     if (token.isEmpty) return;
+    if (_messageAuthToken != null && _messageAuthToken != token) {
+      await disconnectMessageEvents();
+    }
     _messageEventsWanted = true;
     _messageAuthToken = token;
     await _openMessageSocket();

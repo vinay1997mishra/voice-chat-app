@@ -42,7 +42,10 @@ class WalletService {
   String get withdrawableUsdText =>
       '\$' + (withdrawableUsdCents / 100).toStringAsFixed(2);
 
+  int _remoteUpdatedAt = 0;
   void applyRemote(RemoteWallet remote) {
+    if (remote.updatedAt > 0 && remote.updatedAt < _remoteUpdatedAt) return;
+    if (remote.updatedAt > _remoteUpdatedAt) _remoteUpdatedAt = remote.updatedAt;
     coins = remote.coins;
     diamonds = remote.diamonds;
     diamondWalletVisible = remote.diamondWalletVisible;

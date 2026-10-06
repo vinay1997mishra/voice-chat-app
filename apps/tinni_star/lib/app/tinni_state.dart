@@ -185,7 +185,14 @@ class TinniState {
     if (user is! Map || user['user_id']?.toString() != account.userId) return;
     final remote = event['wallet'];
     if (remote is Map) wallet.applyRemote(RemoteWallet.fromServer(Map<String, dynamic>.from(remote)));
-    final next = TinniAccount.fromServer(Map<String, dynamic>.from(user), token: account.authToken);
+    final live = TinniAccount.fromServer(Map<String, dynamic>.from(user), token: account.authToken);
+    final next = TinniAccount(
+      userId: live.userId, email: live.email, displayName: live.displayName,
+      age: live.age, birthday: live.birthday, signature: live.signature,
+      countryCode: live.countryCode, countryName: live.countryName,
+      flagEmoji: live.flagEmoji, gender: live.gender, avatarDataUrl: live.avatarDataUrl,
+      providers: account.providers, authToken: account.authToken,
+    );
     if (next.displayName != account.displayName || next.avatarDataUrl != account.avatarDataUrl ||
         next.signature != account.signature || next.countryCode != account.countryCode ||
         next.age != account.age || next.gender != account.gender) {
