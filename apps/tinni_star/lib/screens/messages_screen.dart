@@ -13,6 +13,8 @@ import '../social/social.dart';
 import '../ui/royal_theme.dart';
 import 'call_screen.dart';
 import 'call_verification_screen.dart';
+import 'chat_user_profile_screen.dart';
+import '../ui/stable_image_provider.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({
@@ -50,13 +52,47 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool get _isInbox => widget.targetUserId == null;
   String get _myUserId => widget.state.auth.current?.userId ?? '10000000';
   String get _targetUserId => widget.targetUserId ?? '';
-  String get _targetName => widget.targetName ?? _targetUserId;
+  String get _targetName => widget.state.social.liveProfiles[_targetUserId]?['display_name']?.toString()
+      ?? widget.targetName ?? _targetUserId;
+  String? get _targetAvatar {
+    final live = widget.state.social.liveProfiles[_targetUserId];
+    if (live != null) return live['avatar_data_url']?.toString();
+    for (final thread in widget.state.social.messageThreads) {
+      if (thread.userId == _targetUserId) return thread.avatarDataUrl;
+    }
+    for (final friend in widget.state.social.friendProfiles) {
+      if (friend.id == _targetUserId) return friend.avatarDataUrl;
+    }
+    return widget.targetAvatarDataUrl;
+  }
+
+  void _onLiveChanged() { if (mounted) setState(() {}); }
+
+  void _openChatProfile() {
+    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+      ChatUserProfileScreen(state: widget.state, userId: _targetUserId,
+        displayName: _targetName, avatarDataUrl: _targetAvatar)));
+  }
+
+  Widget _senderAvatar(ChatMessage message) {
+    final mine = message.from == _myUserId;
+    final source = mine ? widget.state.auth.current?.avatarDataUrl : _targetAvatar;
+    final avatar = stableImageProvider(source);
+    return CircleAvatar(
+      key: Key('message-sender-dp-${message.id ?? message.from}'),
+      radius: 17, backgroundColor: RoyalPalette.panel,
+      backgroundImage: avatar,
+      child: avatar == null ? const Icon(Icons.person_rounded, size: 20) : null,
+    );
+  }
   bool get _isOfficial => _targetUserId == 'tinni-official';
   bool get _isFriend => widget.state.social.friends.contains(_targetUserId);
 
   @override
   void initState() {
     super.initState();
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
+    if (!_isInbox) widget.state.social.retainProfile(_targetUserId);
     widget.state.pageEntries.addListener(_onPageEntered);
     widget.state.social.retainMessageEvents();
     widget.state.social.messageEvents.addListener(_handleMessageEvent);
@@ -69,6 +105,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   @override
   void dispose() {
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
+    if (!_isInbox) widget.state.social.releaseProfile(_targetUserId);
     widget.state.pageEntries.removeListener(_onPageEntered);
     widget.state.social.messageEvents.removeListener(_handleMessageEvent);
     unawaited(widget.state.social.releaseMessageEvents());
@@ -82,6 +120,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
     final event = widget.state.social.messageEvents.value;
     if (event == null) return;
     final type = event['type']?.toString() ?? '';
+    if (type == 'profile_changed' || type == 'profiles_state') {
+      if (mounted) setState(() {});
+      return;
+    }
     if (type == 'message_received') {
       _refreshForIncomingMessage(event);
       return;
@@ -937,17 +979,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
           (message.from == _targetUserId && message.to == _myUserId);
     }).toList();
 
-    final avatar = _avatarProvider(widget.targetAvatarDataUrl);
+    final avatar = _avatarProvider(_targetAvatar);
 
     return Scaffold(
       key: const Key('message-conversation'),
       appBar: AppBar(
-        title: Text(
-          _targetName,
-          style: const TextStyle(
-            color: FeaturePalette.message,
-            fontWeight: FontWeight.w900,
-          ),
+        title: InkWell(
+          key: const Key('message-conversation-profile'),
+          onTap: _openChatProfile,
+          child: Text(_targetName, style: const TextStyle(
+            color: FeaturePalette.message, fontWeight: FontWeight.w900)),
         ),
         actions: [
           if (_isFriend)
@@ -1089,7 +1130,12 @@ class _MessagesScreenState extends State<MessagesScreen> {
                           alignment: mine
                               ? Alignment.centerRight
                               : Alignment.centerLeft,
-                          child: Container(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              if (!mine) ...[_senderAvatar(message), const SizedBox(width: 7)],
+                              Flexible(child: Container(
                             constraints: const BoxConstraints(maxWidth: 300),
                             margin: const EdgeInsets.only(bottom: 8),
                             padding: const EdgeInsets.all(11),
@@ -1234,7 +1280,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
                                 ),
                               ],
                             ),
-                          ),
+                          )),
+                          if (mine) ...[const SizedBox(width: 7), _senderAvatar(message)],
+                        ],
+                      ),
                         );
                       },
                     ),

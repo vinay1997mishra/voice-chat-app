@@ -96,6 +96,8 @@ class SocialService {
     _localUserId = userId;
     _photoReads.clear();
     if (previous != null && previous != account) {
+      liveProfiles.clear();
+      _profileWatchers.clear();
       directMessages.clear();
       messageThreads.clear();
       following.clear();
@@ -265,6 +267,56 @@ class SocialService {
   }
 
 
+  final Map<String, Map<String, dynamic>> liveProfiles = {};
+  final Map<String, int> _profileWatchers = {};
+  String? _sentProfileWatches;
+  void retainProfile(String userId) {
+    _profileWatchers[userId] = (_profileWatchers[userId] ?? 0) + 1;
+    _sendProfileWatches();
+  }
+
+  void releaseProfile(String userId) {
+    final remaining = (_profileWatchers[userId] ?? 1) - 1;
+    if (remaining <= 0) { _profileWatchers.remove(userId); }
+    else { _profileWatchers[userId] = remaining; }
+    _sendProfileWatches();
+  }
+
+  void _sendProfileWatches() {
+    if (!messageEventsConnected) return;
+    final ids = _profileWatchers.keys.take(4).toList()..sort();
+    if (ids.isEmpty && _sentProfileWatches == null) return;
+    final payload = jsonEncode({'type': 'subscribe_profiles', 'user_ids': ids});
+    if (payload == _sentProfileWatches) return;
+    _messageSocket!.add(payload);
+    _sentProfileWatches = payload;
+  }
+
+  void applyProfileEvent(Map<String, dynamic> event) {
+    final raw = event['users'] ?? (event['user'] == null ? const [] : [event['user']]);
+    if (raw is List) {
+      for (final row in raw.whereType<Map>()) {
+        final id = row['user_id']?.toString() ?? '';
+        if (id.isEmpty) continue;
+        liveProfiles[id] = Map<String, dynamic>.from(row);
+        if (liveProfiles.length > 64) {
+          final disposable = liveProfiles.keys.where((key) => !_profileWatchers.containsKey(key)).firstOrNull;
+          if (disposable != null) liveProfiles.remove(disposable);
+        }
+        final at = messageThreads.indexWhere((thread) => thread.userId == id);
+        if (at >= 0) {
+          final old = messageThreads[at];
+          messageThreads[at] = MessageThread(userId: id,
+            displayName: row['display_name']?.toString() ?? old.displayName,
+            avatarDataUrl: row['avatar_data_url']?.toString(), isFriend: old.isFriend,
+            lastMessage: old.lastMessage, unreadCount: old.unreadCount);
+        }
+      }
+    }
+    _persistHistory();
+    messageEvents.value = event;
+  }
+
   final Set<String> following = <String>{};
   final Set<String> friends = <String>{};
   final List<SocialUser> friendProfiles = <SocialUser>[];
@@ -396,6 +448,8 @@ class SocialService {
       }
       socket.pingInterval = const Duration(seconds: 60);
       _messageSocket = socket;
+      _sentProfileWatches = null;
+      _sendProfileWatches();
       if (_roomsWanted) socket.add(jsonEncode({'type': 'subscribe_rooms', 'enabled': true}));
       _messageSocketSubscription = socket.listen(
         _handleMessageSocketData,
@@ -422,6 +476,10 @@ class SocialService {
         (key, value) => MapEntry(key.toString(), value),
       );
       _messageReconnectFailures = 0;
+      if (event['type'] == 'profile_changed' || event['type'] == 'profiles_state') {
+        applyProfileEvent(Map<String, dynamic>.from(event));
+        return;
+      }
       if (event['type'] == 'account_state') {
         accountEvents.value = Map<String, dynamic>.from(event);
         return;

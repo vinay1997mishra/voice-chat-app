@@ -1097,7 +1097,7 @@ class ActiveRoomSession extends ChangeNotifier {
           if (member.userId != currentUserId) continue;
           roomController.addRoomMessage(
             member.displayName,
-            'entered the room',
+            'entered the room', userId: member.userId, avatarDataUrl: member.avatarDataUrl,
           );
           break;
         }
@@ -1111,7 +1111,7 @@ class ActiveRoomSession extends ChangeNotifier {
       if (!_seenRoomJoinKeys.add(key)) continue;
       roomController.addRoomMessage(
         member.displayName,
-        'entered the room',
+        'entered the room', userId: member.userId, avatarDataUrl: member.avatarDataUrl,
       );
     }
   }
@@ -1124,7 +1124,9 @@ class ActiveRoomSession extends ChangeNotifier {
       if (presence.latestChatEvent != null) presence.latestChatEvent!,
     ]) {
       if (!_seenRoomChatEventIds.add(event.id)) continue;
-      current.addRoomMessage(event.displayName, event.text);
+      final member = presence.members.where((member) => member.userId == event.userId).firstOrNull;
+      current.addRoomMessage(event.displayName, event.text,
+        userId: event.userId, avatarDataUrl: member?.avatarDataUrl);
     }
   }
 
@@ -1135,7 +1137,7 @@ class ActiveRoomSession extends ChangeNotifier {
       if (!_seenLuckyNumberEventIds.add(event.id)) continue;
       roomController.addRoomMessage(
         event.displayName,
-        '🎲 Lucky Number: ${event.number}',
+        '🎲 Lucky Number: ${event.number}', userId: event.userId,
       );
     }
   }

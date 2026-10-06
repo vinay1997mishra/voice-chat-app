@@ -350,6 +350,7 @@ export async function moveInlineAvatar(store,now=Date.now(),userId=null) {
   exec(store,"UPDATE app_users SET avatar_data_url=? WHERE user_id=? AND avatar_data_url=?",url,row.user_id,row.avatar_data_url);
   exec(store,"UPDATE country_ribbons SET avatar_data_url=? WHERE user_id=?",url,row.user_id);
   store._notifyAccountChanged(row.user_id);
+  store._notifyProfileChanged?.(row.user_id);
   const user=await store.getUserById(row.user_id);
   const presence=one(store,"SELECT room_id FROM app_user_presence WHERE user_id=?",row.user_id);
   if(presence?.room_id&&store.env.ROOM_PRESENCE) await store.env.ROOM_PRESENCE.get(store.env.ROOM_PRESENCE.idFromName(presence.room_id)).updateMemberProfile(user);
