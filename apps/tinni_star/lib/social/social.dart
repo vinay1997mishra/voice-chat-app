@@ -92,9 +92,9 @@ class SocialService {
   bool _roomsWanted = false;
   void watchRooms(bool enabled) {
     _roomsWanted = enabled;
-    if (messageEventsConnected) _messageSocket!.add(jsonEncode({
-      'type': 'subscribe_rooms', 'enabled': enabled,
-    }));
+    if (messageEventsConnected) {
+      _messageSocket!.add(jsonEncode({'type': 'subscribe_rooms', 'enabled': enabled}));
+    }
   }
 
   bool get messageEventsConnected => _messageSocket?.readyState == WebSocket.open;
@@ -258,9 +258,9 @@ class SocialService {
   }
 
   void markLiveConversationSeen(String peerUserId) {
-    if (messageEventsConnected) _messageSocket!.add(jsonEncode({
-      'type': 'messages_seen', 'peer_user_id': peerUserId,
-    }));
+    if (messageEventsConnected) {
+      _messageSocket!.add(jsonEncode({'type': 'messages_seen', 'peer_user_id': peerUserId}));
+    }
   }
 
   void applyMessageEvent(Map<String, dynamic> row) {

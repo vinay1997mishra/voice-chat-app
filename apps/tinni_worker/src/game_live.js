@@ -19,7 +19,7 @@ export async function openGameSocket(store, request, gameKey) {
     return new Response("WebSocket required", { status: 426 });
   }
   const userId = String(request.headers.get("x-tinni-user-id") || "").trim();
-  const roomId = String(request.headers.get("x-tinni-room-id") || "").trim();
+  const roomId = gameKey === "ludo" ? String(request.headers.get("x-tinni-room-id") || "").trim() : "";
   if (!userId || (gameKey === "ludo" && !roomId)) return new Response("Unauthorized", { status: 401 });
   // Validate room admission before accepting a Ludo connection.
   if (gameKey === "ludo") store._requireActiveRoomUser(userId, roomId);

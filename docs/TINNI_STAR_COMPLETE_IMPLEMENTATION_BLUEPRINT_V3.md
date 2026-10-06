@@ -1344,3 +1344,5 @@ Latest user instruction: remove automatic page polling and unnecessary blinking;
 - No unattended empty-game alarm chain; overdue stake-bearing rounds settle before a sparse recent-result history is rebuilt. Permanent bets, wallet and company records remain intact.
 - Transient room-event retention reduced to 50; session revocation checks no longer write cleanup on every authenticated request.
 - Free-tier request and SQL quotas remain distinct; this change does not guarantee unlimited users or report unconnected dashboard usage.
+
+Build note: Android installs the existing hash-pinned released media using its immutable generation-source checkout, then validates the current app catalog. Renderer development no longer blocks an unrelated transport APK. Idle mic-wave motion stops when there is no voice activity.

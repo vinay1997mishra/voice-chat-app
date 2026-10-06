@@ -10373,7 +10373,23 @@ class _LiveMicWavesState extends State<_LiveMicWaves>
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 680),
-    )..repeat();
+    );
+    _syncMotion();
+  }
+
+  void _syncMotion() {
+    if (widget.level > 0.02) {
+      if (!_controller.isAnimating) _controller.repeat();
+    } else {
+      _controller.stop();
+      _controller.value = 0;
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _LiveMicWaves oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    _syncMotion();
   }
 
   @override

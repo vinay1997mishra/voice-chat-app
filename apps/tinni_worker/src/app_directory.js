@@ -9993,6 +9993,7 @@ export class AppDirectoryStore extends DurableObject {
   _notifyAccountChanged(userId) {
     const payload = JSON.stringify({ type: "account_changed" });
     for (const socket of this.ctx.getWebSockets?.("message-user:" + userId) || []) {
+      if (socket.deserializeAttachment?.()?.userId !== String(userId)) continue;
       try { socket.send(payload); } catch {}
     }
   }

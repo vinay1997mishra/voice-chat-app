@@ -4,10 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/games/game_live_connection.dart';
 
-class _RealHttp extends HttpOverrides {
-  @override
-  HttpClient createHttpClient(SecurityContext? context) => super.createHttpClient(context);
-}
+class _RealHttp extends HttpOverrides {}
 
 void main() {
   test('game socket receives snapshots, coalesces changes and stops after disconnect', () async {

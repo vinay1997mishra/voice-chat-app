@@ -30,9 +30,11 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
   void _onPageEntered() { if (widget.state.pageEntries.value == 1) _refresh(); }
   void _onLiveChanged() {
-    if (mounted) setState(() {
-      if (search.text.trim().isNotEmpty) results = widget.state.discovery.search(search.text.trim());
-    });
+    if (mounted) {
+      setState(() {
+        if (search.text.trim().isNotEmpty) results = widget.state.discovery.search(search.text.trim());
+      });
+    }
   }
 
   @override
