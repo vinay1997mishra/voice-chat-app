@@ -1,17 +1,13 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
-
 import '../infra/request_budget.dart';
 
-/// One hibernating game socket; no periodic HTTP reads while it is ready.
+/// One hibernating game socket; changes request state, idle time does not.
 class GameLiveConnection {
   GameLiveConnection({
-    required this.apiBase,
-    required this.path,
-    required this.onState,
-    required this.onStatus,
-    this.roomId,
+    required this.apiBase, required this.path,
+    required this.onState, required this.onStatus, this.roomId,
   });
   final Uri apiBase;
   final String path;
@@ -19,9 +15,9 @@ class GameLiveConnection {
   final void Function(Map<String, dynamic>) onState;
   final void Function() onStatus;
   WebSocket? _socket;
-  Timer? _retry;
-  Timer? _refresh;
-  Timer? _response;
+  HttpClient? _client;
+  Completer<WebSocket>? _pending;
+  Timer? _openingTimer, _retry, _refresh, _response;
   bool _wanted = false, _opening = false, _ready = false;
   int _generation = 0, _failures = 0;
   String? _token;
@@ -39,24 +35,34 @@ class GameLiveConnection {
     if (!_wanted || _opening || _socket?.readyState == WebSocket.open) return;
     _opening = true;
     final generation = ++_generation;
-    var accepting = true;
+    final pending = Completer<WebSocket>();
+    _pending = pending;
     try {
       final uri = apiBase.replace(
         scheme: apiBase.scheme == 'https' ? 'wss' : 'ws',
         path: path, queryParameters: roomId == null ? null : {'room_id': roomId!},
       );
-      final socket = await WebSocket.connect(uri.toString(), headers: {
-        HttpHeaders.authorizationHeader: 'Bearer $_token',
-      }).then((socket) {
-        if (!accepting || !_wanted || generation != _generation) {
-          unawaited(socket.close());
+      _openingTimer = Timer(const Duration(seconds: 15), () {
+        if (!pending.isCompleted) {
+          pending.completeError(TimeoutException('Game connection timed out'));
+          _client?.close(force: true);
+          _client = null;
         }
-        return socket;
-      }).timeout(const Duration(seconds: 15));
+      });
+      final client = _client ??= HttpClient();
+      unawaited(WebSocket.connect(uri.toString(), headers: {
+        HttpHeaders.authorizationHeader: 'Bearer $_token',
+      }, customClient: client).then<void>((socket) {
+        if (pending.isCompleted || !_wanted || generation != _generation) {
+          unawaited(socket.close());
+        } else { pending.complete(socket); }
+      }, onError: (Object error, StackTrace stack) {
+        if (!pending.isCompleted) pending.completeError(error, stack);
+      }));
+      final socket = await pending.future;
       if (!_wanted || generation != _generation) { await socket.close(); return; }
       _socket = socket;
       _watchResponse(socket);
-      // Protocol pings do not run application handlers or write presence rows.
       socket.pingInterval = const Duration(seconds: 30);
       socket.listen((raw) {
         if (generation != _generation || raw is! String) return;
@@ -71,7 +77,6 @@ class GameLiveConnection {
             onState(Map<String, dynamic>.from(event['state'] as Map));
             onStatus();
           } else if (event['type'] == 'game_changed') {
-            // Coalesce a burst of bets into one socket state read.
             _refresh ??= Timer(const Duration(milliseconds: 200), () {
               _refresh = null;
               if (connected) {
@@ -85,7 +90,11 @@ class GameLiveConnection {
     } catch (_) {
       if (_wanted && generation == _generation) _scheduleRetry();
     } finally {
-      accepting = false;
+      if (identical(_pending, pending)) {
+        _openingTimer?.cancel();
+        _openingTimer = null;
+        _pending = null;
+      }
       if (generation == _generation) _opening = false;
     }
   }
@@ -97,7 +106,6 @@ class GameLiveConnection {
       unawaited(socket.close());
     });
   }
-
   void _lost(WebSocket socket) {
     if (!identical(_socket, socket)) return;
     _socket = null;
@@ -121,12 +129,21 @@ class GameLiveConnection {
     _generation++;
     _opening = false;
     _ready = false;
+    _openingTimer?.cancel();
+    _openingTimer = null;
+    final pending = _pending;
+    _pending = null;
+    if (pending != null && !pending.isCompleted) {
+      pending.completeError(StateError('Game connection cancelled'));
+    }
     _response?.cancel();
     _response = null;
     _retry?.cancel();
     _retry = null;
     _refresh?.cancel();
     _refresh = null;
+    _client?.close(force: true);
+    _client = null;
     final socket = _socket;
     _socket = null;
     unawaited(socket?.close());

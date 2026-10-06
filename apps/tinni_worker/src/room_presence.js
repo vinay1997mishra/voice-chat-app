@@ -2039,6 +2039,10 @@ export class RoomPresenceStore extends DurableObject {
     await this._handleSocketDisconnect(socket);
   }
 
+  updateRoomDetails(room) {
+    this._broadcastRoomEvent({ type: "room_details", room });
+  }
+
   updateMemberProfile(user) {
     const userId = String(user?.user_id || "");
     if (!this.ctx.storage.sql.exec("SELECT user_id FROM room_members WHERE user_id=? LIMIT 1", userId).toArray().length) return;

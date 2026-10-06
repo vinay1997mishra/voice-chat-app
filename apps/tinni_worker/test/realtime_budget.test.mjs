@@ -92,3 +92,27 @@ for(const [binding,prefix] of [['FRUIT_GAME','fruit'],['FRUIT_PARTY','party']]) 
     assert.equal(game._wallet('a').balance,before+Number(paid.total_payout));
   });
 }
+
+test('room DP and member DP push without changing seats or exposing locked rooms in discovery',async t=>{
+  const r=runtime();t.after(r.close);
+  const owner=await r.user(1), guest=await r.user(2);
+  const room=await r.directory.createRoom(owner.user_id,{title:'Before',seat_count:12});
+  await r.request('/room-presence/join',guest.token,{room_id:room.id});
+  const presence=r.direct('ROOM_PRESENCE',room.id);
+  const participant=socket({userId:guest.user_id});
+  presence.ctx.getWebSockets=()=>[participant];
+  const browser=socket({userId:owner.user_id,roomsSubscribed:true});
+  r.directory.ctx.getWebSockets=()=>[browser];
+  await r.directory.updateRoom(owner.user_id,room.id,{
+    title:'After',photo_data_url:'https://media.example.test/room.jpg',
+  });
+  assert.equal(browser.events.at(-1).room.photo_data_url,'https://media.example.test/room.jpg');
+  assert.equal(participant.events.at(-1).type,'room_details');
+  assert.equal(participant.events.at(-1).room.title,'After');
+  await r.directory.updateRoom(owner.user_id,room.id,{closed:true});
+  assert.equal(browser.events.at(-1).room,null);
+  await r.directory.updateUserProfile(guest.user_id,{avatar_data_url:'https://media.example.test/avatar.jpg'});
+  const updated=participant.events.findLast(x=>x.type==='member_updated');
+  assert.equal(updated.members.find(x=>x.user_id===guest.user_id).avatar_data_url,'https://media.example.test/avatar.jpg');
+  assert.equal(updated.members.find(x=>x.user_id===guest.user_id).seat_index,null);
+});

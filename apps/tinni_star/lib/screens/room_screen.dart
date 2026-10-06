@@ -132,6 +132,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   RoomController get controller => widget.state.roomSession.controller!;
 
   RoomSummary get _roomSnapshot {
+    final live = widget.state.roomSession.presence.latestRoomDetails;
+    if (live?['id']?.toString() == widget.room.id) {
+      final room = widget.state.discovery.roomFromLive(live!);
+      if (room != null) return room;
+    }
     for (final room in widget.state.discovery.rooms) {
       if (room.id == widget.room.id) return room;
     }
@@ -878,6 +883,11 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _onCountryRibbonEvent() {
     if (!mounted) return;
     final event = widget.state.social.roomEvents.value;
+    if (event?['type'] == 'room_updated' && event?['room_id']?.toString() == widget.room.id) {
+      widget.state.discovery.applyLiveEvent(event!);
+      setState(() {});
+      return;
+    }
     final rows = event?['ribbons'];
     if (rows is List) {
       _acceptCountryRibbons(rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)));

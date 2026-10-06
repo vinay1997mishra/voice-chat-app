@@ -223,6 +223,8 @@ class DiscoveryService {
   final Set<String> favorites = <String>{};
   final Set<String> followingRoomIds = <String>{};
 
+  RoomSummary? roomFromLive(Map<String, dynamic> row) => _roomFromServer(row);
+
   void applyLiveEvent(Map<String, dynamic> event) {
     if (event['type'] == 'rooms_snapshot' && event['rooms'] is List) {
       rooms

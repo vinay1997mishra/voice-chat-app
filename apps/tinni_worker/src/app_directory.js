@@ -4079,6 +4079,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_rooms SET title = ?, updated_at = ? WHERE id = ?",
           name, Date.now(), roomId,
         );
+        this._notifyRoomChanged(roomId);
         return { room_id: roomId, title: name };
       }
       case "room-dp": {
@@ -4089,6 +4090,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_rooms SET photo_data_url = ?, updated_at = ? WHERE id = ?",
           asset || null, Date.now(), roomId,
         );
+        this._notifyRoomChanged(roomId);
         return { room_id: roomId, photo_data_url: asset || null };
       }
       case "room-bg": {
@@ -4106,6 +4108,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_rooms SET theme_asset = ?, updated_at = ? WHERE id = ?",
           asset || null, Date.now(), roomId,
         );
+        this._notifyRoomChanged(roomId);
         return { room_id: roomId, background_asset: asset || null };
       }
       case "room-live": {
@@ -11898,6 +11901,11 @@ export class AppDirectoryStore extends DurableObject {
     const updated = this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name, u.avatar_data_url AS owner_avatar_data_url, u.flag_emoji AS owner_flag_emoji FROM app_rooms r JOIN app_users u ON u.user_id = r.owner_id WHERE r.id = ? LIMIT 1`, roomId,
     ).toArray()[0];
+    this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(roomId)).updateRoomDetails(rowToRoom(updated));
+    } catch {}
+
     return { ok: true, room: rowToRoom(updated) };
   }
 
@@ -11933,6 +11941,11 @@ export class AppDirectoryStore extends DurableObject {
         WHERE r.id = ? LIMIT 1`,
       roomId,
     ).toArray()[0];
+    this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(roomId)).updateRoomDetails(rowToRoom(updated));
+    } catch {}
+
     return { ok: true, room: rowToRoom(updated) };
   }
 
@@ -12021,6 +12034,11 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 1`,
       roomId,
     ).toArray()[0];
+
+    this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(roomId)).updateRoomDetails(rowToRoom(updated));
+    } catch {}
 
     return {
       ok: true,

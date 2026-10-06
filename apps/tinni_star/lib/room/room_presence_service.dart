@@ -416,6 +416,8 @@ class RoomPresenceService extends ChangeNotifier {
     }
   }
 
+  Map<String, dynamic>? latestRoomDetails;
+
   void _handleLiveSocketData(dynamic raw) {
     if (raw is! String) return;
     try {
@@ -424,6 +426,11 @@ class RoomPresenceService extends ChangeNotifier {
       final data = decoded.map(
         (key, value) => MapEntry(key.toString(), value),
       );
+      if (data['type'] == 'room_details' && data['room'] is Map) {
+        latestRoomDetails = Map<String, dynamic>.from(data['room'] as Map);
+        notifyListeners();
+        return;
+      }
       if (data['type']?.toString() == 'chat_message') {
         final rawMessage = data['message'];
         if (rawMessage is Map) {
