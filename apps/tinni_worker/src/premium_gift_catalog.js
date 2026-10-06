@@ -350,6 +350,81 @@ export const premiumGiftCatalog = {
     "price": 6100000,
     "category": "cp"
   },
+  "enemy-mark": {
+    "name": "Enemy Mark",
+    "price": 44444,
+    "category": "enemy"
+  },
+  "enemy-dark-crown": {
+    "name": "Dark Crown",
+    "price": 150000,
+    "category": "enemy"
+  },
+  "enemy-poison-dagger": {
+    "name": "Poison Dagger",
+    "price": 500000,
+    "category": "enemy"
+  },
+  "enemy-red-skull-flame": {
+    "name": "Red Skull Flame",
+    "price": 850000,
+    "category": "enemy"
+  },
+  "enemy-black-storm": {
+    "name": "Black Storm",
+    "price": 1200000,
+    "category": "enemy"
+  },
+  "enemy-hell-chain": {
+    "name": "Hell Chain",
+    "price": 1550000,
+    "category": "enemy"
+  },
+  "enemy-rage-bomb": {
+    "name": "Rage Bomb",
+    "price": 1900000,
+    "category": "enemy"
+  },
+  "enemy-demon-eye": {
+    "name": "Demon Eye",
+    "price": 2250000,
+    "category": "enemy"
+  },
+  "enemy-final-warning": {
+    "name": "Final Warning",
+    "price": 2600000,
+    "category": "enemy"
+  },
+  "enemy-hunter-blade": {
+    "name": "Hunter Blade",
+    "price": 2950000,
+    "category": "enemy"
+  },
+  "enemy-shadow-coffin": {
+    "name": "Shadow Coffin",
+    "price": 3300000,
+    "category": "enemy"
+  },
+  "enemy-crimson-reaper": {
+    "name": "Crimson Reaper",
+    "price": 3650000,
+    "category": "enemy"
+  },
+  "enemy-war-throne": {
+    "name": "War Throne",
+    "price": 4000000,
+    "category": "enemy"
+  },
+  "enemy-execution-order": {
+    "name": "Execution Order",
+    "price": 4350000,
+    "category": "enemy"
+  },
+  "enemy-abyss-king": {
+    "name": "Abyss King",
+    "price": 4700000,
+    "category": "enemy"
+  },
   "flag-ad": {
     "name": "AD • National Celebration",
     "price": 150000,
