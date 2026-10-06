@@ -1,4 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
+import { saveGameResults, lastGameResult, pendingGameResults, flushGameResults, mainDirectory, recoverMainBets } from "./game_results.js";
+import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 
 export const PARTY_ROUND_MS = 21000;
 export const PARTY_RESULT_SPIN_MS = 5000;
@@ -87,6 +89,18 @@ function dayKey(ms) {
 }
 
 export class FruitPartyStore extends DurableObject {
+  fetch(request) { return openGameSocket(this, request, "fruit-party"); }
+  webSocketMessage(socket, message) { return handleGameMessage(this, socket, message); }
+  webSocketClose() {}
+  webSocketError() {}
+
+  _notifyPhase(now) {
+    const phaseKey = roundIdAt(now) + ":" + (now >= bettingEndAt(roundIdAt(now)));
+    if (this._livePhaseKey === phaseKey) return;
+    this._livePhaseKey = phaseKey;
+    notifyGameChanged(this, "fruit-party");
+  }
+
   constructor(ctx, env) {
     super(ctx, env);
     this.env = env;
@@ -118,6 +132,15 @@ export class FruitPartyStore extends DurableObject {
         settled_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS party_result_outbox (
+        user_id TEXT NOT NULL, round_id INTEGER NOT NULL, payload TEXT NOT NULL,
+        PRIMARY KEY(user_id, round_id)
+      );
+      CREATE TABLE IF NOT EXISTS party_latest_results (
+        user_id TEXT PRIMARY KEY, round_id INTEGER NOT NULL,
+        payload TEXT NOT NULL, delivered INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_party_result_delivery ON party_latest_results(delivered);
       CREATE TABLE IF NOT EXISTS party_wallets (
         user_id TEXT PRIMARY KEY,
         balance INTEGER NOT NULL,
@@ -126,6 +149,7 @@ export class FruitPartyStore extends DurableObject {
         updated_at INTEGER NOT NULL
       );
     `);
+    try { this.ctx.storage.sql.exec("ALTER TABLE party_bets ADD COLUMN main_wallet INTEGER NOT NULL DEFAULT 0"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
     try { this.ctx.storage.sql.exec("ALTER TABLE party_bets ADD COLUMN room_id TEXT"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
   }
 
@@ -148,12 +172,13 @@ export class FruitPartyStore extends DurableObject {
 
   _bets(roundId) {
     return this.ctx.storage.sql.exec(
-      `SELECT user_id, fruit_key, amount, room_id, created_at
+      `SELECT id, user_id, fruit_key, amount, room_id, created_at, main_wallet
          FROM party_bets
         WHERE round_id = ?
         ORDER BY created_at ASC`,
       roundId,
     ).toArray().map((row) => ({
+      id: String(row.id), main_wallet: Number(row.main_wallet || 0) === 1,
       user_id: String(row.user_id),
       fruit_key: String(row.fruit_key),
       amount: Number(row.amount),
@@ -252,32 +277,55 @@ export class FruitPartyStore extends DurableObject {
       this._setMeta("started_round", currentRound);
     }
     await this._sync(now);
+    this._notifyPhase(now);
   }
 
   async _sync(now = Date.now()) {
+    const recoveryPhase = roundIdAt(now) + ":" + (now >= bettingEndAt(roundIdAt(now)));
+    if (this._meta("main_wallet_mode") && this._mainRecoveryPhase !== recoveryPhase) {
+      try {
+        await recoverMainBets(this, "party", "fruit_party");
+        this._mainRecoveryPhase = recoveryPhase;
+      } catch (error) {
+        console.error("Funded bet recovery will retry", String(error?.message || error));
+        await this.ctx.storage.setAlarm(now + 15000);
+        return;
+      }
+    }
     const currentRound = roundIdAt(now);
     const startedRound = Number(this._meta("started_round", currentRound));
     const lastRaw = this._meta("last_settled_round");
     let next = lastRaw === null ? startedRound : Number(lastRaw) + 1;
 
-    let processed = 0;
-    while (
-      (
-        next < currentRound ||
-        (
-          next === currentRound &&
-          now >= bettingEndAt(currentRound)
-        )
-      ) &&
-      processed < 100
-    ) {
-      await this._settle(next);
-      this._setMeta("last_settled_round", next);
-      next += 1;
-      processed += 1;
+    const eligible = now >= bettingEndAt(currentRound) ? currentRound : currentRound - 1;
+    // Read overdue stake-bearing rounds directly after a long idle interval.
+    // Never discard a bet, payout, ledger or settled financial result.
+    const overdue = this.ctx.storage.sql.exec(
+      "SELECT DISTINCT round_id FROM party_bets WHERE round_id >= ? AND round_id <= ? ORDER BY round_id LIMIT 101",
+      next, eligible,
+    ).toArray();
+    for (const row of overdue.slice(0, 100)) await this._settle(Number(row.round_id));
+    if (overdue.length > 100) {
+      this._setMeta("last_settled_round", Number(overdue[99].round_id));
+      await this.ctx.storage.setAlarm(now + 1000);
+      return;
+    }
+    for (let round = Math.max(next, eligible - 6); round <= eligible; round++) {
+      await this._settle(round);
+    }
+    if (next <= eligible) this._setMeta("last_settled_round", eligible);
+    const pending = this.ctx.storage.sql.exec(
+      "SELECT round_id FROM party_bets WHERE round_id > ? LIMIT 1", eligible,
+    ).toArray().length > 0;
+    await flushGameResults(this, "party");
+    const deliveryPending = pendingGameResults(this, "party");
+    const watching = (this.ctx.getWebSockets?.("game:fruit-party") || []).length > 0;
+    if (!watching && !pending && !deliveryPending) {
+      if (await this.ctx.storage.getAlarm() !== null) await this.ctx.storage.deleteAlarm();
+      return;
     }
 
-    const nextAlarm =
+    const nextAlarm = deliveryPending && !watching && !pending ? now + 15000 :
       now < bettingEndAt(currentRound)
         ? bettingEndAt(currentRound)
         : roundEndAt(currentRound);
@@ -322,7 +370,10 @@ export class FruitPartyStore extends DurableObject {
 
     this.ctx.storage.transactionSync(() => {
     const settledAt = Date.now();
-    for (const [userId, payout] of payouts) {
+    for (const userId of payouts.keys()) {
+      const payout = bets.filter(bet => bet.user_id === userId && !bet.main_wallet && winningKeys.has(bet.fruit_key))
+        .reduce((sum, bet) => sum + bet.amount * FRUIT_BY_KEY.get(bet.fruit_key).multiplier, 0);
+      if (!payout) continue;
       this._ensureWallet(userId, settledAt);
       this.ctx.storage.sql.exec(
         `UPDATE party_wallets
@@ -352,6 +403,7 @@ export class FruitPartyStore extends DurableObject {
       players.size,
       settledAt,
     );
+    saveGameResults(this, "party", "fruit_party", roundId, bets, payouts, winner, bonusFruits);
     });
     if (this.env?.APP_DIRECTORY) {
       const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
@@ -469,7 +521,8 @@ export class FruitPartyStore extends DurableObject {
       };
     });
 
-    const wallet = this._wallet(userId, now);
+    const mainWallet = userId ? await mainDirectory(this).mainGameWallet(userId,"fruit_party") : {coins:0,today_winnings:0};
+    const wallet = {balance:mainWallet.coins,today_winnings:mainWallet.today_winnings};
 
     return {
       ok: true,
@@ -497,6 +550,7 @@ export class FruitPartyStore extends DurableObject {
         lucky_fruit_count: 3,
         fruits: PARTY_FRUITS,
       },
+      last_bet_result: mainWallet.last_bet_result || lastGameResult(this, "party", userId),
       wallet_balance: wallet.balance,
       today_winnings: wallet.today_winnings,
       my_bets: myBets,
@@ -505,53 +559,41 @@ export class FruitPartyStore extends DurableObject {
   }
 
   async placeBet(input) {
-    const now = Date.now();
-    await this._ensureStarted(now);
-
     const userId = String(input?.user_id || "").trim();
     const fruitKey = String(input?.fruit_key || "").trim();
     const roomId = String(input?.room_id || "").trim();
     const amount = Number(input?.amount || 0);
-    const roundId = roundIdAt(now);
-    const remainingMs = bettingEndAt(roundId) - now;
-
-    if (!userId) throw new Error("user_id is required");
-    if (!roomId) throw new Error("room_id is required");
+    const requestId = String(input?.request_id || crypto.randomUUID());
+    if (!userId || !roomId) throw new Error("user_id and room_id are required");
     if (!FRUIT_BY_KEY.has(fruitKey)) throw new Error("Invalid fruit");
-    if (!Number.isInteger(amount) || !ALLOWED_BETS.has(amount)) {
-      throw new Error("Invalid bet amount");
+    if (!Number.isInteger(amount) || !ALLOWED_BETS.has(amount)) throw new Error("Invalid bet amount");
+    if (!/^[a-zA-Z0-9_-]{16,80}$/.test(requestId)) throw new Error("Invalid bet request ID");
+    const id = "fruit_party:" + userId + ":" + requestId;
+    const prior = this.ctx.storage.sql.exec("SELECT user_id,fruit_key,amount,room_id FROM party_bets WHERE id=?", id).toArray()[0];
+    if (prior) {
+      if (prior.user_id !== userId || prior.fruit_key !== fruitKey || Number(prior.amount) !== amount || prior.room_id !== roomId) {
+        throw new Error("Bet request ID was already used");
+      }
+      return this.state(userId);
     }
-    if (remainingMs <= 0) {
-      throw new Error("Betting is locked while the result is spinning");
-    }
-
-    this._ensureWallet(userId, now);
-    const wallet = this._wallet(userId, now);
-    if (wallet.balance < amount) throw new Error("Not enough coins");
-
-    this.ctx.storage.sql.exec(
-      `UPDATE party_wallets
-          SET balance = balance - ?, updated_at = ?
-        WHERE user_id = ? AND balance >= ?`,
-      amount,
-      now,
-      userId,
-      amount,
-    );
-
-    this.ctx.storage.sql.exec(
-      `INSERT INTO party_bets
-        (id, round_id, user_id, fruit_key, amount, room_id, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      crypto.randomUUID(),
-      roundId,
-      userId,
-      fruitKey,
-      amount,
-      roomId,
-      now,
-    );
-
+    await this._ensureStarted(Date.now());
+    this._setMeta("main_wallet_mode", "1");
+    await this.ctx.blockConcurrencyWhile(async () => {
+      const now = Date.now(), roundId = roundIdAt(now);
+      if (bettingEndAt(roundId) <= now) throw new Error("Betting is locked while the result is spinning");
+      // The alarm is durable before the main wallet reserves funds.
+      const currentAlarm = await this.ctx.storage.getAlarm();
+      if (currentAlarm === null || currentAlarm > bettingEndAt(roundId)) await this.ctx.storage.setAlarm(bettingEndAt(roundId));
+      const bet = await mainDirectory(this).reserveMainGameBet({
+        id,user_id:userId,game_key:"fruit_party",round_id:roundId,
+        fruit_key:fruitKey,amount,room_id:roomId,
+      });
+      this.ctx.storage.sql.exec(
+        "INSERT OR IGNORE INTO party_bets(id,round_id,user_id,fruit_key,amount,room_id,created_at,main_wallet) VALUES(?,?,?,?,?,?,?,1)",
+        bet.id,bet.round_id,bet.user_id,bet.fruit_key,bet.amount,bet.room_id,bet.created_at,
+      );
+    });
+    notifyGameChanged(this, "fruit-party");
     return this.state(userId);
   }
 }

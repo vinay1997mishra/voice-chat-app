@@ -12,8 +12,9 @@ test('Fruit Party Lucky settles three distinct fruits once despite a notice fail
   party._setMeta('lucky_window_id','0');
   party._setMeta('lucky_rounds_json','[10]');
   const fruits=['lemon','raspberry','kiwi','plum','banana','strawberry','watermelon','cherry'];
+  r.directory._creditNormalWalletAuthorized(user.user_id,10000000);
   for (const key of fruits) await party.placeBet({user_id:user.user_id,room_id:room.id,fruit_key:key,amount:100000});
-  const before=party._wallet(user.user_id).balance;
+  const before=r.directory.getWallet(user.user_id).coins;
   r.directory.recordGameWinning=async()=>{throw new Error('Simulated notice failure');};
   now+=21001;
   await Promise.all([party._settle(10),party._settle(10)]);
@@ -26,8 +27,8 @@ test('Fruit Party Lucky settles three distinct fruits once despite a notice fail
   assert.equal(result.total_payout,expected);
   assert.equal(state.wallet_balance,before+expected);
   await party._settle(10);
-  assert.equal(party._wallet(user.user_id).balance,before+expected);
-  assert.equal(party.ownerStats(user.user_id).player.balance,before+expected);
+  assert.equal(r.directory.getWallet(user.user_id).coins,before+expected);
+  assert.equal(r.directory.mainGameWallet(user.user_id,'fruit_party').today_winnings,expected);
   await assert.rejects(()=>party.placeBet({user_id:user.user_id,room_id:room.id,fruit_key:'lemon',amount:5000}),/locked/);
 });
 

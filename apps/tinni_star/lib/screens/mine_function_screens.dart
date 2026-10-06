@@ -1828,7 +1828,24 @@ class _HostDataScreenState extends State<HostDataScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
     _load();
+  }
+
+  void _onLiveChanged() {
+    if (!mounted) return;
+    final wallet = widget.state.wallet;
+    setState(() {
+      portal = {...portal, 'wallet': {..._map(portal['wallet']),
+        'current_diamonds': wallet.diamonds, 'diamond_usd_cents': wallet.diamondUsdCents,
+        'commission_usd_cents': wallet.commissionUsdCents, 'settlement_usd_cents': wallet.withdrawableUsdCents,
+      }};
+    });
+  }
+  @override
+  void dispose() {
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
+    super.dispose();
   }
 
   Future<void> _load() async {

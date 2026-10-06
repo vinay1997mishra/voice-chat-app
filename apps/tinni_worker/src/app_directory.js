@@ -1,7 +1,9 @@
+import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
 import { premiumGiftCatalog } from './premium_gift_catalog.js';
 import { DurableObject } from "cloudflare:workers";
+import { fruitMultiplier } from "./game_results.js";
 
 const MAX_AVATAR_DATA_LENGTH = 450000;
 const MAX_ROOM_THEME_ASSET_LENGTH = 2500000;
@@ -727,6 +729,19 @@ export class AppDirectoryStore extends DurableObject {
         expires_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS main_game_bets (
+        id TEXT PRIMARY KEY, user_id TEXT NOT NULL, game_key TEXT NOT NULL,
+        round_id INTEGER NOT NULL, fruit_key TEXT NOT NULL, amount INTEGER NOT NULL,
+        room_id TEXT NOT NULL, created_at INTEGER NOT NULL, settled_at INTEGER,
+        winning_coins INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_main_game_pending ON main_game_bets(game_key,settled_at,round_id);
+      CREATE INDEX IF NOT EXISTS idx_main_game_user ON main_game_bets(user_id,game_key,round_id);
+      CREATE TABLE IF NOT EXISTS latest_game_results (
+        user_id TEXT NOT NULL, game_key TEXT NOT NULL, round_id INTEGER NOT NULL,
+        payload TEXT NOT NULL, seen INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY(user_id, game_key)
+      );
       CREATE TABLE IF NOT EXISTS app_wallets (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 0,
@@ -2486,6 +2501,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins=?,updated_at=? WHERE user_id=?",
         expected, now, userId,
       );
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         `UPDATE wallet_coin_guards
             SET quarantined_coins=quarantined_coins+?,
@@ -2563,6 +2579,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE owner_wallets SET balance=?,updated_at=? WHERE user_id=? AND wallet_type=?",
         expected, now, userId, walletType,
       );
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         `UPDATE privileged_wallet_coin_guards
             SET quarantined_coins=quarantined_coins+?,
@@ -2615,6 +2632,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
       amount, now, guard.user_id,
     );
+    this._notifyAccountChanged(guard.user_id);
     this.ctx.storage.sql.exec(
       "UPDATE wallet_coin_guards SET expected_coins=MAX(0,expected_coins-?),updated_at=? WHERE user_id=?",
       amount, now, guard.user_id,
@@ -2632,6 +2650,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?",
       amount, now, guard.user_id,
     );
+    this._notifyAccountChanged(guard.user_id);
     this.ctx.storage.sql.exec(
       "UPDATE wallet_coin_guards SET expected_coins=expected_coins+?,updated_at=? WHERE user_id=?",
       amount, now, guard.user_id,
@@ -2649,6 +2668,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE owner_wallets SET balance=balance+?,updated_at=? WHERE user_id=? AND wallet_type=?",
       amount, now, guard.user_id, guard.wallet_type,
     );
+    this._notifyAccountChanged(guard.user_id);
     this.ctx.storage.sql.exec(
       "UPDATE privileged_wallet_coin_guards SET expected_balance=expected_balance+?,updated_at=? WHERE user_id=? AND wallet_type=?",
       amount, now, guard.user_id, guard.wallet_type,
@@ -2667,6 +2687,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE owner_wallets SET balance=balance-?,updated_at=? WHERE user_id=? AND wallet_type=?",
       amount, now, guard.user_id, guard.wallet_type,
     );
+    this._notifyAccountChanged(guard.user_id);
     this.ctx.storage.sql.exec(
       "UPDATE privileged_wallet_coin_guards SET expected_balance=MAX(0,expected_balance-?),updated_at=? WHERE user_id=? AND wallet_type=?",
       amount, now, guard.user_id, guard.wallet_type,
@@ -2831,6 +2852,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET diamonds = MAX(0, diamonds + ?), updated_at = ? WHERE user_id = ?",
         delta, now, userId,
       );
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,0,?,?,?,?)",
         crypto.randomUUID(),
@@ -2897,6 +2919,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
           amount, now, userId,
         );
+        this._notifyAccountChanged(userId);
         this.ctx.storage.sql.exec(
           "UPDATE wallet_coin_guards SET expected_coins=MAX(0,expected_coins-?),updated_at=? WHERE user_id=?",
           amount, now, userId,
@@ -2906,6 +2929,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_wallets SET banned=?,updated_at=? WHERE user_id=?",
           operation === "ban" ? 1 : 0, now, userId,
         );
+        this._notifyAccountChanged(userId);
       } else if (operation !== "create") {
         throw new Error("Unsupported wallet operation");
       }
@@ -2947,6 +2971,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE owner_wallets SET banned=?,updated_at=? WHERE user_id=? AND wallet_type=?",
         operation === "ban" ? 1 : 0, now, userId, walletType,
       );
+      this._notifyAccountChanged(userId);
     } else if (operation !== "create") {
       throw new Error("Unsupported wallet operation");
     }
@@ -3617,6 +3642,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE settlement_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=?",
       cents, Date.now(), userId,
     );
+    this._notifyAccountChanged(userId);
   }
 
   _ensureRoleDollarBalance(userIdValue, walletTypeValue) {
@@ -3645,6 +3671,7 @@ export class AppDirectoryStore extends DurableObject {
       cents, Date.now(), this._resolveOwnerUserId(userIdValue),
       String(walletTypeValue || "").trim().toLowerCase(),
     );
+    this._notifyAccountChanged(this._resolveOwnerUserId(userIdValue));
     return {
       before: Math.max(0, Number(row?.usd_cents || 0)),
       after: Math.max(0, Number(row?.usd_cents || 0)) + cents,
@@ -3847,6 +3874,7 @@ export class AppDirectoryStore extends DurableObject {
       ["app_user_identities","user_id"], ["app_wallets","user_id"],
       ["wallet_coin_guards","user_id"], ["privileged_wallet_coin_guards","user_id"],
       ["wallet_transactions","user_id"], ["vip_entitlements","user_id"],
+      ["main_game_bets","user_id"], ["latest_game_results","user_id"],
       ["call_verification_submissions","user_id"], ["random_call_stats","user_id"],
       ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
       ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
@@ -3897,6 +3925,9 @@ export class AppDirectoryStore extends DurableObject {
         newId, oldId,
       );
     }
+    this.ctx.storage.sql.exec(
+      "UPDATE latest_game_results SET payload=json_set(payload,'$.user_id',?) WHERE user_id=?",newId,newId,
+    );
     if (oldRoomId) {
       const conflictingRoom = this.ctx.storage.sql.exec(
         "SELECT id FROM app_rooms WHERE public_id = ? AND id <> ? LIMIT 1",
@@ -4067,6 +4098,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_rooms SET title = ?, updated_at = ? WHERE id = ?",
           name, Date.now(), roomId,
         );
+        this._notifyRoomChanged(roomId);
         return { room_id: roomId, title: name };
       }
       case "room-dp": {
@@ -4077,6 +4109,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_rooms SET photo_data_url = ?, updated_at = ? WHERE id = ?",
           asset || null, Date.now(), roomId,
         );
+        this._notifyRoomChanged(roomId);
         return { room_id: roomId, photo_data_url: asset || null };
       }
       case "room-bg": {
@@ -4094,6 +4127,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_rooms SET theme_asset = ?, updated_at = ? WHERE id = ?",
           asset || null, Date.now(), roomId,
         );
+        this._notifyRoomChanged(roomId);
         return { room_id: roomId, background_asset: asset || null };
       }
       case "room-live": {
@@ -4946,7 +4980,16 @@ export class AppDirectoryStore extends DurableObject {
       displayName, age, birthday, signature, countryCode, countryName,
       flagEmoji, gender, avatarDataUrl, Date.now(), userId,
     );
-    return this.getUserById(userId);
+    this._notifyAccountChanged(userId);
+    const owned = this.findOwnedRoomByUserId(userId);
+    if (owned) this._notifyRoomChanged(owned.id);
+    const updated = await this.getUserById(userId);
+    const active = this.ctx.storage.sql.exec("SELECT room_id FROM app_user_presence WHERE user_id=? LIMIT 1", userId).toArray()[0];
+    if (active?.room_id) {
+      const presence = this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(String(active.room_id)));
+      await presence.updateMemberProfile(updated);
+    }
+    return updated;
   }
 
   revokeSession(tokenHashValue, expiresAtValue) {
@@ -4968,9 +5011,8 @@ export class AppDirectoryStore extends DurableObject {
     const tokenHash = String(tokenHashValue || "").trim();
     if (!tokenHash) return false;
     const now = Date.now();
-    this.ctx.storage.sql.exec("DELETE FROM app_session_revocations WHERE expires_at <= ?", now);
     return Boolean(this.ctx.storage.sql.exec(
-      "SELECT token_hash FROM app_session_revocations WHERE token_hash = ? LIMIT 1", tokenHash,
+      "SELECT token_hash FROM app_session_revocations WHERE token_hash = ? AND expires_at > ? LIMIT 1", tokenHash, now,
     ).toArray()[0]);
   }
 
@@ -5187,6 +5229,7 @@ export class AppDirectoryStore extends DurableObject {
       );
     }
     if (roomId) this._captureRocketAudience(roomId,userId,now);
+    if (roomId && memberCountValue !== null) this._notifyRoomChanged(roomId);
     return { ok: true, online: true, room_id: roomId || null, last_seen: now };
   }
 
@@ -5255,7 +5298,7 @@ export class AppDirectoryStore extends DurableObject {
             SELECT id FROM room_realtime_events
              WHERE room_id=?
              ORDER BY created_at DESC
-             LIMIT 500
+             LIMIT 50
           )`,
       roomId, roomId,
     );
@@ -5283,6 +5326,7 @@ export class AppDirectoryStore extends DurableObject {
         roomId, count, now,
       );
     }
+    if (roomId) this._notifyRoomChanged(roomId);
     return { ok: true, online: false };
   }
 
@@ -5947,6 +5991,7 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     const id = "lp-" + crypto.randomUUID();
     this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", totalCoins, now, userId);
+    this._notifyAccountChanged(userId);
     this.ctx.storage.sql.exec(
       "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,?,?,?,?)",
       "wallet-" + crypto.randomUUID(), userId, "lucky_pouch_open", -totalCoins, 0, id, "Lucky Pouch", now,
@@ -6780,6 +6825,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
         totalCost, now, senderId,
       );
+      this._notifyAccountChanged(senderId);
     }
 
     const transactions = [];
@@ -6839,6 +6885,7 @@ export class AppDirectoryStore extends DurableObject {
           "UPDATE app_wallets SET diamonds=diamonds+?,updated_at=? WHERE user_id=?",
           receiverDiamonds, now, receiverId,
         );
+        this._notifyAccountChanged(receiverId);
         this.ctx.storage.sql.exec(
           "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,'host_gift_diamonds',0,?,?,?,?)",
           "wallet-" + crypto.randomUUID(), receiverId, receiverDiamonds, id,
@@ -7209,6 +7256,7 @@ export class AppDirectoryStore extends DurableObject {
           roomId, userId, color, now,
         );
         player = { color, joined_at: now };
+        notifyGameChanged(this, "ludo", roomId);
       }
     }
     return player ? String(player.color) : null;
@@ -7255,6 +7303,7 @@ export class AppDirectoryStore extends DurableObject {
     if (nextVersion !== expectedVersion + 1) {
       throw new Error("Game state changed. Refresh and try again.");
     }
+    notifyGameChanged(this, "ludo", roomId);
     return nextVersion;
   }
 
@@ -7645,6 +7694,7 @@ export class AppDirectoryStore extends DurableObject {
     const pair = [userId, targetId].sort(); const now = Date.now();
     if (price > 0) {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_connect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + targetId, "CP connect", now);
     }
     this.ctx.storage.sql.exec(
@@ -7690,6 +7740,7 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     if (price > 0) {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_disconnect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + row.user_a + ":" + row.user_b, "CP disconnect", now);
     }
     this.ctx.storage.sql.exec("DELETE FROM cp_relationships WHERE user_a = ? AND user_b = ?", row.user_a, row.user_b);
@@ -8125,6 +8176,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE app_wallets SET diamonds=diamonds-?,updated_at=? WHERE user_id=?",
       diamonds, now, userId,
     );
+    this._notifyAccountChanged(userId);
     this._creditNormalWalletAuthorized(userId, coins, "diamond_conversion");
     this.ctx.storage.sql.exec(
       `INSERT INTO diamond_conversions
@@ -8325,6 +8377,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE role_dollar_balances SET usd_cents=?,updated_at=? WHERE user_id=? AND wallet_type=?",
       senderAfter, now, senderId, walletType,
     );
+    this._notifyAccountChanged(senderId);
 
     let recipientBefore = null;
     let recipientAfter = null;
@@ -8526,6 +8579,7 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     if (price > 0) {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'unique_id_purchase',?,0,?,?,?)",
         crypto.randomUUID(), userId, -price, "unique-id:" + publicId, publicId, now,
@@ -8588,6 +8642,7 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     if (price > 0) {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,0,?,?,?)", crypto.randomUUID(), userId, kind + "_purchase", -price, kind + ":" + item.id, item.name, now);
     }
     const durationDays = effective.duration_days ?? item.duration_days;
@@ -8682,6 +8737,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins=coins-?,updated_at=? WHERE user_id=?",
         price,now,senderId,
       );
+      this._notifyAccountChanged(senderId);
       this.ctx.storage.sql.exec(
         "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,?,?,0,?,?,?)",
         crypto.randomUUID(),senderId,"store_item_send",-price,
@@ -8733,6 +8789,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
         price, now, userId,
       );
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'frame_purchase',?,0,?,?,?)",
         crypto.randomUUID(), userId, -price, "frame:" + frameId, frame.name, now,
@@ -8804,6 +8861,7 @@ export class AppDirectoryStore extends DurableObject {
     const expiresAt = durationDays === 0 ? null : base + durationDays * 86400000;
     if (price > 0) {
       this.ctx.storage.sql.exec("UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?", price, now, userId);
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'vip_purchase',?,0,?,?,?)",
         crypto.randomUUID(), userId, -price, "vip:" + vipId + ":" + now, item.name, now,
@@ -8848,7 +8906,7 @@ export class AppDirectoryStore extends DurableObject {
     const commissionUsdCents = (isAgency || isBd) ? Number(settlement?.usd_cents || 0) : 0;
     const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
     const privilegedRows = this.ctx.storage.sql.exec(
-      "SELECT wallet_type,banned,updated_at FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant')",
+      "SELECT w.wallet_type,w.banned,w.updated_at,COALESCE(d.usd_cents,0) AS usd_cents,COALESCE(d.updated_at,0) AS dollar_updated_at FROM owner_wallets w LEFT JOIN role_dollar_balances d ON d.user_id=w.user_id AND d.wallet_type=w.wallet_type WHERE w.user_id=? AND w.wallet_type IN ('coin_seller','merchant')",
       userId,
     ).toArray();
     const privileged = {};
@@ -8859,6 +8917,7 @@ export class AppDirectoryStore extends DurableObject {
       privileged[walletType] = {
         active: true,
         balance: guard.security_frozen ? 0 : guard.balance,
+        usd_cents: Number(privilegedRow.usd_cents || 0),
         banned: Number(privilegedRow.banned || 0) === 1,
         security_frozen: guard.security_frozen,
         freeze_reason: guard.freeze_reason,
@@ -8891,7 +8950,8 @@ export class AppDirectoryStore extends DurableObject {
       freeze_reason: coinGuard.freeze_reason,
       coin_seller_wallet: privileged.coin_seller || null,
       merchant_wallet: privileged.merchant || null,
-      updated_at: Number(row?.updated_at || now),
+      updated_at: Math.max(Number(row?.updated_at || now), Number(settlement?.updated_at || 0),
+        ...privilegedRows.map(item => Math.max(Number(item.updated_at || 0), Number(item.dollar_updated_at || 0)))),
     };
   }
 
@@ -9002,10 +9062,12 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE settlement_balances SET usd_cents=?,updated_at=? WHERE user_id=?",
       senderAfter, now, senderId,
     );
+    this._notifyAccountChanged(senderId);
     this.ctx.storage.sql.exec(
       "UPDATE role_dollar_balances SET usd_cents=?,updated_at=? WHERE user_id=? AND wallet_type=?",
       recipientAfter, now, recipient.user_id, recipient.role,
     );
+    this._notifyAccountChanged(recipient.user_id);
 
     this._recordPrivilegedWalletTransaction({
       userId: recipient.user_id,
@@ -9381,6 +9443,7 @@ export class AppDirectoryStore extends DurableObject {
         now,
         String(row.caller_id),
       );
+      this._notifyAccountChanged(String(row.caller_id));
       if (receiverReward > 0) {
         this.ctx.storage.sql.exec(
           `UPDATE app_wallets
@@ -9390,6 +9453,7 @@ export class AppDirectoryStore extends DurableObject {
           now,
           String(row.receiver_id),
         );
+        this._notifyAccountChanged(String(row.receiver_id));
       }
       this.ctx.storage.sql.exec(
         `UPDATE app_calls
@@ -9952,6 +10016,162 @@ export class AppDirectoryStore extends DurableObject {
     return Number(row?.count || 0);
   }
 
+  _notifyAccountChanged(userId) {
+    const payload = JSON.stringify({ type: "account_changed" });
+    for (const socket of this.ctx.getWebSockets?.("message-user:" + userId) || []) {
+      if (socket.deserializeAttachment?.()?.userId !== String(userId)) continue;
+      try { socket.send(payload); } catch {}
+    }
+  }
+
+  reserveMainGameBet(input) {
+    const userId = String(input?.user_id || "").trim(), gameKey = String(input?.game_key || "");
+    if (!userId || !["fruit_jackpot","fruit_party"].includes(gameKey) ||
+        !Number.isSafeInteger(input.round_id) || ![5000,25000,100000,500000,2000000,10000000].includes(input.amount) ||
+        !fruitMultiplier(gameKey,input.fruit_key) || !String(input.room_id || "").trim() ||
+        !String(input.id || "").startsWith(gameKey + ":" + userId + ":")) throw new Error("Invalid main wallet bet");
+    return this.ctx.storage.transactionSync(() => {
+      const old = this.ctx.storage.sql.exec("SELECT * FROM main_game_bets WHERE id=?",input.id).toArray()[0];
+      if (old) {
+        if (old.user_id !== userId || old.game_key !== gameKey || old.fruit_key !== input.fruit_key ||
+            Number(old.amount) !== input.amount || old.room_id !== input.room_id) throw new Error("Bet request ID was already used");
+        return old;
+      }
+      const now = Date.now();
+      if (Math.floor(now / 26000) !== input.round_id || now >= input.round_id * 26000 + 21000) {
+        throw new Error("Betting is locked while the result is spinning");
+      }
+      const user = this.ctx.storage.sql.exec("SELECT user_id FROM app_users WHERE user_id=?",userId).toArray()[0];
+      const wallet = this.getWallet(userId), controls = this._userControls(userId);
+      if (!user || controls.banned || controls.device_banned || wallet.banned) throw new Error("Wallet is unavailable");
+      this._debitNormalWalletAuthorized(userId,input.amount,"game_bet");
+      this.ctx.storage.sql.exec(
+        "INSERT INTO main_game_bets(id,user_id,game_key,round_id,fruit_key,amount,room_id,created_at) VALUES(?,?,?,?,?,?,?,?)",
+        input.id,userId,gameKey,input.round_id,input.fruit_key,input.amount,input.room_id,now,
+      );
+      this.ctx.storage.sql.exec(
+        "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,'game_bet',?,0,?,?,?)",
+        crypto.randomUUID(),userId,-input.amount,input.id,gameKey + " • Round " + input.round_id,now,
+      );
+      return {...input,created_at:now};
+    });
+  }
+
+  pendingMainGameBets(gameKey, afterId = "") {
+    return this.ctx.storage.sql.exec(
+      "SELECT * FROM main_game_bets WHERE game_key=? AND settled_at IS NULL AND id>? ORDER BY id LIMIT 500",
+      String(gameKey),String(afterId),
+    ).toArray();
+  }
+
+  mainGameWallet(userId, gameKey) {
+    userId = this._resolveOwnerUserId(userId);
+    const wallet = this.getWallet(userId), start = Math.floor(Date.now() / 86400000) * 86400000;
+    const today = this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(winning_coins),0) AS winnings FROM main_game_bets WHERE user_id=? AND game_key=? AND settled_at>=?",
+      String(userId),String(gameKey),start,
+    ).toArray()[0];
+    const last = this.ctx.storage.sql.exec(
+      "SELECT payload FROM latest_game_results WHERE user_id=? AND game_key=?",String(userId),String(gameKey),
+    ).toArray()[0];
+    return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0),last_bet_result:last ? JSON.parse(last.payload) : null};
+  }
+
+  recordGameResults(results) {
+    if (!Array.isArray(results) || results.length > 500) throw new Error("Invalid game receipts");
+    const changed = new Set();
+    this.ctx.storage.transactionSync(() => {
+      for (const result of results) {
+        const userId = this._resolveOwnerUserId(String(result?.user_id || "").trim());
+        const gameKey = String(result?.game_key || "");
+        if (!userId || !["fruit_jackpot", "fruit_party"].includes(gameKey) ||
+            !Number.isSafeInteger(result.round_id) || !Number.isSafeInteger(result.winning_coins) ||
+            result.winning_coins < 0 || !Number.isSafeInteger(result.bet_coins) || result.bet_coins <= 0) {
+          throw new Error("Invalid game receipt");
+        }
+        const mainBets = Array.isArray(result.main_bets) ? result.main_bets : [];
+        let newlyPaid = 0;
+        const uniqueIds = new Set();
+        for (const item of mainBets) {
+          if (uniqueIds.has(item.id)) throw new Error("Duplicate payout bet");
+          uniqueIds.add(item.id);
+          const bet = this.ctx.storage.sql.exec("SELECT * FROM main_game_bets WHERE id=?",String(item.id)).toArray()[0];
+          if (!bet || bet.user_id !== userId || bet.game_key !== gameKey || Number(bet.round_id) !== result.round_id) {
+            throw new Error("Game payout identity mismatch");
+          }
+          const winners = Array.isArray(result.bonus_fruits) && result.bonus_fruits.length
+            ? result.bonus_fruits : [result.fruit_key];
+          const expected = winners.includes(bet.fruit_key) ? Number(bet.amount) * fruitMultiplier(gameKey,bet.fruit_key) : 0;
+          if (item.winning_coins !== expected) throw new Error("Game payout amount mismatch");
+          if (bet.settled_at !== null) {
+            if (Number(bet.winning_coins) !== expected) throw new Error("Settled game payout cannot change");
+            continue;
+          }
+          newlyPaid += expected;
+          this.ctx.storage.sql.exec(
+            "UPDATE main_game_bets SET winning_coins=?,settled_at=? WHERE id=? AND settled_at IS NULL",
+            expected,result.settled_at,item.id,
+          );
+        }
+        let receipt = {...result,user_id:userId,main_bets:undefined};
+        if (mainBets.length) {
+          // Reserved coins and payout are audited in the same main-wallet database.
+          // A frozen wallet retains earned coins until the existing freeze is lifted.
+          const guard = this._normalWalletGuard(userId), now = Date.now();
+          if (newlyPaid > 0) {
+            this.ctx.storage.sql.exec("UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?",newlyPaid,now,userId);
+            this.ctx.storage.sql.exec("UPDATE wallet_coin_guards SET expected_coins=expected_coins+?,updated_at=? WHERE user_id=?",newlyPaid,now,userId);
+            this.ctx.storage.sql.exec(
+              "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,'game_win',?,0,?,?,?)",
+              crypto.randomUUID(),userId,newlyPaid,result.id,gameKey + " • Round " + result.round_id,now,
+            );
+            changed.add(userId);
+          }
+          receipt = {...result,user_id:userId,main_bets:undefined,wallet_balance:guard.coins + newlyPaid,wallet_type:"main"};
+        }
+        const old = this.ctx.storage.sql.exec(
+          "SELECT round_id FROM latest_game_results WHERE user_id=? AND game_key=?", userId, gameKey,
+        ).toArray()[0];
+        if (old && Number(old.round_id) >= result.round_id) continue;
+        this.ctx.storage.sql.exec(
+          "INSERT INTO latest_game_results(user_id,game_key,round_id,payload,seen) VALUES(?,?,?,?,0) " +
+          "ON CONFLICT(user_id,game_key) DO UPDATE SET round_id=excluded.round_id,payload=excluded.payload,seen=0",
+          userId, gameKey, result.round_id, JSON.stringify(receipt),
+        );
+        changed.add(userId);
+      }
+    });
+    for (const userId of changed) this._notifyAccountChanged(userId);
+  }
+
+  pendingGameResults(userId) {
+    return this.ctx.storage.sql.exec(
+      "SELECT payload FROM latest_game_results WHERE user_id=? AND seen=0", String(userId),
+    ).toArray().map(row => JSON.parse(row.payload));
+  }
+
+  async _sendAccountState(socket, attachment) {
+    const user = await this.getUserById(attachment.userId);
+    if (!user || user.controls?.banned || user.controls?.device_banned) {
+      try { socket.close(1008, "Account unavailable"); } catch {}
+      return;
+    }
+    socket.send(JSON.stringify({ type: "account_state", user,
+      wallet: this.getWallet(attachment.userId), game_results: this.pendingGameResults(attachment.userId),
+      server_time: Date.now() }));
+  }
+
+  _notifyRoomChanged(roomId) {
+    const sockets = (this.ctx.getWebSockets?.() || []).filter(socket =>
+      socket.deserializeAttachment?.()?.roomsSubscribed === true);
+    if (!sockets.length || !roomId) return;
+    const room = this.findRoomByExactId(roomId);
+    // Match the discoverable-room HTTP contract: locked or closed rooms disappear.
+    const payload = JSON.stringify({ type: "room_updated", room_id: roomId,
+      room: room && !room.locked && !room.closed ? room : null });
+    for (const socket of sockets) { try { socket.send(payload); } catch {} }
+  }
+
   _notifyMessageSocket(userIdValue, payload = {}) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return;
@@ -9969,6 +10189,7 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   async fetch(request) {
+    if (request.headers.get("x-tinni-game-key") === "ludo") return openGameSocket(this, request, "ludo");
     if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
       return new Response("WebSocket required", { status: 426 });
     }
@@ -9980,7 +10201,10 @@ export class AppDirectoryStore extends DurableObject {
     const server = pair[1];
     const countryCode = String(request.headers.get("x-tinni-country-code") || "IN").trim().toUpperCase();
     this.ctx.acceptWebSocket(server, ["message-user:" + userId]);
-    server.serializeAttachment({ userId, countryCode });
+    const expiresAt = Number(request.headers.get('x-tinni-session-expires') || 0);
+    const tokenHash = request.headers.get('x-tinni-session-hash') || '';
+    server.serializeAttachment({ userId, countryCode, expiresAt, tokenHash });
+    await this._sendAccountState(server, { userId });
     server.send(JSON.stringify({
       type: "inbox_state",
       unread_count: this.unreadMessageCount(userId),
@@ -9992,7 +10216,44 @@ export class AppDirectoryStore extends DurableObject {
     return new Response(null, { status: 101, webSocket: client });
   }
 
-  webSocketMessage(socket, message) {
+  async webSocketMessage(socket, message) {
+    if (socket.deserializeAttachment?.()?.gameKey === "ludo") return handleGameMessage(this, socket, message);
+    if (typeof message !== "string" || message.length > 512) return;
+    const attachment = socket.deserializeAttachment?.() || {};
+    if (!attachment.userId) return;
+    if ((attachment.expiresAt && attachment.expiresAt <= Date.now()) ||
+        (attachment.tokenHash && this.isSessionRevoked(attachment.tokenHash))) {
+      try { socket.close(1008, "Session expired"); } catch {}
+      return;
+    }
+    let event;
+    try { event = JSON.parse(message); } catch { event = {}; }
+    if (event.type === "account_state") {
+      if (Date.now() - Number(attachment.lastAccountRead || 0) < 200) return;
+      attachment.lastAccountRead = Date.now();
+      socket.serializeAttachment(attachment);
+      await this._sendAccountState(socket, attachment);
+      return;
+    }
+    if (event.type === "game_result_seen") {
+      this.ctx.storage.sql.exec(
+        "UPDATE latest_game_results SET seen=1 WHERE user_id=? AND game_key=? AND round_id=? AND seen=0",
+        attachment.userId, String(event.game_key || ""), Number(event.round_id),
+      );
+      return;
+    }
+    if (event.type === "messages_seen") {
+      this.markConversationSeen(attachment.userId, String(event.peer_user_id || "").slice(0, 80));
+      return;
+    }
+    if (event.type === "subscribe_rooms") {
+      attachment.roomsSubscribed = event.enabled === true;
+      socket.serializeAttachment(attachment);
+      if (attachment.roomsSubscribed) socket.send(JSON.stringify({
+        type: "rooms_snapshot", rooms: await this.listRooms(),
+      }));
+      return;
+    }
     if (String(message || "") === "ping") {
       try {
         socket.send(JSON.stringify({ type: "pong" }));
@@ -11268,6 +11529,7 @@ export class AppDirectoryStore extends DurableObject {
         "UPDATE app_wallets SET coins = coins - ?, updated_at = ? WHERE user_id = ?",
         priceCoins, now, userId,
       );
+      this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec(
         `INSERT INTO wallet_transactions
           (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at)
@@ -11434,6 +11696,7 @@ export class AppDirectoryStore extends DurableObject {
       roomId,
     ).toArray()[0];
 
+    this._notifyRoomChanged(roomId);
     return { ok: true, room: rowToRoom(updated) };
   }
 
@@ -11795,6 +12058,11 @@ export class AppDirectoryStore extends DurableObject {
     const updated = this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name, u.avatar_data_url AS owner_avatar_data_url, u.flag_emoji AS owner_flag_emoji FROM app_rooms r JOIN app_users u ON u.user_id = r.owner_id WHERE r.id = ? LIMIT 1`, roomId,
     ).toArray()[0];
+    this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(roomId)).updateRoomDetails(rowToRoom(updated));
+    } catch {}
+
     return { ok: true, room: rowToRoom(updated) };
   }
 
@@ -11830,6 +12098,11 @@ export class AppDirectoryStore extends DurableObject {
         WHERE r.id = ? LIMIT 1`,
       roomId,
     ).toArray()[0];
+    this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(roomId)).updateRoomDetails(rowToRoom(updated));
+    } catch {}
+
     return { ok: true, room: rowToRoom(updated) };
   }
 
@@ -11918,6 +12191,11 @@ export class AppDirectoryStore extends DurableObject {
         LIMIT 1`,
       roomId,
     ).toArray()[0];
+
+    this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE.get(this.env.ROOM_PRESENCE.idFromName(roomId)).updateRoomDetails(rowToRoom(updated));
+    } catch {}
 
     return {
       ok: true,
@@ -12457,6 +12735,7 @@ export class AppDirectoryStore extends DurableObject {
             LIMIT 1`,
           String(existing.id),
         ).toArray()[0];
+        this._notifyRoomChanged(String(existing.id));
         return rowToRoom(reopened);
       }
       return rowToRoom(existing);
@@ -12501,6 +12780,7 @@ export class AppDirectoryStore extends DurableObject {
       now,
       now,
     );
+    this._notifyRoomChanged(ownerId);
     return this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,

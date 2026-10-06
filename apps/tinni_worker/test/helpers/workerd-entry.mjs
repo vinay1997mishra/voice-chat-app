@@ -12,6 +12,9 @@ export default {
         display_name: 'Player ' + body.index, age: 25, country_code: 'IN',
         country_name: 'India', flag_emoji: '🇮🇳', gender: 'male', language: 'English',
       });
+      if (body.coins) await directory.ownerAction("wallet-normal", {
+        user_id:user.user_id,operation:"credit",amount:body.coins,
+      });
       const room = body.createRoom
         ? await directory.createRoom(user.user_id, { title: 'Workerd room', seat_count: 12 })
         : null;

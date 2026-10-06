@@ -9,9 +9,11 @@ class RemoteRoleWallet {
     required this.banned,
     required this.securityFrozen,
     required this.freezeReason,
+    this.usdCents = 0,
   });
 
   final int balance;
+  final int usdCents;
   final bool banned;
   final bool securityFrozen;
   final String freezeReason;
@@ -35,11 +37,13 @@ class RemoteWallet {
     this.freezeReason = '',
     this.coinSellerWallet,
     this.merchantWallet,
+    this.userId,
   });
 
 
   factory RemoteWallet.fromServer(Map<String, dynamic> row) {
     return RemoteWallet(
+      userId: row['user_id']?.toString(),
       coins: _asInt(row['coins']),
       diamonds: _asInt(row['diamonds']),
       banned: row['banned'] == true,
@@ -59,6 +63,7 @@ class RemoteWallet {
     );
   }
 
+  final String? userId;
   final int coins;
   final int diamonds;
   final bool banned;
@@ -1434,6 +1439,7 @@ RemoteRoleWallet? _roleWallet(dynamic value) {
   if (row.isEmpty || row['active'] != true) return null;
   return RemoteRoleWallet(
     balance: _asInt(row['balance']),
+    usdCents: _asInt(row['usd_cents']),
     banned: row['banned'] == true,
     securityFrozen: row['security_frozen'] == true,
     freezeReason: row['freeze_reason']?.toString() ?? '',
