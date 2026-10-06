@@ -91,6 +91,14 @@ async function deriveSecret(secret, saltBytes, iterations) {
   return new Uint8Array(bits);
 }
 
+async function hashOpaqueSecret(value) {
+  const digest = await crypto.subtle.digest(
+    "SHA-256",
+    encoder.encode(String(value || "")),
+  );
+  return toBase64Url(new Uint8Array(digest));
+}
+
 function randomOtp() {
   const values = new Uint32Array(1);
   const limit = Math.floor(0x100000000 / 1000000) * 1000000;
@@ -306,6 +314,25 @@ export class AppDirectoryStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS app_schema_versions(id INTEGER PRIMARY KEY,version TEXT NOT NULL)");
+    // Security tables must be created even when the application schema version
+    // is already current so older Durable Objects receive the hardening patch.
+    this.ctx.storage.sql.exec(`
+      CREATE TABLE IF NOT EXISTS security_rate_limits (
+        rate_key TEXT PRIMARY KEY,
+        count INTEGER NOT NULL,
+        window_started_at INTEGER NOT NULL,
+        blocked_until INTEGER NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_security_rate_limits_updated
+        ON security_rate_limits(updated_at);
+
+      CREATE TABLE IF NOT EXISTS facebook_login_poll_secrets (
+        request_id TEXT PRIMARY KEY,
+        secret_hash TEXT NOT NULL,
+        created_at INTEGER NOT NULL
+      );
+    `);
     if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
       this._armStorageSweep();
       return;
@@ -1676,6 +1703,78 @@ export class AppDirectoryStore extends DurableObject {
       const next=Math.max(Date.now()+1000,Number(row?.next_sweep)||Date.now()+10000);
       if(current===null||current>next) await this.ctx.storage.setAlarm(next);
     });
+  }
+
+  async consumeSecurityRateLimit(keyValue, limitValue, windowMsValue) {
+    const key = cleanText(keyValue, 240);
+    const limit = Math.max(1, Math.min(500, Math.floor(Number(limitValue || 1))));
+    const windowMs = Math.max(
+      1000,
+      Math.min(24 * 60 * 60 * 1000, Math.floor(Number(windowMsValue || 60000))),
+    );
+    if (!key) throw new Error("Security rate-limit key is required");
+
+    const now = Date.now();
+    // Keep the table bounded without retaining long-lived client identifiers.
+    this.ctx.storage.sql.exec(
+      "DELETE FROM security_rate_limits WHERE updated_at < ?",
+      now - 7 * 24 * 60 * 60 * 1000,
+    );
+
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM security_rate_limits WHERE rate_key = ? LIMIT 1",
+      key,
+    ).toArray()[0];
+
+    if (!row || now - Number(row.window_started_at) >= windowMs) {
+      this.ctx.storage.sql.exec(
+        `INSERT INTO security_rate_limits
+          (rate_key,count,window_started_at,blocked_until,updated_at)
+         VALUES (?,1,?,0,?)
+         ON CONFLICT(rate_key) DO UPDATE SET
+           count=1,
+           window_started_at=excluded.window_started_at,
+           blocked_until=0,
+           updated_at=excluded.updated_at`,
+        key,
+        now,
+        now,
+      );
+      return {
+        allowed: true,
+        remaining: Math.max(0, limit - 1),
+        reset_at: now + windowMs,
+      };
+    }
+
+    const resetAt = Number(row.window_started_at) + windowMs;
+    if (Number(row.blocked_until || 0) > now) {
+      return {
+        allowed: false,
+        remaining: 0,
+        reset_at: resetAt,
+        retry_after_ms: Math.max(1000, Number(row.blocked_until) - now),
+      };
+    }
+
+    const count = Number(row.count || 0) + 1;
+    const allowed = count <= limit;
+    const blockedUntil = allowed ? 0 : Math.max(now + 1000, resetAt);
+    this.ctx.storage.sql.exec(
+      `UPDATE security_rate_limits
+          SET count=?, blocked_until=?, updated_at=?
+        WHERE rate_key=?`,
+      count,
+      blockedUntil,
+      now,
+      key,
+    );
+    return {
+      allowed,
+      remaining: Math.max(0, limit - count),
+      reset_at: resetAt,
+      retry_after_ms: allowed ? 0 : Math.max(1000, blockedUntil - now),
+    };
   }
 
   reserveMediaBudget(key,size,leaseId) {return coldStorage.reserveMediaBudget(this,key,size,leaseId);}
@@ -4858,6 +4957,10 @@ export class AppDirectoryStore extends DurableObject {
   async startFacebookLogin() {
     const now = Date.now();
     const requestId = crypto.randomUUID() + crypto.randomUUID().replaceAll("-", "");
+    const pollSecret =
+      crypto.randomUUID().replaceAll("-", "") +
+      crypto.randomUUID().replaceAll("-", "");
+    const pollSecretHash = await hashOpaqueSecret(pollSecret);
     this.ctx.storage.sql.exec(
       `INSERT INTO facebook_login_requests
         (request_id, status, created_at, updated_at)
@@ -4866,7 +4969,40 @@ export class AppDirectoryStore extends DurableObject {
       now,
       now,
     );
-    return { request_id: requestId, created_at: now };
+    this.ctx.storage.sql.exec(
+      `INSERT INTO facebook_login_poll_secrets
+        (request_id, secret_hash, created_at)
+       VALUES (?, ?, ?)`,
+      requestId,
+      pollSecretHash,
+      now,
+    );
+    return {
+      request_id: requestId,
+      poll_secret: pollSecret,
+      created_at: now,
+    };
+  }
+
+  async verifyFacebookPollSecret(requestIdValue, pollSecretValue) {
+    const requestId = String(requestIdValue || "").trim();
+    const pollSecret = String(pollSecretValue || "").trim();
+    if (!requestId || pollSecret.length < 32) return false;
+    const row = this.ctx.storage.sql.exec(
+      `SELECT secret_hash, created_at
+         FROM facebook_login_poll_secrets
+        WHERE request_id = ?
+        LIMIT 1`,
+      requestId,
+    ).toArray()[0];
+    if (!row || Date.now() - Number(row.created_at) > 10 * 60 * 1000) {
+      return false;
+    }
+    const actual = await hashOpaqueSecret(pollSecret);
+    return safeEqualBytes(
+      encoder.encode(actual),
+      encoder.encode(String(row.secret_hash || "")),
+    );
   }
 
   async getFacebookLogin(requestIdValue) {
