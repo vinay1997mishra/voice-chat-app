@@ -63,7 +63,8 @@ void main() {
       giftId: 'flag-in', progress: .5, child: SizedBox.expand(key: childKey),
     ))));
     expect(find.byKey(childKey), findsOneWidget);
-    expect(find.byType(CustomPaint), findsNothing);
+    expect(find.descendant(of: find.byType(GiftAtmosphere),
+      matching: find.byType(CustomPaint)), findsNothing);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox());
   });
