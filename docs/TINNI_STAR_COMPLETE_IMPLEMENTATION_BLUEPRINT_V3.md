@@ -1332,3 +1332,13 @@ The user's latest timing and privacy instructions supersede earlier general cine
 - Every successful Lucky send renews the Combo to exactly nine seconds. Taps, failed requests and requests in flight do not renew the existing deadline. Nine seconds without a successful send hides the control.
 - Same gift and the same receiver set within the active window retain the Lucky session and selected quantity. A different gift, different receiver set, expired window or non-Lucky send ends continuation.
 - Center HUD and queued multiplier effects use the authenticated server result and shared room timeline. The Lucky RNG, maximum configured multiplier, prize pool, prices, sender payouts, recipient eligibility, Host-only Diamonds and Lucky 10% Rocket/social value continue to use their existing server rules.
+
+## 2026-10-06 — Realistic anime gift videos, latest 3–5-second requirement
+
+- The user's latest requirement is **3–5 seconds per gift video**, superseding the earlier 3–8-second request and older gift timing rules. Use cinematic anime-film visuals with natural proportions, detailed surfaces, coherent articulated motion and believable lighting. Toy/doll/chibi/primitive-geometry appearance and static-poster zooms do not satisfy this requirement.
+- Replace presentation assets for the 50 Normal, 20 CP and ten Lucky subjects with actual named-subject animated clips. Luxury uses the same canonical Normal IDs.
+- Country gifts retain exact national flag artwork and recognizable waving cloth. The new minimum requires a genuine three-second flag clip/hold instead of the older two-second policy.
+- The separate Rocket countdown remains nine seconds. Preserve all prices, recipients, wallet settlements, Lucky multipliers/quantities, the nine-second Combo deadline, Lucky 10%/normal 100% counting and Host-only Diamonds.
+- Production preparation and verified current status are recorded in `docs/TINNI_STAR_ANIME_GIFT_PRODUCTION.md`; `tools/cinematic/anime-gift-plan.json` covers every gift ID. Production targets and prompts are not generated/approved assets or delivered runtime changes.
+- Change runtime holds, media validation and the immutable bundle together only when actual replacement videos exist. Review full clips and Android playback before claiming visual completion.
+- The user cancelled the Fruit Party visual request in this session; make no Fruit Party changes under this request.
