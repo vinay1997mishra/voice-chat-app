@@ -2960,6 +2960,72 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
+    if (url.pathname === "/enemy" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({
+        ok: true,
+        enemy: await getAppDirectoryStore(env).enemyState(appSession.user.user_id),
+      });
+    }
+
+    if (url.pathname === "/enemy/request" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          enemy: await getAppDirectoryStore(env).enemyRequest(
+            appSession.user.user_id,
+            body.target_user_id,
+          ),
+        }, 201);
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to request Enemy relation"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/enemy/respond" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      try {
+        return json({
+          ok: true,
+          enemy: await getAppDirectoryStore(env).enemyRespond(
+            appSession.user.user_id,
+            body.accept === true,
+          ),
+        });
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to respond to Enemy relation"),
+        }, 400);
+      }
+    }
+
+    if (url.pathname === "/enemy/disconnect" && request.method === "POST") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      try {
+        return json(
+          await getAppDirectoryStore(env).enemyDisconnect(
+            appSession.user.user_id,
+          ),
+        );
+      } catch (error) {
+        return json({
+          ok: false,
+          error: String(error?.message || "Unable to remove Enemy relation"),
+        }, 400);
+      }
+    }
+
     if (url.pathname === "/profile/trends" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);

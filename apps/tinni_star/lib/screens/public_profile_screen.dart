@@ -4,8 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/tinni_state.dart';
+import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 import 'cp_screen.dart';
+import 'enemy_screen.dart';
 import 'personal_profile_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
@@ -20,10 +22,11 @@ class PublicProfileScreen extends StatefulWidget {
 class _PublicProfileScreenState extends State<PublicProfileScreen> {
   Map<String, String?> media = const <String, String?>{};
   Map<String, dynamic> stats = const <String, dynamic>{};
-  Map<String, dynamic> guardian = const <String, dynamic>{};
   List<Map<String, dynamic>> identityTags = const <Map<String, dynamic>>[];
   List<Map<String, dynamic>> trends = const <Map<String, dynamic>>[];
   Map<String, dynamic>? cpPartnerProfile;
+  RemoteEnemy? enemyRelation;
+  Map<String, dynamic>? enemyPartnerProfile;
   bool loading = true;
   bool posting = false;
   int tab = 0;
@@ -79,7 +82,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     final results = await Future.wait<dynamic>([
       _safeProfileLoad(widget.state.backend.profileMedia(account.authToken)),
       _safeProfileLoad(widget.state.backend.accountStats(account.authToken)),
-      _safeProfileLoad(widget.state.backend.guardianState(account.authToken)),
       _safeProfileLoad(
         widget.state.backend.userTagsAndMedals(
           account.authToken,
@@ -88,16 +90,19 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       ),
       _safeProfileLoad(widget.state.backend.profileTrends(account.authToken)),
       _safeProfileLoad(widget.state.backend.cpState(account.authToken)),
+      _safeProfileLoad(widget.state.backend.enemyState(account.authToken)),
     ]);
 
     if (!mounted) return;
 
     final mediaResult = results[0];
     final statsResult = results[1];
-    final guardianResult = results[2];
-    final tagResult = results[3];
-    final trendsResult = results[4];
-    final cpResult = results.length > 5 ? results[5] : null;
+    final tagResult = results[2];
+    final trendsResult = results[3];
+    final cpResult = results[4];
+    final enemyResult = results[5] is RemoteEnemy
+        ? results[5] as RemoteEnemy
+        : null;
 
     widget.state.cp.applyRemote(
       cpResult,
@@ -120,6 +125,23 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       }
     }
 
+    Map<String, dynamic>? resolvedEnemyPartner;
+    if (enemyResult != null && enemyResult.state == 'accepted') {
+      final enemyId = enemyResult.userA == account.userId
+          ? enemyResult.userB
+          : enemyResult.userA;
+      final enemyPartnerResult = await _safeProfileLoad(
+        widget.state.backend.searchUserById(
+          account.authToken,
+          enemyId,
+        ),
+      );
+      if (enemyPartnerResult is Map) {
+        resolvedEnemyPartner =
+            Map<String, dynamic>.from(enemyPartnerResult);
+      }
+    }
+
     final tagData = tagResult is Map
         ? Map<String, dynamic>.from(tagResult)
         : const <String, dynamic>{};
@@ -131,9 +153,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       }
       if (statsResult is Map) {
         stats = Map<String, dynamic>.from(statsResult);
-      }
-      if (guardianResult is Map) {
-        guardian = Map<String, dynamic>.from(guardianResult);
       }
       if (tagResult is Map) {
         identityTags = rawIdentityTags is List
@@ -151,6 +170,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         );
       }
       cpPartnerProfile = partnerProfile;
+      enemyRelation = enemyResult;
+      enemyPartnerProfile = resolvedEnemyPartner;
       loading = false;
     });
   }
@@ -765,22 +786,28 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
   }
 
   Future<void> _openEnemyPanel() async {
-    final account = widget.state.auth.current;
-    if (account == null) return;
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => _EnemyDetailScreen(
-          displayName: account.displayName,
-          avatar: _provider(account.avatarDataUrl),
-        ),
+        builder: (_) => EnemyScreen(state: widget.state),
       ),
     );
+    if (!mounted) return;
+    setState(() => loading = true);
+    await _load();
   }
 
   Widget _buildEnemyProfileCard() {
     final account = widget.state.auth.current;
     if (account == null) return const SizedBox.shrink();
+    final activeEnemy =
+        enemyRelation != null && enemyRelation!.state == 'accepted';
+    final enemyAvatar = activeEnemy
+        ? _provider(enemyPartnerProfile?['avatar_data_url']?.toString())
+        : null;
+    final enemyName = activeEnemy
+        ? (enemyPartnerProfile?['display_name']?.toString() ?? '')
+        : '';
     const red = Color(0xFFFF202D);
     return InkWell(
       key: const Key('profile-enemy-card'),
@@ -831,11 +858,11 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 Expanded(
                   child: Center(
                     child: _relationAvatar(
-                      image: null,
-                      fallback: '',
+                      image: enemyAvatar,
+                      fallback: enemyName,
                       accent: red,
                       size: 92,
-                      add: true,
+                      add: !activeEnemy,
                     ),
                   ),
                 ),
@@ -1018,100 +1045,6 @@ class _RelationWavePainter extends CustomPainter {
       oldDelegate.primary != primary ||
       oldDelegate.secondary != secondary ||
       oldDelegate.hostile != hostile;
-}
-
-class _EnemyDetailScreen extends StatelessWidget {
-  const _EnemyDetailScreen({
-    required this.displayName,
-    required this.avatar,
-  });
-
-  final String displayName;
-  final ImageProvider? avatar;
-
-  @override
-  Widget build(BuildContext context) {
-    const red = Color(0xFFFF202D);
-    return Scaffold(
-      key: const Key('enemy-detail-screen'),
-      backgroundColor: const Color(0xFF05070C),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF05070C),
-        foregroundColor: Colors.white,
-        title: const Text('Enemy'),
-      ),
-      body: ListView(
-        padding: const EdgeInsets.all(18),
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(26),
-              border: Border.all(color: red),
-              gradient: const LinearGradient(
-                colors: [Color(0xFF21070A), Color(0xFF08090E)],
-              ),
-              boxShadow: const [
-                BoxShadow(color: Color(0x55FF1024), blurRadius: 24),
-              ],
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 36,
-                  backgroundColor: const Color(0xFF171820),
-                  backgroundImage: avatar,
-                  child: avatar == null
-                      ? Text(
-                          displayName.isEmpty
-                              ? '?'
-                              : displayName.characters.first.toUpperCase(),
-                          style: const TextStyle(
-                            color: red,
-                            fontSize: 24,
-                            fontWeight: FontWeight.w900,
-                          ),
-                        )
-                      : null,
-                ),
-                const Expanded(
-                  child: Center(
-                    child: Icon(
-                      Icons.dangerous_rounded,
-                      color: red,
-                      size: 64,
-                      shadows: [
-                        Shadow(color: Color(0xFFFF0018), blurRadius: 18),
-                      ],
-                    ),
-                  ),
-                ),
-                Container(
-                  width: 72,
-                  height: 72,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(color: red, width: 2),
-                    color: const Color(0xFF11131B),
-                  ),
-                  child: const Icon(Icons.add_rounded, color: red, size: 36),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 18),
-          const Text(
-            'Enemy relation is not configured yet.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              color: Color(0xFF9EA3AF),
-              fontSize: 12,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }
 
 class _ProfileIdentityTag extends StatelessWidget {
