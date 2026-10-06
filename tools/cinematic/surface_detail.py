@@ -42,7 +42,9 @@ def enhance(h):
         if any(s in name for s in ("gold", "steel", "graphite")):
             rough, scale, depth = .23, 150, .008
             shader.inputs["Metallic"].default_value = .88
-            shader.inputs["Anisotropic IOR Level"].default_value = .22
+            anisotropy = shader.inputs.get("Anisotropic") or shader.inputs.get("Anisotropic IOR Level")
+            if anisotropy is not None:
+                anisotropy.default_value = .22
         if any(s in name for s in ("velvet", "living leaves", "animal coat", "hair", "bamboo", "basmati", "saffron")):
             shader.inputs["Metallic"].default_value = 0
             shader.inputs["Coat Weight"].default_value = .03
