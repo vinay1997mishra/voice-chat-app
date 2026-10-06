@@ -7966,14 +7966,7 @@ export class AppDirectoryStore extends DurableObject {
     if (!row || row.state !== "accepted") throw new Error("Active CP relationship is required");
     const action = String(input.action || "").trim();
     if (action === "intimacy") {
-      const delta = Math.max(1, Math.min(10000, Number(input.delta || 0)));
-      const intimacy = Number(row.intimacy || 0) + delta;
-      const level = this._cpLevelForIntimacy(intimacy);
-      const now = Date.now();
-      this.ctx.storage.sql.exec(
-        "UPDATE cp_relationships SET intimacy=?, level=?, last_intimacy_at=?, decay_applied_days=0, updated_at=? WHERE user_a=? AND user_b=?",
-        intimacy, level, now, now, row.user_a, row.user_b,
-      );
+      throw new Error("CP intimacy can only be increased by CP gifts");
     } else if (action === "ring") {
       const ringId = cleanText(input.ring_id, 80);
       if (!ringId) throw new Error("ring_id is required");
