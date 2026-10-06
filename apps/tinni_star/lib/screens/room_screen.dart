@@ -60,6 +60,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   final ScrollController _roomMessageScrollController = ScrollController();
   final ScrollController _rocketLevelScrollController = ScrollController();
   int _lastRoomMessageCount = 0;
+  int _roomMessageScrollGeneration = 0;
   int? _lastCommentsClearVersion;
   String? _roomLockPassword;
   final Set<String> _selectedGiftRecipients = <String>{};
@@ -638,27 +639,44 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _scrollRoomCommentsToNewest() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted || !_roomMessageScrollController.hasClients) return;
+    final generation = ++_roomMessageScrollGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       final controller = _roomMessageScrollController;
-      controller.animateTo(
-        controller.position.maxScrollExtent,
-        duration: const Duration(milliseconds: 220),
-        curve: Curves.easeOut,
-      );
-      // Sender tags/medals can make the newly inserted row taller after its
-      // first layout pass. Re-target on the next frame so the newest message
-      // remains fully visible instead of stopping at a stale scroll extent.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted || !controller.hasClients) return;
-        final settledBottom = controller.position.maxScrollExtent;
-        if ((settledBottom - controller.offset).abs() <= 0.5) return;
-        controller.animateTo(
-          settledBottom,
-          duration: const Duration(milliseconds: 160),
+      if (!mounted || !controller.hasClients ||
+          generation != _roomMessageScrollGeneration) {
+        return;
+      }
+
+      // ListView.builder only knows an estimated max extent until enough
+      // variable-height rows have been laid out. Scroll, let that animation
+      // expose/build later rows, then re-check the real bottom. A newer
+      // message invalidates older passes so rapid chat does not fight itself.
+      for (var pass = 0; pass < 4; pass++) {
+        if (!mounted || !controller.hasClients ||
+            generation != _roomMessageScrollGeneration) {
+          return;
+        }
+        final target = controller.position.maxScrollExtent;
+        await controller.animateTo(
+          target,
+          duration: Duration(milliseconds: pass == 0 ? 220 : 120),
           curve: Curves.easeOut,
         );
-      });
+        if (!mounted || generation != _roomMessageScrollGeneration) return;
+        await WidgetsBinding.instance.endOfFrame;
+        if (!mounted || !controller.hasClients ||
+            generation != _roomMessageScrollGeneration) {
+          return;
+        }
+        final remaining =
+            controller.position.maxScrollExtent - controller.offset;
+        if (remaining.abs() <= 0.5) return;
+      }
+
+      if (mounted && controller.hasClients &&
+          generation == _roomMessageScrollGeneration) {
+        controller.jumpTo(controller.position.maxScrollExtent);
+      }
     });
   }
 
