@@ -68,10 +68,12 @@ class EmailOtpVerifyResult {
 class FacebookStartResult {
   const FacebookStartResult({
     required this.requestId,
+    required this.pollSecret,
     required this.authUrl,
   });
 
   final String requestId;
+  final String pollSecret;
   final Uri authUrl;
 }
 
@@ -181,22 +183,30 @@ class AppAuthApi {
     }
 
     final requestId = data['request_id']?.toString() ?? '';
+    final pollSecret = data['poll_secret']?.toString() ?? '';
     final authUrl = data['auth_url']?.toString() ?? '';
-    if (requestId.isEmpty || authUrl.isEmpty) {
+    if (requestId.isEmpty || pollSecret.length < 32 || authUrl.isEmpty) {
       throw StateError('Facebook login response is incomplete');
     }
 
     return FacebookStartResult(
       requestId: requestId,
+      pollSecret: pollSecret,
       authUrl: Uri.parse(authUrl),
     );
   }
 
-  Future<FacebookPollResult> pollFacebookLogin(String requestId) async {
+  Future<FacebookPollResult> pollFacebookLogin(
+    String requestId, {
+    required String pollSecret,
+  }) async {
     final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/app-auth/facebook/status',
-        queryParameters: <String, String>{'request_id': requestId},
+        queryParameters: <String, String>{
+          'request_id': requestId,
+          'poll_secret': pollSecret,
+        },
       ),
     );
     request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
@@ -242,6 +252,7 @@ class AppAuthApi {
 
   Future<AppLoginResult> completeFacebookLogin({
     required String requestId,
+    required String pollSecret,
     required Map<String, dynamic> profile,
   }) async {
     final request = await openBackendRequest(_httpClient, 'POST', 
@@ -251,6 +262,7 @@ class AppAuthApi {
     request.write(
       jsonEncode(<String, dynamic>{
         'request_id': requestId,
+        'poll_secret': pollSecret,
         'profile': profile,
       }),
     );
