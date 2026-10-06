@@ -37,6 +37,7 @@ for(const binding of ['FRUIT_GAME','FRUIT_PARTY']) {
     const paid=r.directory.getWallet(user.user_id).coins;
     await game.alarm();await game.placeBet(first);
     assert.equal(r.directory.getWallet(user.user_id).coins,paid);
+    assert.equal((await game.ownerStats(user.user_id)).player.balance,paid);
     const ledger=r.directory.ctx.storage.sql.exec("SELECT kind,coins_delta FROM wallet_transactions WHERE user_id=? AND kind IN ('game_bet','game_win')",user.user_id).toArray();
     assert.equal(ledger.filter(row=>row.kind==='game_bet').length,8);
     assert.equal(ledger.filter(row=>row.kind==='game_win').length,1);

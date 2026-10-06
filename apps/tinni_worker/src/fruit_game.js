@@ -474,7 +474,7 @@ export class FruitGameStore extends DurableObject {
 
   }
 
-  ownerStats(userIdValue = "") {
+  async ownerStats(userIdValue = "") {
     const userId = String(userIdValue || "").trim();
     const totals = this.ctx.storage.sql.exec(
       `SELECT COUNT(*) AS bet_count,
@@ -490,6 +490,7 @@ export class FruitGameStore extends DurableObject {
 
     let player = null;
     if (userId) {
+      const mainWallet = await mainDirectory(this).mainGameWallet(userId,"fruit_jackpot",true);
       const userBet = this.ctx.storage.sql.exec(
         `SELECT COUNT(*) AS bet_count,
                 COALESCE(SUM(amount), 0) AS total_bet
@@ -508,9 +509,9 @@ export class FruitGameStore extends DurableObject {
         user_id: userId,
         bet_count: Number(userBet.bet_count || 0),
         total_bet: Number(userBet.total_bet || 0),
-        balance: Number(wallet?.balance ?? START_BALANCE),
+        balance: Number(mainWallet.coins),
         today_winnings: Number(wallet?.today_winnings || 0),
-        net_profit: Number(wallet?.balance ?? START_BALANCE) - START_BALANCE,
+        net_profit: Number(mainWallet.game_net_coins || 0),
       };
     }
 

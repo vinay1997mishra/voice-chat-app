@@ -10064,7 +10064,7 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray();
   }
 
-  mainGameWallet(userId, gameKey) {
+  mainGameWallet(userId, gameKey, withStats = false) {
     userId = this._resolveOwnerUserId(userId);
     const wallet = this.getWallet(userId), start = Math.floor(Date.now() / 86400000) * 86400000;
     const today = this.ctx.storage.sql.exec(
@@ -10074,7 +10074,12 @@ export class AppDirectoryStore extends DurableObject {
     const last = this.ctx.storage.sql.exec(
       "SELECT payload FROM latest_game_results WHERE user_id=? AND game_key=?",String(userId),String(gameKey),
     ).toArray()[0];
-    return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0),last_bet_result:last ? JSON.parse(last.payload) : null};
+    const stats = withStats ? this.ctx.storage.sql.exec(
+      "SELECT COALESCE(SUM(winning_coins-amount),0) AS net FROM main_game_bets WHERE user_id=? AND game_key=?",
+      String(userId),String(gameKey),
+    ).toArray()[0] : null;
+    return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0),last_bet_result:last ? JSON.parse(last.payload) : null,
+      game_net_coins:stats ? Number(stats.net || 0) : null};
   }
 
   recordGameResults(results) {
