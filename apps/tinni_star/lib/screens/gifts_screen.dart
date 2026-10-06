@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../economy/economy.dart';
+import '../economy/premium_gift_catalog.dart';
+import '../effects/cinematic_video.dart';
 import '../effects/effect_queue.dart';
 import '../infra/app_backend_service.dart';
 import 'store_screen.dart';
@@ -10,6 +12,16 @@ import '../ui/royal_theme.dart';
 class GiftsScreen extends StatefulWidget {
   const GiftsScreen({super.key, required this.state});
   final TinniState state;
+
+  /// Use the same IDs, prices and art as the room's authoritative gift catalog.
+  static List<GiftDefinition> catalogFor(String category) => switch (category) {
+    'Normal' => PremiumGiftCatalog.normal,
+    'Lucky' => GiftService.luckyCatalog,
+    'CP' => PremiumGiftCatalog.cp,
+    'Country' => PremiumGiftCatalog.countries,
+    'Luxury' => PremiumGiftCatalog.normal.where((gift) => gift.price >= 1000000).toList(growable: false),
+    _ => [...PremiumGiftCatalog.normal, ...PremiumGiftCatalog.cp, ...GiftService.luckyCatalog],
+  };
 
   @override
   State<GiftsScreen> createState() => _GiftsScreenState();
@@ -54,19 +66,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     }
   }
 
-  List<GiftDefinition> get gifts {
-    const all = <GiftDefinition>[
-        GiftDefinition(id: 'gold-dragon', name: 'Golden Dragon', price: 5000, effectKind: 'mp4'),
-        GiftDefinition(id: 'royal-crown', name: 'Royal Crown', price: 2500, effectKind: 'pag'),
-        GiftDefinition(id: 'star-castle', name: 'Star Castle', price: 12000, effectKind: 'mp4'),
-        GiftDefinition(id: 'cp-heart', name: 'CP Heart', price: 44444, effectKind: 'svga'),
-        ...GiftService.catalog,
-      ];
-    if (category == 'CP') return all.where((gift) => gift.id == 'cp-heart').toList();
-    if (category == 'Luxury') return all.where((gift) => gift.price >= 1000 && gift.id != 'cp-heart').toList();
-    if (category == 'Normal') return all.where((gift) => gift.price < 1000).toList();
-    return all;
-  }
+  List<GiftDefinition> get gifts => GiftsScreen.catalogFor(category);
 
   Future<void> send(GiftDefinition gift) async {
     if (sending) return;
@@ -137,7 +137,8 @@ class _GiftsScreenState extends State<GiftsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = ['Popular', 'Normal', 'Luxury', 'CP', 'Backpack'];
+    final categories = ['Popular', 'Normal', 'Lucky', 'CP', 'Country', 'Luxury', 'Backpack'];
+    final visibleGifts = gifts;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Gift'),
@@ -197,7 +198,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
           Expanded(
             child: GridView.builder(
               padding: const EdgeInsets.all(12),
-              itemCount: gifts.length,
+              itemCount: visibleGifts.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 3,
                 childAspectRatio: 0.72,
@@ -205,7 +206,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                 crossAxisSpacing: 10,
               ),
               itemBuilder: (_, index) {
-                final gift = gifts[index];
+                final gift = visibleGifts[index];
                 final color = _giftColor(gift, index);
                 return RoyalPanel(
                   padding: const EdgeInsets.all(8),
@@ -235,12 +236,16 @@ class _GiftsScreenState extends State<GiftsScreen> {
                               ),
                             ],
                           ),
-                          child: Icon(
-                            index.isEven
-                                ? Icons.auto_awesome_rounded
-                                : Icons.card_giftcard_rounded,
-                            color: color,
-                            size: 36,
+                          child: ClipOval(
+                            child: Image.asset(
+                              gift.artworkAsset ?? CinematicAssets.posterFor(gift.id),
+                              key: ValueKey('gift-art-${gift.id}'),
+                              fit: BoxFit.contain,
+                              cacheWidth: 240,
+                              errorBuilder: (_, error, stackTrace) => Center(
+                                child: Text(gift.emoji, style: const TextStyle(fontSize: 36)),
+                              ),
+                            ),
                           ),
                         ),
                       ),

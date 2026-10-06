@@ -8,12 +8,38 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/economy/economy.dart';
 import 'package:tinni_star/economy/premium_gift_catalog.dart';
 import 'package:tinni_star/effects/gift_atmosphere.dart';
+import 'package:tinni_star/effects/cinematic_video.dart';
+import 'package:tinni_star/screens/gifts_screen.dart';
 
 List<GiftDefinition> get _gifts => [
   ...PremiumGiftCatalog.normal, ...PremiumGiftCatalog.cp, ...GiftService.luckyCatalog,
 ];
 
 void main() {
+
+  test('gift browser exposes the full room catalog with canonical sendable IDs and prices', () {
+    final browser = [
+      ...GiftsScreen.catalogFor('Normal'), ...GiftsScreen.catalogFor('CP'),
+      ...GiftsScreen.catalogFor('Country'), ...GiftsScreen.catalogFor('Lucky'),
+    ];
+    final authoritative = [
+      ...PremiumGiftCatalog.normal, ...PremiumGiftCatalog.cp,
+      ...PremiumGiftCatalog.countries, ...GiftService.luckyCatalog,
+    ];
+    expect(browser.map((gift) => gift.id).toSet(),
+      authoritative.map((gift) => gift.id).toSet());
+    for (final gift in browser) {
+      final source = authoritative.singleWhere((candidate) => candidate.id == gift.id);
+      expect(gift.price, source.price, reason: gift.name);
+      if (gift.lucky) {
+        expect(gift.artworkAsset, isNotNull);
+      } else {
+        expect(CinematicAssets.movieFor(gift.id), isNotNull, reason: gift.name);
+      }
+    }
+    expect(browser.any((gift) => gift.id == 'gold-dragon' || gift.id == 'royal-crown'), isFalse);
+  });
+
   test('every saleable gift has a named environment, including every country', () {
     final gifts = [..._gifts, ...PremiumGiftCatalog.countries];
     for (final gift in gifts) {
