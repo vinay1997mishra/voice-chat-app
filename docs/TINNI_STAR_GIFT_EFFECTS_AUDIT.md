@@ -1,4 +1,4 @@
-# Gift effects audit and 0.5.48 update
+# Gift effects audit and complete catalog presentation
 
 ## Verified starting point
 
@@ -32,6 +32,12 @@ Atmospheres use the existing animation clock and gift hold duration, introduce n
 
 The update adds full catalog profile coverage, entrance/hold/exit painting checks and a pixel-level reduced-motion check. CI exports two contact sheets showing all 80 Normal/CP/Lucky subjects using the actual bundled posters with their effects. These are visual review artifacts, not screenshots of hardware video decoding.
 
-Original 3D meshes and original Lucky art remain the assets. Added weather/light/particle presentation does not convert basic meshes into photoreal models. Realistic asset refinement and Android playback quality should be judged from the movies and actual device playback, not inferred from a passing analyzer or codec test.
+The original Normal/CP designs now have detailed physically based surfaces: micro-bump grain, metal reflections, optical jewelry, food/skin subsurface finishes, leaf/fabric/bamboo detail and neutral shadowed light. Food has modeled garnish, long rice grains, serving details and soft volume-scattered vapor. Dragons have scale relief, articulated scalloped wings, curved horns, fangs, clawed limbs and segmented chest armor. Water, vehicles, animals and architecture also have material or modeled detail matching their subjects. Lucky retains its original art with explicit animated atmospheres; national flag and Rocket hardware paths retain their verified media.
+
+These are original designed 3D gifts. Some subjects, especially the CP figures, remain stylised; they are not scanned objects or filmed actors. Actual Android playback and visual quality must be judged on a device, rather than inferred from a passing analyzer or codec test.
 
 Current app source: 95cd3eccd87d3e7a232cd9df09cbe2de0351d139. Its standalone analyzer and all 229 app tests passed in [run 37403311805](https://github.com/vinay1997mishra/voice-chat-app/actions/runs/37403311805). The full [Android build](https://github.com/vinay1997mishra/voice-chat-app/actions/runs/37403311748) also checks all Worker tests, live health/configuration and final APK identity/signing before publishing. [All gift review sheets](https://github.com/vinay1997mishra/voice-chat-app/tree/gift-review-95cd3eccd87d/tools/gifts/previews) are exported from this same app source. Final APK delivery is recorded by the build/release result.
+
+## Render refinement validation
+
+Renderer source 9002015b37c0c2f89826fda1dcf79407c7b6885a passes five catalog/security tests and all 329 actual Blender geometry checks, including physical material nodes and articulated dragon wings. Representative food, Ice Dragon, bouquet and CP posters have been reviewed; a speckled food-vapor effect was replaced by soft volume scattering before final rendering. All 70 Normal/CP scenes are being re-rendered in [run 37405648517](https://github.com/vinay1997mishra/voice-chat-app/actions/runs/37405648517). Unchanged flags and Rocket films retain recorded provenance and pass checks of the pinned ZIP, per-asset hashes, codec, frames and duration. Final refined APK verification is recorded after that pipeline completes.
