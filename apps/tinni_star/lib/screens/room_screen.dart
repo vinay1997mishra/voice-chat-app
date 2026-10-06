@@ -8575,6 +8575,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         : RepaintBoundary(
                             child: AnimatedAvatarFrame(
                               size: seatDiameter,
+                              avatarScale: 1.0,
                               frameId: presenceMember?.equippedFrameId,
                               child: Container(
                               width: seatDiameter,
