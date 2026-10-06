@@ -70,15 +70,14 @@ class SocialService {
   SocialService({
     Uri? apiBase,
     HttpClient? httpClient,
-    LocalChatStore? localHistory,
+    this.localHistory,
   })  : apiBase = apiBase ??
             Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
-        _httpClient = httpClient ?? HttpClient(),
-        _localHistory = localHistory;
+        _httpClient = httpClient ?? HttpClient();
 
   final Uri apiBase;
   final HttpClient _httpClient;
-  final LocalChatStore? _localHistory;
+  final LocalChatStore? localHistory;
   String? _localAccount;
   String? _localUserId;
   Future<void> _historyReady = Future<void>.value();
@@ -105,10 +104,11 @@ class SocialService {
       blocked.clear();
       _setUnreadMessages(0);
     }
-    if (account == null || _localHistory == null) return _historyReady;
+    final history = localHistory;
+    if (account == null || history == null) return _historyReady;
     _historyReady = () async {
       try {
-        final data = await _localHistory.load(account);
+        final data = await history.load(account);
         if (_localAccount != account || _localUserId != userId) return;
         final oldUserId = data['user_id']?.toString();
         final existing = List<ChatMessage>.of(directMessages);
@@ -173,7 +173,7 @@ class SocialService {
         final index = messageThreads.indexWhere((thread) => thread.userId == peer);
         final old = index < 0 ? null : messageThreads[index];
         if (old != null && (old.lastMessage?.createdAt?.millisecondsSinceEpoch ?? 0) >
-            (message.createdAt?.millisecondsSinceEpoch ?? 0)) continue;
+            (message.createdAt?.millisecondsSinceEpoch ?? 0)) { continue; }
         final next = MessageThread(userId: peer,
           displayName: old?.displayName ?? peer, isFriend: old?.isFriend ?? friends.contains(peer),
           avatarDataUrl: old?.avatarDataUrl, unreadCount: old?.unreadCount ?? 0, lastMessage: message);
@@ -189,7 +189,7 @@ class SocialService {
 
   Future<void> _writeLocalHistory() async {
     await _historyReady;
-    final account = _localAccount, store = _localHistory;
+    final account = _localAccount, store = localHistory;
     if (account == null || store == null) return;
     await store.save(account, {
       'version': 1, 'user_id': _localUserId,
@@ -220,7 +220,7 @@ class SocialService {
   }
 
   void _prefetchPhotos(Iterable<ChatMessage> messages, String authToken) {
-    if (_localHistory == null || _localAccount == null) return;
+    if (localHistory == null || _localAccount == null) return;
     for (final message in messages.where((message) => message.isImage)) {
       unawaited(loadMessagePhoto(authToken: authToken, message: message));
     }
@@ -234,7 +234,7 @@ class SocialService {
     return _photoReads.putIfAbsent(key, () {
       final operation = _photoQueue.then<Uint8List?>((_) async {
         try {
-          final local = account == null ? null : await _localHistory?.readPhoto(account, id);
+          final local = account == null ? null : await localHistory?.readPhoto(account, id);
           if (local != null) return local;
           if (account != _localAccount) return null;
           final url = Uri.tryParse(message.mediaUrl ?? '');
@@ -247,12 +247,12 @@ class SocialService {
           final bytes = BytesBuilder(copy: false);
           await for (final chunk in response.timeout(const Duration(seconds: 20))) {
             bytes.add(chunk);
-            if (bytes.length > 4000000) throw StateError('Chat photo exceeds size limit');
+            if (bytes.length > 4000000) { throw StateError('Chat photo exceeds size limit'); }
           }
           final result = bytes.takeBytes();
           if (result.isEmpty) return null;
-          if (account != null && _localHistory != null) {
-            await _localHistory.savePhoto(account, id, result);
+          if (account != null && localHistory != null) {
+            await localHistory!.savePhoto(account, id, result);
           }
           return result;
         } catch (_) { return null; }
@@ -1007,7 +1007,7 @@ class SocialService {
       throw StateError('Server returned invalid photo message');
     }
     _mergeMessages([message]);
-    final localAccount = _localAccount, store = _localHistory;
+    final localAccount = _localAccount, store = localHistory;
     if (localAccount != null && store != null && message.id != null) {
       try { await store.savePhoto(localAccount, message.id!, base64Decode(dataUrl.split(',').last)); }
       catch (error) { debugPrint('Sent photo could not be saved locally: $error'); }

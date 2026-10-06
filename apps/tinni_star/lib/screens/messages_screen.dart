@@ -1660,7 +1660,7 @@ class _CachedMessagePhotoState extends State<_CachedMessagePhoto> {
   void didUpdateWidget(covariant _CachedMessagePhoto oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.authToken != widget.authToken ||
-        oldWidget.message.mediaUrl != widget.message.mediaUrl) _read();
+        oldWidget.message.mediaUrl != widget.message.mediaUrl) { _read(); }
   }
 
   @override
