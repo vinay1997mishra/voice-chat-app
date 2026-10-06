@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
-import 'guardian_screen.dart';
 import 'cp_screen.dart';
 import 'personal_profile_screen.dart';
 
@@ -276,10 +275,6 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         : const <String, dynamic>{};
     final wealthLevel = (wealth['level'] as num?)?.toInt() ?? 0;
     final charmLevel = (charm['level'] as num?)?.toInt() ?? 0;
-    final guardianRow = guardian['guardian'] is Map
-        ? Map<String, dynamic>.from(guardian['guardian'] as Map)
-        : null;
-
     return Scaffold(
       key: const Key('public-profile-screen'),
       backgroundColor: RoyalPalette.black,
@@ -484,10 +479,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
             ),
             const SizedBox(height: 10),
             if (tab == 0)
-              _buildAboutMe(
-                guardianRow: guardianRow,
-                accountName: account.displayName,
-              )
+              _buildAboutMe()
             else
               _buildTrends(),
             if (loading)
@@ -501,162 +493,88 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     );
   }
 
-  Widget _buildCpProfileCard() {
-    final account = widget.state.auth.current;
-    final cp = widget.state.cp.relationship;
-    if (account == null) return const SizedBox.shrink();
-
-    final myAvatar = _provider(account.avatarDataUrl);
-    String partnerName = '?';
-    ImageProvider? partnerAvatar;
-    var subtitle = 'Invite a CP • 2,222,222 coins';
-    var levelText = 'CP';
-    if (cp != null) {
-      final partnerId = cp.userA == account.userId ? cp.userB : cp.userA;
-      partnerName =
-          cpPartnerProfile?['display_name']?.toString().trim().isNotEmpty == true
-              ? cpPartnerProfile!['display_name'].toString()
-              : partnerId;
-      partnerAvatar = _provider(
-        cpPartnerProfile?['avatar_data_url']?.toString(),
-      );
-      final days = DateTime.now()
-              .difference(
-                DateTime(
-                  cp.startedAt.year,
-                  cp.startedAt.month,
-                  cp.startedAt.day,
-                ),
-              )
-              .inDays +
-          1;
-      subtitle = 'Lv.' +
-          cp.level.toString() +
-          ' • ' +
-          cp.intimacy.toString() +
-          ' intimacy • ' +
-          (days < 1 ? 1 : days).toString() +
-          ' days';
-      levelText = 'CP Lv.' + cp.level.toString();
-    }
-
-    Widget avatar({
-      required ImageProvider? image,
-      required String name,
-    }) {
-      return Column(
-        mainAxisSize: MainAxisSize.min,
+  Widget _relationAvatar({
+    required ImageProvider? image,
+    required String fallback,
+    required Color accent,
+    required double size,
+    bool add = false,
+  }) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: const Color(0xFF151827),
+        border: Border.all(color: accent, width: 2.6),
+        boxShadow: [
+          BoxShadow(
+            color: accent.withValues(alpha: .55),
+            blurRadius: 18,
+            spreadRadius: 2,
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.all(4),
+      child: Stack(
+        clipBehavior: Clip.none,
         children: [
-          Container(
-            padding: const EdgeInsets.all(2),
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: FeaturePalette.cpSoft,
-                width: 1.6,
-              ),
-            ),
+          Positioned.fill(
             child: CircleAvatar(
-              radius: 25,
-              backgroundColor: const Color(0xFF301126),
+              backgroundColor: const Color(0xFF171827),
               backgroundImage: image,
-              child: image == null
+              child: image == null && !add
                   ? Text(
-                      name.isEmpty ? '?' : name.characters.first.toUpperCase(),
-                      style: const TextStyle(
-                        color: FeaturePalette.cpSoft,
-                        fontSize: 18,
+                      fallback.isEmpty ? '?' : fallback.characters.first.toUpperCase(),
+                      style: TextStyle(
+                        color: accent,
+                        fontSize: size * .30,
                         fontWeight: FontWeight.w900,
                       ),
                     )
-                  : null,
+                  : image == null
+                      ? Icon(
+                          Icons.person_rounded,
+                          color: Colors.white.withValues(alpha: .30),
+                          size: size * .42,
+                        )
+                      : null,
             ),
           ),
-          const SizedBox(height: 3),
-          SizedBox(
-            width: 76,
-            child: Text(
-              name,
-              maxLines: 1,
-              textAlign: TextAlign.center,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(
-                color: RoyalPalette.cream,
-                fontSize: 9.5,
-                fontWeight: FontWeight.w800,
+          if (add)
+            Positioned(
+              right: -2,
+              bottom: -2,
+              child: Container(
+                width: size * .34,
+                height: size * .34,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: const Color(0xFF17131D),
+                  border: Border.all(color: accent, width: 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: accent.withValues(alpha: .45),
+                      blurRadius: 10,
+                    ),
+                  ],
+                ),
+                child: Icon(
+                  Icons.add_rounded,
+                  color: accent,
+                  size: size * .23,
+                ),
               ),
             ),
-          ),
-        ],
-      );
-    }
-
-    return RoyalPanel(
-      key: const Key('profile-cp-card'),
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => CpScreen(state: widget.state),
-        ),
-      ),
-      accentColor: FeaturePalette.cp,
-      child: Row(
-        children: [
-          avatar(image: myAvatar, name: account.displayName),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.favorite_rounded,
-                  color: FeaturePalette.cp,
-                  size: 28,
-                ),
-                Text(
-                  'CP',
-                  style: TextStyle(
-                    color: FeaturePalette.cpSoft,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          avatar(image: partnerAvatar, name: partnerName),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  levelText,
-                  style: const TextStyle(
-                    color: FeaturePalette.cpSoft,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  subtitle,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: RoyalPalette.muted,
-                    fontSize: 10,
-                    height: 1.25,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'All my CP  ›',
-                  style: TextStyle(
-                    color: FeaturePalette.cp,
-                    fontSize: 10,
-                    fontWeight: FontWeight.w900,
-                  ),
-                ),
+          Positioned(
+            top: -14,
+            left: size * .28,
+            child: Icon(
+              Icons.workspace_premium_rounded,
+              color: accent,
+              size: size * .32,
+              shadows: [
+                Shadow(color: accent.withValues(alpha: .75), blurRadius: 10),
               ],
             ),
           ),
@@ -665,64 +583,278 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     );
   }
 
-  Widget _buildAboutMe({
-    required Map<String, dynamic>? guardianRow,
-    required String accountName,
-  }) {
+  Widget _glowingCpHeart(double size) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Icon(
+            Icons.favorite_rounded,
+            size: size * .82,
+            color: const Color(0xFFFF2D87),
+            shadows: const [
+              Shadow(color: Color(0xFFFF4FA0), blurRadius: 22),
+              Shadow(color: Color(0xAAFF9ACC), blurRadius: 38),
+            ],
+          ),
+          Icon(
+            Icons.favorite_rounded,
+            size: size * .55,
+            color: const Color(0xFFFF79B6),
+          ),
+          Positioned(
+            top: size * .15,
+            right: size * .17,
+            child: Icon(
+              Icons.auto_awesome_rounded,
+              color: Colors.white,
+              size: size * .17,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _murderEnemyEmblem(double size) {
+    const red = Color(0xFFFF202D);
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        alignment: Alignment.center,
+        clipBehavior: Clip.none,
+        children: [
+          Transform.rotate(
+            angle: .78,
+            child: Container(
+              width: size * .68,
+              height: size * .68,
+              decoration: BoxDecoration(
+                color: const Color(0xFF09080C),
+                border: Border.all(color: red, width: 3),
+                boxShadow: const [
+                  BoxShadow(color: Color(0xCCFF1428), blurRadius: 28, spreadRadius: 4),
+                ],
+              ),
+            ),
+          ),
+          for (final angle in <double>[0, .78, 1.57, 2.35])
+            Transform.rotate(
+              angle: angle,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Icon(
+                  Icons.change_history_rounded,
+                  color: const Color(0xFFDFE1E8),
+                  size: size * .30,
+                  shadows: const [
+                    Shadow(color: Color(0xFFFF101F), blurRadius: 12),
+                  ],
+                ),
+              ),
+            ),
+          const Icon(
+            Icons.dangerous_rounded,
+            color: red,
+            size: 58,
+            shadows: [
+              Shadow(color: Color(0xFFFF001A), blurRadius: 20),
+            ],
+          ),
+          Positioned(
+            bottom: size * .04,
+            child: Container(
+              width: size * .72,
+              height: 3,
+              decoration: BoxDecoration(
+                color: red,
+                boxShadow: const [
+                  BoxShadow(color: red, blurRadius: 12, spreadRadius: 1),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCpProfileCard() {
+    final account = widget.state.auth.current;
+    final cp = widget.state.cp.relationship;
+    if (account == null) return const SizedBox.shrink();
+
+    final myAvatar = _provider(account.avatarDataUrl);
+    ImageProvider? partnerAvatar;
+    if (cp != null) {
+      partnerAvatar = _provider(
+        cpPartnerProfile?['avatar_data_url']?.toString(),
+      );
+    }
+
+    return InkWell(
+      key: const Key('profile-cp-card'),
+      onTap: () => Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => CpScreen(state: widget.state),
+        ),
+      ),
+      borderRadius: BorderRadius.circular(26),
+      child: Container(
+        height: 184,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: const Color(0xFFFF4FA0), width: 1.8),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF24132D),
+              Color(0xFF12192D),
+              Color(0xFF231126),
+            ],
+          ),
+          boxShadow: const [
+            BoxShadow(color: Color(0x55FF2D87), blurRadius: 22, spreadRadius: 1),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: const _RelationWavePainter(
+                  primary: Color(0xFFFF2D87),
+                  secondary: Color(0xFFFF8FC3),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: _relationAvatar(
+                      image: myAvatar,
+                      fallback: account.displayName,
+                      accent: const Color(0xFFFF8FC3),
+                      size: 92,
+                    ),
+                  ),
+                ),
+                _glowingCpHeart(104),
+                Expanded(
+                  child: Center(
+                    child: _relationAvatar(
+                      image: partnerAvatar,
+                      fallback: '',
+                      accent: const Color(0xFFFF8FC3),
+                      size: 92,
+                      add: cp == null,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openEnemyPanel() async {
+    final account = widget.state.auth.current;
+    if (account == null) return;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => _EnemyDetailScreen(
+          displayName: account.displayName,
+          avatar: _provider(account.avatarDataUrl),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildEnemyProfileCard() {
+    final account = widget.state.auth.current;
+    if (account == null) return const SizedBox.shrink();
+    const red = Color(0xFFFF202D);
+    return InkWell(
+      key: const Key('profile-enemy-card'),
+      onTap: _openEnemyPanel,
+      borderRadius: BorderRadius.circular(26),
+      child: Container(
+        height: 184,
+        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 18),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          border: Border.all(color: red, width: 1.9),
+          gradient: const LinearGradient(
+            colors: [
+              Color(0xFF1B0609),
+              Color(0xFF07080D),
+              Color(0xFF23070A),
+            ],
+          ),
+          boxShadow: const [
+            BoxShadow(color: Color(0x66FF1226), blurRadius: 24, spreadRadius: 1),
+          ],
+        ),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Positioned.fill(
+              child: CustomPaint(
+                painter: const _RelationWavePainter(
+                  primary: Color(0xFFFF1428),
+                  secondary: Color(0xFF5C0008),
+                  hostile: true,
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Expanded(
+                  child: Center(
+                    child: _relationAvatar(
+                      image: _provider(account.avatarDataUrl),
+                      fallback: account.displayName,
+                      accent: red,
+                      size: 92,
+                    ),
+                  ),
+                ),
+                _murderEnemyEmblem(106),
+                Expanded(
+                  child: Center(
+                    child: _relationAvatar(
+                      image: null,
+                      fallback: '',
+                      accent: red,
+                      size: 92,
+                      add: true,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAboutMe() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 14),
       child: Column(
         children: [
           _buildCpProfileCard(),
-          const SizedBox(height: 10),
-          RoyalPanel(
-            onTap: () => Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => GuardianScreen(state: widget.state),
-              ),
-            ),
-            accentColor: RoyalPalette.deepGold,
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.shield_rounded,
-                  color: RoyalPalette.gold,
-                  size: 32,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        'My Guardian',
-                        style: TextStyle(
-                          color: RoyalPalette.gold,
-                          fontWeight: FontWeight.w900,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        guardianRow == null
-                            ? 'You do not have a Guardian yet'
-                            : guardianRow['display_name']?.toString() ??
-                                'Guardian',
-                        style: const TextStyle(
-                          color: RoyalPalette.muted,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const Icon(
-                  Icons.chevron_right_rounded,
-                  color: RoyalPalette.gold,
-                ),
-              ],
-            ),
-          ),
+          const SizedBox(height: 12),
+          _buildEnemyProfileCard(),
           const SizedBox(height: 10),
           if (media.values.any((value) => (value ?? '').isNotEmpty))
             RoyalPanel(
@@ -819,6 +951,163 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                   ),
                 ),
               ),
+        ],
+      ),
+    );
+  }
+}
+
+
+class _RelationWavePainter extends CustomPainter {
+  const _RelationWavePainter({
+    required this.primary,
+    required this.secondary,
+    this.hostile = false,
+  });
+
+  final Color primary;
+  final Color secondary;
+  final bool hostile;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final glow = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = hostile ? 2.4 : 2.0
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 7)
+      ..color = primary.withValues(alpha: .72);
+    final line = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.1
+      ..color = secondary.withValues(alpha: .85);
+
+    for (var i = 0; i < 3; i++) {
+      final y = size.height * (.40 + i * .10);
+      final p = Path()
+        ..moveTo(0, y)
+        ..cubicTo(
+          size.width * .22,
+          y + (hostile ? -24 : 22) * (i.isEven ? 1 : -1),
+          size.width * .38,
+          y + (hostile ? 22 : -18) * (i.isEven ? 1 : -1),
+          size.width * .50,
+          y,
+        )
+        ..cubicTo(
+          size.width * .64,
+          y + (hostile ? -20 : 18) * (i.isEven ? 1 : -1),
+          size.width * .80,
+          y + (hostile ? 24 : -22) * (i.isEven ? 1 : -1),
+          size.width,
+          y,
+        );
+      canvas.drawPath(p, glow);
+      canvas.drawPath(p, line);
+    }
+
+    final dot = Paint()..color = primary.withValues(alpha: .75);
+    for (var i = 0; i < 16; i++) {
+      final x = size.width * ((i * 37) % 100) / 100;
+      final y = size.height * (.18 + ((i * 23) % 64) / 100);
+      canvas.drawCircle(Offset(x, y), hostile ? 1.7 : 2.1, dot);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _RelationWavePainter oldDelegate) =>
+      oldDelegate.primary != primary ||
+      oldDelegate.secondary != secondary ||
+      oldDelegate.hostile != hostile;
+}
+
+class _EnemyDetailScreen extends StatelessWidget {
+  const _EnemyDetailScreen({
+    required this.displayName,
+    required this.avatar,
+  });
+
+  final String displayName;
+  final ImageProvider? avatar;
+
+  @override
+  Widget build(BuildContext context) {
+    const red = Color(0xFFFF202D);
+    return Scaffold(
+      key: const Key('enemy-detail-screen'),
+      backgroundColor: const Color(0xFF05070C),
+      appBar: AppBar(
+        backgroundColor: const Color(0xFF05070C),
+        foregroundColor: Colors.white,
+        title: const Text('Enemy'),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.all(18),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(26),
+              border: Border.all(color: red),
+              gradient: const LinearGradient(
+                colors: [Color(0xFF21070A), Color(0xFF08090E)],
+              ),
+              boxShadow: const [
+                BoxShadow(color: Color(0x55FF1024), blurRadius: 24),
+              ],
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 36,
+                  backgroundColor: const Color(0xFF171820),
+                  backgroundImage: avatar,
+                  child: avatar == null
+                      ? Text(
+                          displayName.isEmpty
+                              ? '?'
+                              : displayName.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: red,
+                            fontSize: 24,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        )
+                      : null,
+                ),
+                const Expanded(
+                  child: Center(
+                    child: Icon(
+                      Icons.dangerous_rounded,
+                      color: red,
+                      size: 64,
+                      shadows: [
+                        Shadow(color: Color(0xFFFF0018), blurRadius: 18),
+                      ],
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 72,
+                  height: 72,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: red, width: 2),
+                    color: const Color(0xFF11131B),
+                  ),
+                  child: const Icon(Icons.add_rounded, color: red, size: 36),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'Enemy relation is not configured yet.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              color: Color(0xFF9EA3AF),
+              fontSize: 12,
+            ),
+          ),
         ],
       ),
     );
