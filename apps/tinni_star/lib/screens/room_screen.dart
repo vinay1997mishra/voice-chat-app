@@ -640,12 +640,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _scrollRoomCommentsToNewest() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || !_roomMessageScrollController.hasClients) return;
-      final position = _roomMessageScrollController.position;
-      _roomMessageScrollController.animateTo(
-        position.maxScrollExtent,
+      final controller = _roomMessageScrollController;
+      controller.animateTo(
+        controller.position.maxScrollExtent,
         duration: const Duration(milliseconds: 220),
         curve: Curves.easeOut,
       );
+      // Sender tags/medals can make the newly inserted row taller after its
+      // first layout pass. Re-target on the next frame so the newest message
+      // remains fully visible instead of stopping at a stale scroll extent.
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted || !controller.hasClients) return;
+        final settledBottom = controller.position.maxScrollExtent;
+        if ((settledBottom - controller.offset).abs() <= 0.5) return;
+        controller.animateTo(
+          settledBottom,
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOut,
+        );
+      });
     });
   }
 
