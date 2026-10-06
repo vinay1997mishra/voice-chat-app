@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../economy/economy.dart';
+import '../economy/enemy_gift_catalog.dart';
 import '../economy/premium_gift_catalog.dart';
 import '../effects/cinematic_video.dart';
 import '../effects/effect_queue.dart';
@@ -10,17 +11,28 @@ import 'store_screen.dart';
 import '../ui/royal_theme.dart';
 
 class GiftsScreen extends StatefulWidget {
-  const GiftsScreen({super.key, required this.state});
+  const GiftsScreen({
+    super.key,
+    required this.state,
+    this.initialCategory = 'Popular',
+  });
   final TinniState state;
+  final String initialCategory;
 
   /// Use the same IDs, prices and art as the room's authoritative gift catalog.
   static List<GiftDefinition> catalogFor(String category) => switch (category) {
     'Normal' => PremiumGiftCatalog.normal,
     'Lucky' => GiftService.luckyCatalog,
     'CP' => PremiumGiftCatalog.cp,
+    "Enemy's" => EnemyGiftCatalog.gifts,
     'Country' => PremiumGiftCatalog.countries,
     'Luxury' => PremiumGiftCatalog.normal.where((gift) => gift.price >= 1000000).toList(growable: false),
-    _ => [...PremiumGiftCatalog.normal, ...PremiumGiftCatalog.cp, ...GiftService.luckyCatalog],
+    _ => [
+      ...PremiumGiftCatalog.normal,
+      ...PremiumGiftCatalog.cp,
+      ...EnemyGiftCatalog.gifts,
+      ...GiftService.luckyCatalog,
+    ],
   };
 
   @override
@@ -28,11 +40,20 @@ class GiftsScreen extends StatefulWidget {
 }
 
 class _GiftsScreenState extends State<GiftsScreen> {
-  String category = 'Popular';
+  late String category;
   bool sending = false;
+
+  @override
+  void initState() {
+    super.initState();
+    category = widget.initialCategory;
+  }
 
   Color _giftColor(GiftDefinition gift, int index) {
     final id = (gift.id + ' ' + gift.name).toLowerCase();
+    if (category == "Enemy's" || id.startsWith('enemy-')) {
+      return const Color(0xFFFF202D);
+    }
     if (id.contains('heart') || id.contains('ring') || category == 'CP') {
       return FeaturePalette.cp;
     }
@@ -57,6 +78,8 @@ class _GiftsScreenState extends State<GiftsScreen> {
         return FeaturePalette.vip;
       case 'CP':
         return FeaturePalette.cp;
+      case "Enemy's":
+        return const Color(0xFFFF202D);
       case 'Backpack':
         return FeaturePalette.backpack;
       case 'Normal':
@@ -137,7 +160,16 @@ class _GiftsScreenState extends State<GiftsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final categories = ['Popular', 'Normal', 'Lucky', 'CP', 'Country', 'Luxury', 'Backpack'];
+    final categories = [
+      'Popular',
+      'Normal',
+      'Lucky',
+      'CP',
+      "Enemy's",
+      'Country',
+      'Luxury',
+      'Backpack',
+    ];
     final visibleGifts = gifts;
     return Scaffold(
       appBar: AppBar(

@@ -7,6 +7,7 @@ import '../relationship/cp_service.dart';
 import '../ui/royal_theme.dart';
 import 'cp_disconnect_screen.dart';
 import 'cp_ranking_screen.dart';
+import 'gifts_screen.dart';
 
 class CpScreen extends StatefulWidget {
   const CpScreen({super.key, required this.state});
@@ -454,7 +455,7 @@ class _CpScreenState extends State<CpScreen> {
                 icon: Icons.card_giftcard_rounded,
                 title: 'Gift intimacy',
                 subtitle:
-                    'Regular gifts count at 100% of normalized intimacy. Lucky gifts count only 10%. If both CP partners exchange gifts on the same day, eligible gift intimacy gets a 1.2× daily exchange multiplier.',
+                    'Only CP-category gifts sent between connected CP partners increase CP intimacy and CP level. Other gift categories do not raise CP level. If a CP gift is configured as Lucky, its intimacy counts at 10%; eligible same-day mutual CP gifting keeps the 1.2× multiplier.',
               ),
               _CpRuleTile(
                 icon: Icons.workspace_premium_rounded,
@@ -523,7 +524,9 @@ class _CpScreenState extends State<CpScreen> {
                   final myAvatar = _avatarProvider(account?.avatarDataUrl);
                   final days = _loveDays(cp.startedAt);
                   final progress = cp.level <= 1
-                      ? (cp.intimacy / 200000).clamp(0.0, 1.0)
+                      ? (cp.intimacy / 200000)
+                          .clamp(0.0, 1.0)
+                          .toDouble()
                       : 1.0;
 
                   return Column(
@@ -709,10 +712,20 @@ class _CpScreenState extends State<CpScreen> {
                         childAspectRatio: 0.92,
                         children: [
                           _CpNestAction(
-                            icon: Icons.favorite_rounded,
-                            label: 'Intimacy',
-                            subtitle: 'Gift / Mic',
-                            onTap: _showTasksAndRules,
+                            icon: Icons.card_giftcard_rounded,
+                            label: 'CP Gifts',
+                            subtitle: 'Level up',
+                            onTap: () {
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => GiftsScreen(
+                                    state: widget.state,
+                                    initialCategory: 'CP',
+                                  ),
+                                ),
+                              );
+                            },
                           ),
                           _CpNestAction(
                             icon: Icons.diamond_rounded,

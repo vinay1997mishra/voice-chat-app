@@ -128,6 +128,28 @@ class RemoteCp {
   final String? ringId;
 }
 
+class RemoteEnemy {
+  const RemoteEnemy({
+    required this.userA,
+    required this.userB,
+    required this.state,
+    required this.rivalry,
+    required this.level,
+    required this.requestedBy,
+    required this.createdAt,
+    this.nextLevelThreshold,
+  });
+
+  final String userA;
+  final String userB;
+  final String state;
+  final int rivalry;
+  final int level;
+  final String requestedBy;
+  final int createdAt;
+  final int? nextLevelThreshold;
+}
+
 class VipCatalogItem {
   const VipCatalogItem({required this.id, required this.name, required this.level, required this.enabled, required this.data});
   final String id;
@@ -883,6 +905,39 @@ class AppBackendService {
     await _request('POST', '/cp/memories', token, body: {'text': text});
   }
 
+  Future<RemoteEnemy?> enemyState(String token) async {
+    final data = await _request('GET', '/enemy', token);
+    return _enemy(data['enemy']);
+  }
+
+  Future<RemoteEnemy> enemyRequest(String token, String targetUserId) async {
+    final data = await _request(
+      'POST',
+      '/enemy/request',
+      token,
+      body: <String, dynamic>{'target_user_id': targetUserId},
+    );
+    final enemy = _enemy(data['enemy']);
+    if (enemy == null) throw StateError('Server returned invalid Enemy relation');
+    return enemy;
+  }
+
+  Future<RemoteEnemy> enemyRespond(String token, bool accept) async {
+    final data = await _request(
+      'POST',
+      '/enemy/respond',
+      token,
+      body: <String, dynamic>{'accept': accept},
+    );
+    final enemy = _enemy(data['enemy']);
+    if (enemy == null) throw StateError('Server returned invalid Enemy relation');
+    return enemy;
+  }
+
+  Future<void> enemyDisconnect(String token) async {
+    await _request('POST', '/enemy/disconnect', token, body: const {});
+  }
+
   Future<Map<String, dynamic>> coinsHistory(
     String token, {
     int limit = 200,
@@ -1428,6 +1483,27 @@ class AppBackendService {
       ringId: row['ring_id']?.toString(),
       requestedBy: row['requested_by']?.toString() ?? '',
       createdAt: _asInt(row['created_at']),
+    );
+  }
+
+  RemoteEnemy? _enemy(dynamic value) {
+    final row = _map(value);
+    if (row.isEmpty) return null;
+    final a = row['user_a']?.toString() ?? '';
+    final b = row['user_b']?.toString() ?? '';
+    if (a.isEmpty || b.isEmpty) return null;
+    final rules = _map(row['enemy_rules']);
+    return RemoteEnemy(
+      userA: a,
+      userB: b,
+      state: row['state']?.toString() ?? 'pending',
+      rivalry: _asInt(row['rivalry']),
+      level: _asInt(row['level'], fallback: 1),
+      requestedBy: row['requested_by']?.toString() ?? '',
+      createdAt: _asInt(row['created_at']),
+      nextLevelThreshold: rules['next_level_threshold'] == null
+          ? null
+          : _asInt(rules['next_level_threshold']),
     );
   }
 
