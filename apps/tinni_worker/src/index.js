@@ -796,6 +796,7 @@ async function ensureRoomPresenceMember(env, roomIdValue, appSession) {
       "ensure.identity_tags",
       () => directory.listUserIdentityTags(userId),
     ) || [];
+  const inventory = await directory.inventoryState(userId);
   const result = await store.join({
     room_id: roomId,
     user_id: userId,
@@ -803,6 +804,9 @@ async function ensureRoomPresenceMember(env, roomIdValue, appSession) {
     avatar_data_url: user.avatar_data_url,
     flag_emoji: user.flag_emoji,
     country_code: user.country_code,
+    equipped_frame_id: inventory?.equipped_frame_id || null,
+    equipped_entry_id: inventory?.equipped_entry_id || null,
+    equipped_profile_card_id: inventory?.equipped_profile_card_id || null,
     owner_tags: Array.isArray(identityTags) ? identityTags : [],
     owner_medals: Array.isArray(user.medals) ? user.medals : [],
     seat_index: null,
@@ -3561,9 +3565,21 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       try {
-        return json(await getAppDirectoryStore(env).equipFrame(
+        const directory = getAppDirectoryStore(env);
+        const result = await directory.equipFrame(
           appSession.user.user_id, body.frame_id,
-        ));
+        );
+        const roomId = await directory.activeRoomForUser(appSession.user.user_id);
+        if (roomId) {
+          await bestEffortRoomDirectoryTask(
+            "frames.equip.live_room_sync",
+            () => getRoomPresenceStore(env, roomId).updateMemberFrame(
+              appSession.user.user_id,
+              result?.inventory?.equipped_frame_id || null,
+            ),
+          );
+        }
+        return json(result);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to equip frame") }, 400);
       }
@@ -5553,6 +5569,7 @@ export default {
           }, 403);
         }
       }
+      const inventory = await directory.inventoryState(user.user_id);
       const presenceBody = {
         room_id: roomId,
         user_id: user.user_id,
@@ -5563,9 +5580,9 @@ export default {
         family_tag: body.family_tag,
         host_tag: body.host_tag,
         agency_name: body.agency_name,
-        equipped_frame_id: body.equipped_frame_id,
-        equipped_entry_id: body.equipped_entry_id,
-        equipped_profile_card_id: body.equipped_profile_card_id,
+        equipped_frame_id: inventory?.equipped_frame_id || null,
+        equipped_entry_id: inventory?.equipped_entry_id || null,
+        equipped_profile_card_id: inventory?.equipped_profile_card_id || null,
         owner_tags: Array.isArray(identityTags) ? identityTags : [],
         owner_medals: Array.isArray(user.medals) ? user.medals : [],
         seat_index:
