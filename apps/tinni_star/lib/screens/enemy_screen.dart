@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
-import '../economy/premium_gift_catalog.dart';
+import '../economy/enemy_gift_catalog.dart';
 import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 import 'gifts_screen.dart';
