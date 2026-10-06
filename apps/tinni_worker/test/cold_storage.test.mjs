@@ -44,24 +44,37 @@ test('missing archive produces an error instead of silently dropping wallet hist
   r.archiveObjects.delete(key);
   await assert.rejects(r.directory.walletTransactions(a.user_id),/temporarily unavailable/);
 });
-test('old message payloads archive while live previews, unread state and media permissions survive',async t=>{
-  const r=runtime();t.after(r.close);const a=await r.user(1),b=await r.user(2);
-  const now=Date.now();
-  for(let i=0;i<3;i++) sql(r,`INSERT INTO direct_messages(id,from_user_id,to_user_id,text,message_kind,media_url,created_at,seen_at)
-    VALUES(?,?,?,?,'image',?,?,?)`,'m'+i,a.user_id,b.user_id,'message '+i+'x'.repeat(200),'https://test.local/message-media/m'+i,now-40*cold.DAY_MS+i,now);
-  sql(r,`INSERT INTO direct_messages(id,from_user_id,to_user_id,text,created_at,seen_at) VALUES('latest',?,?,'Current preview',?,NULL)`,a.user_id,b.user_id,now);
-  await cold.inventoryStorage(r.directory);
-  assert.equal(await cold.archiveMessageBatch(r.directory),3);
-  assert.equal(sql(r,"SELECT text FROM direct_messages WHERE id='m0'").one().text,'');
-  assert.equal(r.directory.unreadMessageCount(b.user_id),1);
-  assert.equal(r.directory.listMessageThreads(b.user_id)[0].last_message.text,'Current preview');
-  assert.equal(r.directory.canAccessDirectMessageMedia(b.user_id,'m0'),true);
-  const messages=await r.directory.listDirectMessages(b.user_id,a.user_id);
-  assert.equal(messages[0].text,'message 0'+'x'.repeat(200));
-  assert.equal(messages[0].media_url,'https://test.local/message-media/m0');
-  assert.equal(r.directory.unreadMessageCount(b.user_id),0);
-  const owner=await r.directory.ownerInboxConversation(b.user_id,a.user_id);
-  assert.equal(owner[0].text,messages[0].text);
+test('long chats trim to the newest 500 while short chats and recent excess messages survive',async t=>{
+  const r=runtime();t.after(r.close);const a=await r.user(1),b=await r.user(2),c=await r.user(3);
+  const now=Date.now(),old=now-20*cold.DAY_MS;
+  for(let i=0;i<520;i++) sql(r,"INSERT INTO direct_messages(id,from_user_id,to_user_id,text,created_at) VALUES(?,?,?,'old chat',?)",
+    'long-'+String(i).padStart(4,'0'),i%2?a.user_id:b.user_id,i%2?b.user_id:a.user_id,old+i);
+  sql(r,"INSERT INTO direct_messages(id,from_user_id,to_user_id,text,created_at) VALUES('short',?,?,'short remains',?)",a.user_id,c.user_id,old);
+  const result=await cold.cleanupPrivateChats(r.directory,now);
+  assert.equal(result.deleted_messages,20);
+  assert.equal(sql(r,"SELECT COUNT(*) n FROM direct_messages WHERE id LIKE 'long-%'").one().n,500);
+  assert.ok(sql(r,"SELECT id FROM direct_messages WHERE id='short'").toArray().length);
+  for(let i=0;i<5;i++) sql(r,"INSERT INTO direct_messages(id,from_user_id,to_user_id,text,created_at) VALUES(?,?,?,'new',?)",'new-'+i,a.user_id,b.user_id,now+i);
+  const latest=await r.directory.listDirectMessages(a.user_id,b.user_id,500);
+  assert.equal(latest.at(-1).id,'new-4');
+  // Excess younger than 10 days stays until its photos have had their full retention window.
+  sql(r,"UPDATE direct_messages SET created_at=? WHERE id LIKE 'long-%'",now-cold.DAY_MS);
+  assert.equal((await cold.cleanupPrivateChats(r.directory,now)).deleted_messages,0);
+});
+test('chat photos expire at 10 days even in short chats, without deleting their text record',async t=>{
+  const r=runtime();t.after(r.close);const a=await r.user(1),b=await r.user(2),now=Date.now();
+  for(const [id,days] of [['old-photo',11],['new-photo',9]]) {
+    sql(r,"INSERT INTO direct_messages(id,from_user_id,to_user_id,text,message_kind,media_url,created_at) VALUES(?,?,?,'Photo','image',?,?)",
+      id,a.user_id,b.user_id,'https://test.local/message-media/'+id,now-days*cold.DAY_MS);
+    await r.env.EFFECT_MEDIA.put('messages/'+id,new Uint8Array([1,2,3]),{});
+  }
+  assert.equal(r.directory.canAccessDirectMessageMedia(b.user_id,'old-photo'),false);
+  assert.equal(r.directory.canAccessDirectMessageMedia(b.user_id,'new-photo'),true);
+  const result=await cold.cleanupPrivateChats(r.directory,now);
+  assert.equal(result.deleted_photos,1);
+  assert.equal(r.mediaObjects.has('messages/old-photo'),false);
+  assert.equal(r.mediaObjects.has('messages/new-photo'),true);
+  assert.equal(sql(r,"SELECT COUNT(*) n FROM direct_messages").one().n,2);
 });
 test('capacity reservations serialize writes and stop before the conservative R2 budget',async t=>{
   const r=runtime();t.after(r.close);await cold.inventoryStorage(r.directory);

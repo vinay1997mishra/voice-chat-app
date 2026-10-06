@@ -1,6 +1,8 @@
 // Private cold storage. R2 capacity is a conservative bucket budget, not an account billing promise.
 export const DAY_MS = 86400000;
 export const GAME_HISTORY_MS = 15 * DAY_MS;
+export const CHAT_PHOTO_MS = 10 * DAY_MS;
+export const CHAT_SERVER_MESSAGES = 500;
 export const PRIVATE_PREFIX = "private-cold/";
 export const R2_BYTE_LIMIT = 7_000_000_000;
 const BATCH_ROWS = 256;
@@ -44,6 +46,27 @@ export function initColdStorage(store) {
   try { exec(store,"ALTER TABLE direct_messages ADD COLUMN cold_batch_id INTEGER"); }
   catch(error) { if(!/duplicate|already exists/i.test(String(error))) throw error; }
   exec(store,"CREATE INDEX IF NOT EXISTS idx_direct_messages_cold_pending ON direct_messages(created_at) WHERE cold_batch_id IS NULL AND seen_at IS NOT NULL");
+  try { exec(store,"ALTER TABLE direct_messages ADD COLUMN media_deleted_at INTEGER"); }
+  catch(error) { if(!/duplicate|already exists/i.test(String(error))) throw error; }
+  exec(store,`
+    CREATE TABLE IF NOT EXISTS chat_retention_threads(
+      peer_a TEXT NOT NULL,peer_b TEXT NOT NULL,next_check INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY(peer_a,peer_b)
+    );
+    CREATE INDEX IF NOT EXISTS idx_chat_retention_due ON chat_retention_threads(next_check);
+    CREATE INDEX IF NOT EXISTS idx_message_photo_expiry ON direct_messages(created_at)
+      WHERE message_kind='image' AND media_deleted_at IS NULL;
+    CREATE INDEX IF NOT EXISTS idx_notification_message_id ON user_notifications(json_extract(metadata_json,'$.message_id'))
+      WHERE type='message';
+    CREATE TRIGGER IF NOT EXISTS queue_chat_retention AFTER INSERT ON direct_messages
+    BEGIN
+      INSERT OR IGNORE INTO chat_retention_threads(peer_a,peer_b,next_check)
+        VALUES(MIN(NEW.from_user_id,NEW.to_user_id),MAX(NEW.from_user_id,NEW.to_user_id),0);
+    END;
+    INSERT OR IGNORE INTO chat_retention_threads(peer_a,peer_b)
+      SELECT MIN(from_user_id,to_user_id),MAX(from_user_id,to_user_id)
+        FROM direct_messages GROUP BY MIN(from_user_id,to_user_id),MAX(from_user_id,to_user_id);
+  `);
   exec(store,"INSERT OR IGNORE INTO storage_budget(id,next_run,next_sweep) VALUES(1,?,?)",Date.now()+10000,Date.now()+10000);
 }
 export function storageBudget(store) {
@@ -82,6 +105,7 @@ export async function inventoryStorage(store, now=Date.now()) {
           if(references.some(row=>mediaKey(store.env,row.avatar_data_url)===object.key)) obsolete=false;
         }
       }
+      if(bucketIndex===0&&object.key.startsWith("messages/")&&Number(new Date(object.uploaded))<now-CHAT_PHOTO_MS) obsolete=true;
       if(bucketIndex===1&&isPrivateStorageKey(object.key)&&Number(new Date(object.uploaded))<now-DAY_MS) {
         obsolete=!one(store,"SELECT id FROM cold_batches WHERE object_key=?",object.key);
       }
@@ -100,7 +124,7 @@ export async function inventoryStorage(store, now=Date.now()) {
   return {ok:false,reason:"Inventory continuation",used_bytes:total};
 }
 export async function reserveMediaBudget(store, key, size, leaseId) {
-  if(!Number.isSafeInteger(size)||size<1||size>3_000_000||!key||!leaseId) throw new Error("Invalid media reservation");
+  if(!Number.isSafeInteger(size)||size<1||size>4_000_000||!key||!leaseId) throw new Error("Invalid media reservation");
   let state=storageBudget(store);
   if(!state.known&&!state.scanning) {
     await store.ctx.blockConcurrencyWhile(()=>inventoryStorage(store));
@@ -222,29 +246,52 @@ export async function walletHistory(store,userId,limit=200,before=Number.MAX_SAF
   }
   return result;
 }
-export async function archiveMessageBatch(store,now=Date.now()) {
-  const cutoff=now-30*DAY_MS;
-  const first=one(store,`SELECT id,from_user_id,to_user_id FROM direct_messages d
-    WHERE cold_batch_id IS NULL AND seen_at IS NOT NULL AND created_at<? AND length(text)>80
-    AND EXISTS(SELECT 1 FROM direct_messages n WHERE n.from_user_id=d.from_user_id
-      AND n.to_user_id=d.to_user_id AND n.created_at>d.created_at)
-    ORDER BY created_at LIMIT 1`,cutoff);
-  if(!first) return 0;
-  const data=rows(store,`SELECT d.* FROM direct_messages d
-    WHERE cold_batch_id IS NULL AND seen_at IS NOT NULL AND created_at<? AND length(text)>80
-      AND ((from_user_id=? AND to_user_id=?) OR (from_user_id=? AND to_user_id=?))
-      AND EXISTS(SELECT 1 FROM direct_messages n WHERE n.from_user_id=d.from_user_id
-        AND n.to_user_id=d.to_user_id AND n.created_at>d.created_at)
-    ORDER BY created_at LIMIT ?`,cutoff,first.from_user_id,first.to_user_id,first.to_user_id,first.from_user_id,BATCH_ROWS);
-  if(!data.length) return 0;
-  const payload=data.map(row=>({id:row.id,text:row.text,media_url:row.media_url}));
-  const uploaded=await putPrivateBatch(store,"messages","",payload);
-  store.ctx.storage.transactionSync(()=>{
-    const batch=exec(store,`INSERT INTO cold_batches(kind,object_key,sha256,size,first_at,last_at,row_count)
-      VALUES('messages',?,?,?,?,?,?) RETURNING id`,uploaded.key,uploaded.digest,uploaded.size,data[0].created_at,data.at(-1).created_at,data.length).one().id;
-    for(const row of data) exec(store,"UPDATE direct_messages SET text='',media_url=NULL,cold_batch_id=? WHERE id=?",batch,row.id);
-  });
-  return data.length;
+// Long chats are removed from server storage; the app retains received history on the phone.
+export async function cleanupPrivateChats(store,now=Date.now()) {
+  const cutoff=now-CHAT_PHOTO_MS;
+  let photos=0,messages=0;
+  const expiredPhotos=rows(store,`SELECT id FROM direct_messages
+    WHERE message_kind='image' AND media_deleted_at IS NULL AND created_at<?
+    ORDER BY created_at LIMIT 512`,cutoff);
+  for(const row of expiredPhotos) {
+    await store.env.EFFECT_MEDIA?.delete("messages/"+row.id);
+    exec(store,"UPDATE direct_messages SET media_deleted_at=? WHERE id=?",now,row.id);
+    photos++;
+  }
+  const pending=rows(store,"SELECT * FROM chat_retention_threads WHERE next_check<=? ORDER BY next_check LIMIT 32",now);
+  for(const thread of pending) {
+    if(messages>=512) break;
+    const a=store._resolveOwnerUserId(thread.peer_a)||thread.peer_a;
+    const b=store._resolveOwnerUserId(thread.peer_b)||thread.peer_b;
+    const boundary=one(store,`SELECT id,created_at FROM direct_messages
+      WHERE (from_user_id=? AND to_user_id=?) OR (from_user_id=? AND to_user_id=?)
+      ORDER BY created_at DESC,id DESC LIMIT 1 OFFSET ?`,a,b,b,a,CHAT_SERVER_MESSAGES-1);
+    if(!boundary) {
+      exec(store,"DELETE FROM chat_retention_threads WHERE peer_a=? AND peer_b=?",thread.peer_a,thread.peer_b);
+      continue;
+    }
+    const expired=rows(store,`SELECT id,message_kind FROM direct_messages
+      WHERE ((from_user_id=? AND to_user_id=?) OR (from_user_id=? AND to_user_id=?))
+        AND created_at<? AND (created_at<? OR (created_at=? AND id<?))
+      ORDER BY created_at,id LIMIT ?`,a,b,b,a,cutoff,boundary.created_at,boundary.created_at,boundary.id,512-messages);
+    for(const row of expired) {
+      // Delete the object before its authorizing SQL record; a failed deletion retries next sweep.
+      if(row.message_kind==='image') await store.env.EFFECT_MEDIA?.delete("messages/"+row.id);
+      store.ctx.storage.transactionSync(()=>{
+        exec(store,"DELETE FROM user_notifications WHERE type='message' AND json_extract(metadata_json,'$.message_id')=?",row.id);
+        exec(store,"DELETE FROM owner_panel_message_log WHERE message_id=?",row.id);
+        exec(store,"DELETE FROM direct_messages WHERE id=?",row.id);
+      });
+      messages++;
+    }
+    const oldestExcess=one(store,`SELECT created_at FROM direct_messages
+      WHERE (from_user_id=? AND to_user_id=?) OR (from_user_id=? AND to_user_id=?)
+      ORDER BY created_at DESC,id DESC LIMIT 1 OFFSET ?`,a,b,b,a,CHAT_SERVER_MESSAGES);
+    if(!oldestExcess) exec(store,"DELETE FROM chat_retention_threads WHERE peer_a=? AND peer_b=?",thread.peer_a,thread.peer_b);
+    else exec(store,"UPDATE chat_retention_threads SET next_check=? WHERE peer_a=? AND peer_b=?",
+      Math.max(now+3600000,Number(oldestExcess.created_at)+CHAT_PHOTO_MS+1),thread.peer_a,thread.peer_b);
+  }
+  return {deleted_photos:photos,deleted_messages:messages,server_messages_per_chat:CHAT_SERVER_MESSAGES};
 }
 export async function hydrateMessages(store,data) {
   const ids=[...new Set(data.map(row=>row.cold_batch_id).filter(Boolean))];
@@ -329,7 +376,7 @@ export async function runColdMaintenance(store,now=Date.now()) {
     const current=one(store,"SELECT * FROM storage_budget WHERE id=1");
     if(Number(current.next_run)>now) return {ok:true,skipped:true};
     exec(store,"UPDATE storage_budget SET next_run=?,last_run=? WHERE id=1",now+DAY_MS,now);
-    let archivedWallet=0,archivedMessages=0,avatars=0;
+    let archivedWallet=0,avatars=0;
     try {
       const inventory=await inventoryStorage(store,now);
       if(!inventory.ok) {
@@ -338,14 +385,13 @@ export async function runColdMaintenance(store,now=Date.now()) {
       }
       for(let batch=0;batch<2;batch++) {
         archivedWallet+=await archiveWalletBatch(store,now);
-        archivedMessages+=await archiveMessageBatch(store,now);
       }
       for(let image=0;image<4;image++) avatars+=await moveInlineAvatar(store,now);
     } catch(error) {
       console.error("Storage maintenance paused; source rows remain safe",String(error?.message||error));
     }
     cleanupExpiredRows(store,now);
-    return {ok:true,archived_wallet_rows:archivedWallet,archived_message_rows:archivedMessages,migrated_current_avatars:avatars};
+    return {ok:true,archived_wallet_rows:archivedWallet,migrated_current_avatars:avatars};
   });
 }
 export function initGameRetention(store,prefix) {
@@ -408,6 +454,8 @@ export async function sweepGameRetention(store,now=Date.now()) {
   if(Number(state?.next_sweep)>now) return {skipped:true};
   exec(store,"UPDATE storage_budget SET next_sweep=? WHERE id=1",now+3600000);
   const pruned=pruneMainGameHistory(store,now);
+  try { await cleanupPrivateChats(store,now); }
+  catch(error) {console.error("Private chat cleanup will retry",String(error?.message||error));}
   for(const [binding,id] of [["FRUIT_GAME","tinni-fruit-game-global"],["FRUIT_PARTY","tinni-fruit-party-global"]]) {
     if(!store.env[binding]) continue;
     try {await store.env[binding].get(store.env[binding].idFromName(id)).pruneHistory(now);}

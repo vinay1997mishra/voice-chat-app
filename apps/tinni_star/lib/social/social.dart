@@ -2,6 +2,9 @@ import 'dart:async';
 import '../infra/request_budget.dart';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
+
+import 'local_chat_store.dart';
 
 import '../infra/backend_http.dart';
 
@@ -67,12 +70,199 @@ class SocialService {
   SocialService({
     Uri? apiBase,
     HttpClient? httpClient,
+    LocalChatStore? localHistory,
   })  : apiBase = apiBase ??
             Uri.parse('https://tinni-star-api.mishrajii7991.workers.dev'),
-        _httpClient = httpClient ?? HttpClient();
+        _httpClient = httpClient ?? HttpClient(),
+        _localHistory = localHistory;
 
   final Uri apiBase;
   final HttpClient _httpClient;
+  final LocalChatStore? _localHistory;
+  String? _localAccount;
+  String? _localUserId;
+  Future<void> _historyReady = Future<void>.value();
+  Future<void> _photoQueue = Future<void>.value();
+  bool _saveRunning = false;
+  bool _saveDirty = false;
+  Future<void>? _saveTask;
+  final Map<String, Future<Uint8List?>> _photoReads = {};
+
+  Future<void> bindLocalAccount(String? email, String? userId) {
+    final account = email == null || userId == null
+        ? null : '${apiBase.origin}|${email.trim().isEmpty ? userId : email.trim().toLowerCase()}';
+    if (account == _localAccount && userId == _localUserId) return _historyReady;
+    final previous = _localAccount;
+    _localAccount = account;
+    _localUserId = userId;
+    _photoReads.clear();
+    if (previous != null && previous != account) {
+      directMessages.clear();
+      messageThreads.clear();
+      following.clear();
+      friends.clear();
+      friendProfiles.clear();
+      blocked.clear();
+      _setUnreadMessages(0);
+    }
+    if (account == null || _localHistory == null) return _historyReady;
+    _historyReady = () async {
+      try {
+        final data = await _localHistory.load(account);
+        if (_localAccount != account || _localUserId != userId) return;
+        final oldUserId = data['user_id']?.toString();
+        final existing = List<ChatMessage>.of(directMessages);
+        final cached = (data['messages'] as List? ?? const [])
+            .whereType<Map>().map((row) => _cachedMessage(row, oldUserId, userId!));
+        final rawThreads = data['threads'];
+        if (rawThreads is List) {
+          for (final row in rawThreads.whereType<Map>()) {
+            final peer = row['user_id']?.toString() ?? '';
+            if (peer.isEmpty || messageThreads.any((thread) => thread.userId == peer)) continue;
+            messageThreads.add(MessageThread(
+              userId: peer, displayName: row['display_name']?.toString() ?? peer,
+              isFriend: false, avatarDataUrl: row['avatar_data_url']?.toString(),
+              lastMessage: row['last_message'] is Map
+                  ? _cachedMessage(row['last_message'] as Map, oldUserId, userId!) : null,
+            ));
+          }
+        }
+        _mergeMessages([...cached, ...existing.map((message) =>
+            _cachedMessage(_messageJson(message), oldUserId, userId!))]);
+      } catch (error) {
+        debugPrint('Local chat history could not be loaded: $error');
+      }
+    }();
+    return _historyReady;
+  }
+
+  ChatMessage _cachedMessage(Map row, String? oldUserId, String userId) {
+    String participant(dynamic value) => value?.toString() == oldUserId
+        ? userId : value?.toString() ?? '';
+    final created = _asInt(row['created_at']), seen = _asInt(row['seen_at']);
+    return ChatMessage(id: row['id']?.toString(),
+      from: participant(row['from']), to: participant(row['to']),
+      text: row['text']?.toString() ?? '', kind: row['message_kind']?.toString() ?? 'text',
+      mediaUrl: row['media_url']?.toString(),
+      createdAt: created > 0 ? DateTime.fromMillisecondsSinceEpoch(created) : null,
+      seenAt: seen > 0 ? DateTime.fromMillisecondsSinceEpoch(seen) : null);
+  }
+
+  Map<String, dynamic> _messageJson(ChatMessage message) => {
+    'id': message.id, 'from': message.from, 'to': message.to, 'text': message.text,
+    'message_kind': message.kind, 'media_url': message.mediaUrl,
+    'created_at': message.createdAt?.millisecondsSinceEpoch,
+    'seen_at': message.seenAt?.millisecondsSinceEpoch,
+  };
+
+  void _mergeMessages(Iterable<ChatMessage> values) {
+    final merged = <String, ChatMessage>{};
+    for (final message in [...directMessages, ...values]) {
+      final key = message.id ?? '${message.from}|${message.to}|${message.createdAt}|${message.text}';
+      merged[key] = message;
+    }
+    directMessages
+      ..clear()
+      ..addAll(merged.values);
+    directMessages.sort((a, b) =>
+        (a.createdAt?.millisecondsSinceEpoch ?? 0).compareTo(b.createdAt?.millisecondsSinceEpoch ?? 0));
+    final myId = _localUserId;
+    if (myId != null) {
+      for (final message in directMessages) {
+        final peer = message.from == myId ? message.to : message.from;
+        final index = messageThreads.indexWhere((thread) => thread.userId == peer);
+        final old = index < 0 ? null : messageThreads[index];
+        if (old != null && (old.lastMessage?.createdAt?.millisecondsSinceEpoch ?? 0) >
+            (message.createdAt?.millisecondsSinceEpoch ?? 0)) continue;
+        final next = MessageThread(userId: peer,
+          displayName: old?.displayName ?? peer, isFriend: old?.isFriend ?? friends.contains(peer),
+          avatarDataUrl: old?.avatarDataUrl, unreadCount: old?.unreadCount ?? 0, lastMessage: message);
+        if (index < 0) { messageThreads.add(next); } else { messageThreads[index] = next; }
+      }
+    }
+  }
+
+  Future<void> flushLocalHistory() async {
+    await _saveTask;
+    await _writeLocalHistory();
+  }
+
+  Future<void> _writeLocalHistory() async {
+    await _historyReady;
+    final account = _localAccount, store = _localHistory;
+    if (account == null || store == null) return;
+    await store.save(account, {
+      'version': 1, 'user_id': _localUserId,
+      'messages': directMessages.map(_messageJson).toList(),
+      'threads': messageThreads.map((thread) => {
+        'user_id': thread.userId, 'display_name': thread.displayName,
+        'avatar_data_url': thread.avatarDataUrl,
+        'last_message': thread.lastMessage == null ? null : _messageJson(thread.lastMessage!),
+      }).toList(),
+    });
+  }
+
+  void _persistHistory() {
+    _saveDirty = true;
+    if (_saveRunning) return;
+    _saveRunning = true;
+    _saveTask = () async {
+      try {
+        while (_saveDirty) {
+          _saveDirty = false;
+          await _writeLocalHistory();
+        }
+      } catch (error) {
+        debugPrint('Local chat history could not be saved: $error');
+      } finally { _saveRunning = false; }
+    }();
+    unawaited(_saveTask!);
+  }
+
+  void _prefetchPhotos(Iterable<ChatMessage> messages, String authToken) {
+    if (_localHistory == null || _localAccount == null) return;
+    for (final message in messages.where((message) => message.isImage)) {
+      unawaited(loadMessagePhoto(authToken: authToken, message: message));
+    }
+  }
+
+  Future<Uint8List?> loadMessagePhoto({
+    required String authToken, required ChatMessage message,
+  }) {
+    final account = _localAccount, id = message.id ?? message.mediaUrl ?? '';
+    final key = '${account ?? ''}|$id';
+    return _photoReads.putIfAbsent(key, () {
+      final operation = _photoQueue.then<Uint8List?>((_) async {
+        try {
+          final local = account == null ? null : await _localHistory?.readPhoto(account, id);
+          if (local != null) return local;
+          if (account != _localAccount) return null;
+          final url = Uri.tryParse(message.mediaUrl ?? '');
+          if (url == null || url.origin != apiBase.origin ||
+              !url.path.startsWith('/message-media/')) return null;
+          final request = await openBackendRequest(_httpClient, 'GET', url);
+          request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+          final response = await closeBackendRequest(request);
+          if (response.statusCode != 200) { await response.drain<void>(); return null; }
+          final bytes = BytesBuilder(copy: false);
+          await for (final chunk in response.timeout(const Duration(seconds: 20))) {
+            bytes.add(chunk);
+            if (bytes.length > 4000000) throw StateError('Chat photo exceeds size limit');
+          }
+          final result = bytes.takeBytes();
+          if (result.isEmpty) return null;
+          if (account != null && _localHistory != null) {
+            await _localHistory.savePhoto(account, id, result);
+          }
+          return result;
+        } catch (_) { return null; }
+      });
+      _photoQueue = operation.then<void>((_) {});
+      unawaited(operation.whenComplete(() => _photoReads.remove(key)));
+      return operation;
+    });
+  }
+
 
   final Set<String> following = <String>{};
   final Set<String> friends = <String>{};
@@ -286,7 +476,8 @@ class SocialService {
       createdAt: DateTime.fromMillisecondsSinceEpoch((row['created_at'] as num?)?.toInt() ?? 0),
     );
     if (directMessages.any((item) => item.id == id)) return;
-    directMessages.add(message);
+    _mergeMessages([message]);
+    if (_messageAuthToken != null) _prefetchPhotos([message], _messageAuthToken!);
     final index = messageThreads.indexWhere((thread) => thread.userId == from);
     final old = index < 0 ? null : messageThreads.removeAt(index);
     messageThreads.insert(0, MessageThread(
@@ -294,6 +485,7 @@ class SocialService {
       avatarDataUrl: old?.avatarDataUrl, isFriend: old?.isFriend ?? friends.contains(from),
       lastMessage: message, unreadCount: (old?.unreadCount ?? 0) + 1,
     ));
+    _persistHistory();
   }
 
   void _handleMessageSocketClosed() {
@@ -512,6 +704,8 @@ class SocialService {
   }
 
   Future<List<MessageThread>> syncInbox(String authToken) async {
+    await _historyReady;
+    final localAccount = _localAccount;
     final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(path: '/messages/inbox'),
     );
@@ -578,9 +772,18 @@ class SocialService {
       }
     }
 
+    if (localAccount != _localAccount) throw StateError('Account changed');
+    final localOnly = messageThreads.where((thread) =>
+        !values.any((remote) => remote.userId == thread.userId)).map((thread) =>
+        MessageThread(userId: thread.userId, displayName: thread.displayName,
+          isFriend: false, avatarDataUrl: thread.avatarDataUrl, lastMessage: thread.lastMessage));
+    final combined = [...values, ...localOnly];
     messageThreads
       ..clear()
-      ..addAll(values);
+      ..addAll(combined);
+    _mergeMessages(values.map((thread) => thread.lastMessage).whereType<ChatMessage>());
+    _persistHistory();
+    _prefetchPhotos(values.map((thread) => thread.lastMessage).whereType<ChatMessage>(), authToken);
     _setUnreadMessages(
       values.fold<int>(
         0,
@@ -604,7 +807,7 @@ class SocialService {
       ..clear()
       ..addAll(friendThreads.map((thread) => thread.userId));
 
-    return values;
+    return combined;
   }
 
   Future<List<ChatMessage>> loadConversation({
@@ -612,12 +815,14 @@ class SocialService {
     required String myUserId,
     required String peerUserId,
   }) async {
+    await _historyReady;
+    final localAccount = _localAccount;
     final request = await openBackendRequest(_httpClient, 'GET', 
       apiBase.replace(
         path: '/messages',
         queryParameters: <String, String>{
           'peer_user_id': peerUserId,
-          'limit': '300',
+          'limit': '500',
         },
       ),
     );
@@ -667,13 +872,13 @@ class SocialService {
       }
     }
 
-    directMessages.removeWhere(
-      (message) =>
-          (message.from == myUserId && message.to == peerUserId) ||
-          (message.from == peerUserId && message.to == myUserId),
-    );
-    directMessages.addAll(values);
-    return values;
+    if (localAccount != _localAccount) throw StateError('Account changed');
+    _mergeMessages(values);
+    _persistHistory();
+    _prefetchPhotos(values, authToken);
+    return directMessages.where((message) =>
+        (message.from == myUserId && message.to == peerUserId) ||
+        (message.from == peerUserId && message.to == myUserId)).toList();
   }
 
   Future<ChatMessage> sendDirectMessageRemote({
@@ -682,6 +887,8 @@ class SocialService {
     required String to,
     required String text,
   }) async {
+    await _historyReady;
+    final sendingAccount = _localAccount;
     final value = text.trim();
     if (value.isEmpty) throw StateError('Message cannot be empty');
     if (!friends.contains(to)) {
@@ -713,6 +920,7 @@ class SocialService {
       );
     }
 
+    if (sendingAccount != _localAccount) throw StateError('Account changed');
     final raw = data['message'];
     if (raw is! Map) throw StateError('Server returned invalid message');
     final createdAtMs = _asInt(raw['created_at']);
@@ -731,7 +939,8 @@ class SocialService {
           ? DateTime.fromMillisecondsSinceEpoch(seenAtMs)
           : null,
     );
-    directMessages.add(message);
+    _mergeMessages([message]);
+    _persistHistory();
     return message;
   }
 
@@ -741,6 +950,8 @@ class SocialService {
     required String to,
     required String dataUrl,
   }) async {
+    await _historyReady;
+    final sendingAccount = _localAccount;
     if (!friends.contains(to)) {
       throw StateError(
         'Both users must follow each other before sending photos.',
@@ -773,6 +984,7 @@ class SocialService {
       );
     }
 
+    if (sendingAccount != _localAccount) throw StateError('Account changed');
     final raw = data['message'];
     if (raw is! Map) throw StateError('Server returned invalid photo message');
     final createdAtMs = _asInt(raw['created_at']);
@@ -794,7 +1006,13 @@ class SocialService {
     if (!message.isImage) {
       throw StateError('Server returned invalid photo message');
     }
-    directMessages.add(message);
+    _mergeMessages([message]);
+    final localAccount = _localAccount, store = _localHistory;
+    if (localAccount != null && store != null && message.id != null) {
+      try { await store.savePhoto(localAccount, message.id!, base64Decode(dataUrl.split(',').last)); }
+      catch (error) { debugPrint('Sent photo could not be saved locally: $error'); }
+    }
+    _persistHistory();
     return message;
   }
 

@@ -1,5 +1,5 @@
 import * as coldStorage from "./cold_storage.js";
-const APP_SCHEMA_VERSION = "2026-10-06-cold-storage-1";
+const APP_SCHEMA_VERSION = "2026-10-06-cold-storage-2";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
@@ -10343,7 +10343,7 @@ export class AppDirectoryStore extends DurableObject {
          FROM direct_messages
         WHERE (from_user_id = ? AND to_user_id = ?)
            OR (from_user_id = ? AND to_user_id = ?)
-        ORDER BY created_at ASC
+        ORDER BY created_at DESC,id DESC
         LIMIT ?`,
       userId,
       peerUserId,
@@ -10351,7 +10351,7 @@ export class AppDirectoryStore extends DurableObject {
       userId,
       limit,
     ).toArray();
-    return (await coldStorage.hydrateMessages(this,stored)).map((row) => ({
+    return (await coldStorage.hydrateMessages(this,stored.reverse())).map((row) => ({
       id: String(row.id),
       from: String(row.from_user_id),
       to: String(row.to_user_id),
@@ -11361,12 +11361,13 @@ export class AppDirectoryStore extends DurableObject {
     const messageId = String(messageIdValue || "").trim();
     if (!userId || !messageId) return false;
     const row = this.ctx.storage.sql.exec(
-      `SELECT from_user_id,to_user_id,message_kind
+      `SELECT from_user_id,to_user_id,message_kind,created_at,media_deleted_at
          FROM direct_messages
         WHERE id=? LIMIT 1`,
       messageId,
     ).toArray()[0];
     if (!row || String(row.message_kind || "text") !== "image") return false;
+    if(row.media_deleted_at!=null||Number(row.created_at)<Date.now()-coldStorage.CHAT_PHOTO_MS) return false;
     return String(row.from_user_id) === userId || String(row.to_user_id) === userId;
   }
 
