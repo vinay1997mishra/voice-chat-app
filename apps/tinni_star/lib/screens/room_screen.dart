@@ -3182,9 +3182,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     BoxFit fit = BoxFit.contain,
   }) {
     final asset = gift.artworkAsset;
-    if(gift.posterUrl?.startsWith('https://') == true) return SizedBox(
+    if(gift.posterUrl?.startsWith('https://') == true) { return SizedBox(
       width:size,height:size,child:Image.network(gift.posterUrl!,fit:fit,
-        errorBuilder:(_,error,stackTrace)=>Center(child:Text(gift.emoji,style:TextStyle(fontSize:size*.62)))));
+        errorBuilder:(_,error,stackTrace)=>Center(child:Text(gift.emoji,style:TextStyle(fontSize:size*.62))))); }
     if (asset == null || asset.isEmpty) {
       return SizedBox(
         width: size,

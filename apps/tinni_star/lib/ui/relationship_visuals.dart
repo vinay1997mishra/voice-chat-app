@@ -35,12 +35,13 @@ class RelationshipHero extends StatefulWidget {
   const RelationshipHero({super.key,required this.level,required this.progress,
     required this.startedAt,required this.nameA,required this.nameB,
     required this.idA,required this.idB,this.imageA,this.imageB,
-    this.nextThreshold,this.previousThreshold=0,this.rivalry=false});
+    this.nextThreshold,this.previousThreshold=0,this.rivalry=false,this.symbol});
   final int level,progress,previousThreshold;
   final int? nextThreshold;
   final DateTime startedAt;
   final String nameA,nameB,idA,idB;
   final ImageProvider? imageA,imageB;
+  final Widget? symbol;
   final bool rivalry;
   @override
   State<RelationshipHero> createState()=>_RelationshipHeroState();
@@ -67,8 +68,8 @@ class _RelationshipHeroState extends State<RelationshipHero>
   }
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if(state==AppLifecycleState.resumed&&!reduced) _pulse.repeat();
-    else _pulse.stop();
+    if(state==AppLifecycleState.resumed&&!reduced) { _pulse.repeat(); }
+    else { _pulse.stop(); }
   }
   @override
   void dispose() {
@@ -81,7 +82,7 @@ class _RelationshipHeroState extends State<RelationshipHero>
         border:Border.all(color:widget.rivalry?const Color(0xFFDADBE6):const Color(0xFFFFD485),width:2),
         boxShadow:[BoxShadow(color:(widget.rivalry?Colors.red:Colors.pink).withValues(alpha:.4),blurRadius:12+widget.level.clamp(0,12).toDouble())]),
         child:CircleAvatar(radius:33,backgroundImage:image,
-          onBackgroundImageError:image==null?null:(_,__) {},
+          onBackgroundImageError:image==null?null:(error,stackTrace) {},
           child:image==null?Text(name.isEmpty?'?':name.characters.first):null)),
       const SizedBox(height:9),Text(name,maxLines:1,overflow:TextOverflow.ellipsis,
         style:const TextStyle(color:Colors.white,fontWeight:FontWeight.w800)),
@@ -115,7 +116,7 @@ class _RelationshipHeroState extends State<RelationshipHero>
                 child:Container(width:70,height:76,alignment:Alignment.center,
                   child:widget.rivalry?Text('VS',style:TextStyle(fontSize:35,color:color,fontWeight:FontWeight.w900,
                     shadows:[Shadow(color:color,blurRadius:15)]))
-                    :Icon(Icons.favorite_rounded,size:58,color:color,shadows:[Shadow(color:color,blurRadius:18)]))),
+                    :widget.symbol ?? Icon(Icons.favorite_rounded,size:58,color:color,shadows:[Shadow(color:color,blurRadius:18)]))),
               Expanded(child:person(widget.nameB,widget.idB,widget.imageB,60*(1-enter))),
             ]),
             const SizedBox(height:20),RelationshipBadge(level:widget.level,rivalry:widget.rivalry),
@@ -203,7 +204,7 @@ class _RelationshipSeatAuraState extends State<RelationshipSeatAura> with Single
   void initState(){super.initState();motion=AnimationController(vsync:this,duration:const Duration(seconds:4));}
   @override
   void didChangeDependencies(){super.didChangeDependencies();
-    if(widget.level>=5&&!MediaQuery.disableAnimationsOf(context))motion.repeat();else motion.stop();}
+    if(widget.level>=5&&!MediaQuery.disableAnimationsOf(context)) { motion.repeat(); } else { motion.stop(); }}
   @override
   void dispose(){motion.dispose();super.dispose();}
   @override

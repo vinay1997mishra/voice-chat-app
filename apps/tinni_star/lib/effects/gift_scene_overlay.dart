@@ -212,8 +212,8 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   Widget build(BuildContext context) {
     final event = _event;
     if (event == null || !widget.enabled) return const SizedBox.shrink();
-    if(_levelUp) return IgnorePointer(child:RelationshipLevelUpVisual(level:event.gift.levelAfter,
-      rivalry:event.gift.resolvedCategory=='vs',timeline:_motion));
+    if(_levelUp) { return IgnorePointer(child:RelationshipLevelUpVisual(level:event.gift.levelAfter,
+      rivalry:event.gift.resolvedCategory=='vs',timeline:_motion)); }
     final fullScreen = event.gift.effectTier == 'cinematic' || (event.gift.effectTier.isEmpty && PremiumGiftCatalog.isFullScreen(event.gift.id));
     final countryFlag = event.gift.id.startsWith('flag-');
     final reduced = MediaQuery.disableAnimationsOf(context);

@@ -7851,7 +7851,7 @@ export class AppDirectoryStore extends DurableObject {
       user_a_avatar: row.user_a_avatar ? String(row.user_a_avatar) : null,
       user_b_avatar: row.user_b_avatar ? String(row.user_b_avatar) : null,
       intimacy: Math.max(0, Number(row.intimacy || 0)),
-      level: Math.max(1, Number(row.level || 1)),
+      level: this._cpLevelForIntimacy(row.intimacy),
     }));
   }
 

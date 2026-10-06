@@ -163,9 +163,9 @@ class _CinematicVideoState extends State<CinematicVideo>
   Widget build(BuildContext context) {
     if (_reducedMotion) {
       final poster = widget.posterUrl;
-      if (poster != null && poster.startsWith('https://')) return Image.network(
+      if (poster != null && poster.startsWith('https://')) { return Image.network(
         poster, fit:widget.fit, errorBuilder:(_,error,stackTrace)=>widget.fallback,
-      );
+      ); }
       return Image.asset(
         CinematicAssets.posterFor(widget.sceneId),
         key: ValueKey('cinematic-poster-' + widget.sceneId),

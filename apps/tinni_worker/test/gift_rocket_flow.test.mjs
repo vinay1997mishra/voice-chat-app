@@ -61,8 +61,8 @@ assert.doesNotMatch(
 
 assert.match(
   roomScreen,
-  /const giftCategories = <String>\[\s*'Normal',\s*'Lucky',\s*'CP',\s*'Country',\s*'Luxury',\s*\];/,
-  "Gift box must expose only Normal, Lucky, CP, Country and Luxury",
+  /const giftCategories = <String>\[\s*'Normal',\s*'Lucky',\s*'CP',\s*'VS',\s*'Country',\s*'Luxury',\s*\];/,
+  "Gift box must expose Normal, Lucky, CP, VS, Country and Luxury",
 );
 assert.match(
   roomScreen,

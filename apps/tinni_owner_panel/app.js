@@ -2413,6 +2413,7 @@ function renderRelationshipGiftManager(category) {
   if (!root) return;
   if (currentSession?.role !== "owner") { root.hidden = true; return; }
   root.hidden = false;
+  for (const url of root._giftPreviewUrls?.values() || []) URL.revokeObjectURL(url);
   const label = category.toUpperCase();
   const items = state.catalog.filter(item => item.kind === "gift" && relationshipCategory(item.data?.category) === category);
   root.innerHTML = `<div class="panel-head"><div><h2>${label} Gifts</h2><p>${category === "cp" ? "Romantic bond" : "Rivalry clash"} · Owner video management</p></div></div>
@@ -2448,6 +2449,7 @@ function renderRelationshipGiftManager(category) {
   });
   let selected = null;
   const localUrls = new Map();
+  root._giftPreviewUrls = localUrls;
   function preview(kind, url, local = false) {
     const element = form.querySelector(kind === "video" ? "[data-gift-preview]" : "[data-poster-preview]");
     if (localUrls.has(kind)) { URL.revokeObjectURL(localUrls.get(kind)); localUrls.delete(kind); }

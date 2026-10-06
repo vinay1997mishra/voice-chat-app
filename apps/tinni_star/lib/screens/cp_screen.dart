@@ -524,7 +524,7 @@ class _CpScreenState extends State<CpScreen> {
                   return Column(
                     children: [
                       RelationshipHero(
-                        key: const Key('cp-nest-hero'), level: cp.level, progress:cp.intimacy,
+                        key: const Key('cp-nest-hero'), symbol:const _CpHeart(), level: cp.level, progress:cp.intimacy,
                         startedAt:cp.startedAt, nameA:account?.displayName ?? '', nameB:partnerName,
                         idA:account?.userId ?? '',idB:partnerId,imageA:myAvatar,imageB:partnerAvatar,
                         nextThreshold:cp.nextLevelThreshold,previousThreshold:cp.previousLevelThreshold,
