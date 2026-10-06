@@ -65,6 +65,13 @@ class RoomGiftVisualEvent {
     this.senderName = '',
     this.sentCoins = 0,
     this.unitPrice = 0,
+    this.category = '',
+    this.animationUrl,
+    this.posterUrl,
+    this.effectTier = '',
+    this.animationDurationMs = 5000,
+    this.levelBefore = 1,
+    this.levelAfter = 1,
     this.sessionId = '',
     this.multiplierCounts = const [],
     this.highWin = false,
@@ -89,6 +96,13 @@ class RoomGiftVisualEvent {
   final String senderName;
   final int sentCoins;
   final int unitPrice;
+  final String category;
+  final String? animationUrl;
+  final String? posterUrl;
+  final String effectTier;
+  final int animationDurationMs;
+  final int levelBefore;
+  final int levelAfter;
   final String sessionId;
   final List<Map<String, int>> multiplierCounts;
   final bool highWin;
@@ -112,6 +126,13 @@ class RoomGiftVisualEvent {
       createdAt: DateTime.fromMillisecondsSinceEpoch(number('created_at')),
       roomSummary: gift['room_summary'] is Map ? Map<String, dynamic>.from(gift['room_summary'] as Map) : null,
       senderName: gift['sender_name']?.toString() ?? '', sentCoins: math.max(0, number('sent_coins')),
+      category: gift['category']?.toString() ?? '',
+      animationUrl: gift['animation_url']?.toString(),
+      posterUrl: gift['poster_url']?.toString(),
+      effectTier: gift['effect_tier']?.toString() ?? '',
+      animationDurationMs: number('animation_duration_ms').clamp(1000,15000).toInt(),
+      levelBefore: math.max(1,number('level_before')),
+      levelAfter: math.max(1,number('level_after')),
       unitPrice: math.max(0, number('unit_price')), sessionId: gift['session_id']?.toString() ?? '',
       multiplierCounts: List.unmodifiable(counts is List ? counts.whereType<Map>().map((row) => <String, int>{
         'multiplier': int.tryParse(row['multiplier']?.toString() ?? '') ?? -1,
@@ -1110,6 +1131,7 @@ class RoomPresenceService extends ChangeNotifier {
         '/gifts/send',
         authToken,
         <String, Object>{
+          'request_id': 'gift_' + List.generate(24, (_) => math.Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join(),
           'room_id': roomId,
           'gift_id': giftId,
           'gift_name': giftName,

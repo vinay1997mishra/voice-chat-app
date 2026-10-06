@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app/tinni_state.dart';
 import '../relationship/cp_service.dart';
 import '../ui/royal_theme.dart';
+import '../ui/relationship_visuals.dart';
 import 'cp_disconnect_screen.dart';
 import 'cp_ranking_screen.dart';
 import 'gifts_screen.dart';
@@ -84,6 +85,11 @@ class _CpScreenState extends State<CpScreen> {
       // Keep the locally known friend list usable if the network is unavailable.
     }
     if (mounted) setState(() => loadingFriends = false);
+  }
+
+  Future<void> _openCpGifts() async {
+    await Navigator.push(context, MaterialPageRoute(builder:(_) => GiftsScreen(state:widget.state,initialCategory:'CP')));
+    if (mounted) await _syncCp();
   }
 
   Future<void> _requestCp(String friendId) async {
@@ -198,21 +204,7 @@ class _CpScreenState extends State<CpScreen> {
     return null;
   }
 
-  int _loveDays(DateTime startedAt) {
-    final start = DateTime(startedAt.year, startedAt.month, startedAt.day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final value = today.difference(start).inDays + 1;
-    return value < 1 ? 1 : value;
-  }
 
-  String _dateText(DateTime value) {
-    return value.day.toString().padLeft(2, '0') +
-        '/' +
-        value.month.toString().padLeft(2, '0') +
-        '/' +
-        value.year.toString();
-  }
 
 
   Future<void> _showRingCabinet() async {
@@ -455,19 +447,19 @@ class _CpScreenState extends State<CpScreen> {
                 icon: Icons.card_giftcard_rounded,
                 title: 'Gift intimacy',
                 subtitle:
-                    'Only CP-category gifts sent between connected CP partners increase CP intimacy and CP level. Other gift categories do not raise CP level. If a CP gift is configured as Lucky, its intimacy counts at 10%; eligible same-day mutual CP gifting keeps the 1.2× multiplier.',
+                    'Only confirmed CP-category gifts sent between your active couple increase CP progress. CP, VS, Lucky, Normal and Luxury progress remain separate.',
               ),
               _CpRuleTile(
                 icon: Icons.workspace_premium_rounded,
-                title: 'CP level cycle',
+                title: 'CP progress',
                 subtitle:
-                    'When intimacy reaches the next level threshold, the level updates and a new 7-day cycle begins. Lv.1 → Lv.2 starts at 200K intimacy.',
+                    'Levels and the next requirement come from confirmed backend progress, following the 2M economy and 100× scaled ladder.',
               ),
               _CpRuleTile(
                 icon: Icons.timelapse_rounded,
-                title: 'Maintain / decay',
+                title: 'Persistent relationship',
                 subtitle:
-                    'If no intimacy is gained for 3 consecutive days, from day 4 intimacy decreases by 5% per day until activity resumes.',
+                    'CP progress does not decay; disconnect requires intentional confirmation.',
               ),
               _CpRuleTile(
                 icon: Icons.visibility_rounded,
@@ -479,7 +471,7 @@ class _CpScreenState extends State<CpScreen> {
                 icon: Icons.currency_exchange_rounded,
                 title: 'Tinni CP conversion',
                 subtitle:
-                    'Reference app: 45,000 coins = USD 1. Tinni: 2,000,000 coins = USD 1. CP Heart is scaled to 44,444 coins and CP Invite to 2,222,222 coins.',
+                    'Tinni uses a 2,000,000-coin reference. Only confirmed CP gifts count toward this relationship.',
               ),
             ],
           ),
@@ -510,6 +502,12 @@ class _CpScreenState extends State<CpScreen> {
         child: ListView(
           padding: const EdgeInsets.all(14),
           children: [
+            if(cp==null && widget.state.cp.state!=CourtingState.pending) Padding(
+              padding:const EdgeInsets.only(bottom:12),child:TextField(
+                keyboardType:TextInputType.number,
+                decoration:const InputDecoration(labelText:'User ID',hintText:'Enter a user ID to send a CP request'),
+                onSubmitted:(id)=>_requestCp(id.trim()),
+              )),
             if (cp != null) ...[
               Builder(
                 builder: (context) {
@@ -522,184 +520,14 @@ class _CpScreenState extends State<CpScreen> {
                     _partnerProfile?['avatar_data_url']?.toString(),
                   );
                   final myAvatar = _avatarProvider(account?.avatarDataUrl);
-                  final days = _loveDays(cp.startedAt);
-                  final progress = cp.level <= 1
-                      ? (cp.intimacy / 200000)
-                          .clamp(0.0, 1.0)
-                          .toDouble()
-                      : 1.0;
 
                   return Column(
                     children: [
-                      Container(
-                        key: const Key('cp-nest-hero'),
-                        padding: const EdgeInsets.fromLTRB(14, 18, 14, 16),
-                        decoration: BoxDecoration(
-                          gradient: const LinearGradient(
-                            begin: Alignment.topLeft,
-                            end: Alignment.bottomRight,
-                            colors: [
-                              Color(0xFF3C112C),
-                              Color(0xFF6E214E),
-                              Color(0xFF1A0B1A),
-                            ],
-                          ),
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(
-                            color: FeaturePalette.cp.withValues(alpha: 0.82),
-                            width: 1.4,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color:
-                                  FeaturePalette.cp.withValues(alpha: 0.24),
-                              blurRadius: 22,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          children: [
-                            const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.auto_awesome_rounded,
-                                  color: Color(0xFFFFD766),
-                                  size: 17,
-                                ),
-                                SizedBox(width: 6),
-                                Text(
-                                  'CP NEST',
-                                  style: TextStyle(
-                                    color: FeaturePalette.cpSoft,
-                                    fontSize: 20,
-                                    letterSpacing: 2.2,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                                ),
-                                SizedBox(width: 6),
-                                Icon(
-                                  Icons.auto_awesome_rounded,
-                                  color: Color(0xFFFFD766),
-                                  size: 17,
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 15),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _CpPersonAvatar(
-                                    image: myAvatar,
-                                    name: account?.displayName ?? 'You',
-                                    userId: account?.userId ?? '',
-                                  ),
-                                ),
-                                const Padding(
-                                  padding: EdgeInsets.symmetric(horizontal: 5),
-                                  child: Column(
-                                    children: [
-                                      _CpHeart(),
-                                      Text(
-                                        'LOVE',
-                                        style: TextStyle(
-                                          color: FeaturePalette.cpSoft,
-                                          fontSize: 9,
-                                          fontWeight: FontWeight.w900,
-                                          letterSpacing: 1.3,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: _CpPersonAvatar(
-                                    image: partnerAvatar,
-                                    name: partnerName,
-                                    userId: partnerId,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 15),
-                            Wrap(
-                              spacing: 8,
-                              runSpacing: 8,
-                              alignment: WrapAlignment.center,
-                              children: [
-                                _CpNestPill(
-                                  icon: Icons.favorite_rounded,
-                                  text: days.toString() + ' Love Days',
-                                ),
-                                _CpNestPill(
-                                  icon: Icons.workspace_premium_rounded,
-                                  text: 'CP Lv.' + cp.level.toString(),
-                                ),
-                                _CpNestPill(
-                                  icon: Icons.auto_awesome_rounded,
-                                  text: cp.intimacy.toString() + ' Intimacy',
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 13),
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(20),
-                              child: LinearProgressIndicator(
-                                value: progress,
-                                minHeight: 8,
-                                backgroundColor: const Color(0x55220D20),
-                                valueColor:
-                                    const AlwaysStoppedAnimation<Color>(
-                                  FeaturePalette.cp,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(height: 7),
-                            if (cp.level <= 1)
-                              Text(
-                                (200000 - cp.intimacy).clamp(0, 200000).toString() +
-                                    ' intimacy needed for Lv.2',
-                                style: const TextStyle(
-                                  color: FeaturePalette.cpSoft,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                              ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'Together since ' + _dateText(cp.startedAt),
-                              style: const TextStyle(
-                                color: Color(0xFFE7A6CC),
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                            if (cp.ringId != null) ...[
-                              const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 11,
-                                  vertical: 5,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: const Color(0x44220D20),
-                                  borderRadius: BorderRadius.circular(16),
-                                  border: Border.all(
-                                    color: const Color(0x99FFD766),
-                                  ),
-                                ),
-                                child: Text(
-                                  '💍 ' + cp.ringId!,
-                                  style: const TextStyle(
-                                    color: Color(0xFFFFD766),
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 11,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ],
-                        ),
+                      RelationshipHero(
+                        key: const Key('cp-nest-hero'), level: cp.level, progress:cp.intimacy,
+                        startedAt:cp.startedAt, nameA:account?.displayName ?? '', nameB:partnerName,
+                        idA:account?.userId ?? '',idB:partnerId,imageA:myAvatar,imageB:partnerAvatar,
+                        nextThreshold:cp.nextLevelThreshold,previousThreshold:cp.previousLevelThreshold,
                       ),
                       const SizedBox(height: 14),
                       GridView.count(
@@ -715,17 +543,7 @@ class _CpScreenState extends State<CpScreen> {
                             icon: Icons.card_giftcard_rounded,
                             label: 'CP Gifts',
                             subtitle: 'Level up',
-                            onTap: () {
-                              Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) => GiftsScreen(
-                                    state: widget.state,
-                                    initialCategory: 'CP',
-                                  ),
-                                ),
-                              );
-                            },
+                            onTap: _openCpGifts,
                           ),
                           _CpNestAction(
                             icon: Icons.diamond_rounded,
@@ -920,114 +738,6 @@ class _CpScreenState extends State<CpScreen> {
             ],
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _CpPersonAvatar extends StatelessWidget {
-  const _CpPersonAvatar({
-    required this.image,
-    required this.name,
-    required this.userId,
-  });
-
-  final ImageProvider? image;
-  final String name;
-  final String userId;
-
-  @override
-  Widget build(BuildContext context) {
-    final initial = name.trim().isEmpty ? '?' : name.trim().characters.first;
-    return Column(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(3),
-          decoration: BoxDecoration(
-            shape: BoxShape.circle,
-            border: Border.all(
-              color: const Color(0xFFFFD766),
-              width: 2,
-            ),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66FF4FA3),
-                blurRadius: 13,
-              ),
-            ],
-          ),
-          child: CircleAvatar(
-            radius: 34,
-            backgroundColor: const Color(0xFF2B1025),
-            backgroundImage: image,
-            child: image == null
-                ? Text(
-                    initial.toUpperCase(),
-                    style: const TextStyle(
-                      color: FeaturePalette.cpSoft,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 25,
-                    ),
-                  )
-                : null,
-          ),
-        ),
-        const SizedBox(height: 7),
-        Text(
-          name,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: RoyalPalette.cream,
-            fontWeight: FontWeight.w900,
-            fontSize: 12,
-          ),
-        ),
-        Text(
-          'ID ' + userId,
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: const TextStyle(
-            color: Color(0xFFD790B8),
-            fontSize: 9.5,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _CpNestPill extends StatelessWidget {
-  const _CpNestPill({required this.icon, required this.text});
-
-  final IconData icon;
-  final String text;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: const Color(0x44220D20),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(
-          color: FeaturePalette.cp.withValues(alpha: 0.48),
-        ),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: FeaturePalette.cpSoft, size: 13),
-          const SizedBox(width: 5),
-          Text(
-            text,
-            style: const TextStyle(
-              color: FeaturePalette.cpSoft,
-              fontSize: 10.5,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
-        ],
       ),
     );
   }

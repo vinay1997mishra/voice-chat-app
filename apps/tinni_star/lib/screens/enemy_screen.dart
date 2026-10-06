@@ -6,6 +6,8 @@ import '../app/tinni_state.dart';
 import '../economy/enemy_gift_catalog.dart';
 import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
+import '../ui/relationship_visuals.dart';
+import 'relationship_ranking_screen.dart';
 import 'gifts_screen.dart';
 
 class EnemyScreen extends StatefulWidget {
@@ -18,7 +20,7 @@ class EnemyScreen extends StatefulWidget {
 
 class _EnemyScreenState extends State<EnemyScreen> {
   RemoteEnemy? enemy;
-  Map<String, dynamic>? partnerProfile;
+  Map<String, dynamic>? rivalProfile;
   bool loading = true;
   bool loadingFriends = false;
   bool busy = false;
@@ -56,26 +58,32 @@ class _EnemyScreenState extends State<EnemyScreen> {
     if (account == null) return;
     try {
       final remote = await widget.state.backend.enemyState(account.authToken);
-      Map<String, dynamic>? partner;
+      Map<String, dynamic>? rival;
       if (remote != null && remote.state == 'accepted') {
-        final partnerId =
+        final rivalId =
             remote.userA == account.userId ? remote.userB : remote.userA;
         try {
-          partner = await widget.state.backend.searchUserById(
+          rival = await widget.state.backend.searchUserById(
             account.authToken,
-            partnerId,
+            rivalId,
           );
         } catch (_) {}
       }
       if (!mounted) return;
       setState(() {
         enemy = remote;
-        partnerProfile = partner;
+        widget.state.vsRelationship = remote;
+        rivalProfile = rival;
         loading = false;
       });
     } catch (_) {
       if (mounted) setState(() => loading = false);
     }
+  }
+
+  Future<void> _openVsGifts() async {
+    await Navigator.push(context,MaterialPageRoute(builder:(_) => GiftsScreen(state:widget.state,initialCategory:'VS')));
+    if(mounted) await _syncEnemy();
   }
 
   Future<void> _syncFriends() async {
@@ -95,9 +103,9 @@ class _EnemyScreenState extends State<EnemyScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF10080A),
-        title: const Text('Enemy Challenge'),
+        title: const Text('VS Challenge'),
         content: const Text(
-          'Send an Enemy challenge? Once accepted, only Enemy gifts sent between this pair will raise the Enemy level.',
+          'Send an VS challenge? Once accepted, only VS gifts sent between this pair will raise the VS level.',
         ),
         actions: [
           TextButton(
@@ -118,7 +126,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
         account.authToken,
         userId,
       );
-      partnerProfile = null;
+      rivalProfile = null;
       if (mounted) setState(() {});
     } catch (error) {
       if (mounted) {
@@ -155,13 +163,15 @@ class _EnemyScreenState extends State<EnemyScreen> {
   Future<void> _disconnect() async {
     final account = widget.state.auth.current;
     if (account == null || busy) return;
+    final relation=enemy;
+    if(relation==null) return;
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: const Color(0xFF10080A),
-        title: const Text('Remove Enemy'),
+        title: const Text('Remove VS'),
         content: const Text(
-          'Remove this Enemy relation? The current rivalry level will be cleared.',
+          'Remove this VS relation? The current rivalry level will be cleared.',
         ),
         actions: [
           TextButton(
@@ -179,11 +189,12 @@ class _EnemyScreenState extends State<EnemyScreen> {
     if (confirmed != true || !mounted) return;
     setState(() => busy = true);
     try {
-      await widget.state.backend.enemyDisconnect(account.authToken);
+      await widget.state.backend.enemyDisconnect(account.authToken,expectedPair:'${relation.userA}:${relation.userB}:${relation.createdAt}');
       if (!mounted) return;
       setState(() {
         enemy = null;
-        partnerProfile = null;
+        widget.state.vsRelationship = null;
+        rivalProfile = null;
       });
     } catch (error) {
       if (mounted) {
@@ -231,7 +242,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
         SizedBox(
           width: 105,
           child: Text(
-            add ? 'Add Enemy' : name,
+            add ? 'Add VS' : name,
             maxLines: 1,
             textAlign: TextAlign.center,
             overflow: TextOverflow.ellipsis,
@@ -302,118 +313,28 @@ class _EnemyScreenState extends State<EnemyScreen> {
 
   Widget _accepted(RemoteEnemy relation) {
     final account = widget.state.auth.current!;
-    final partnerId =
+    final rivalId =
         relation.userA == account.userId ? relation.userB : relation.userA;
-    final partnerName =
-        partnerProfile?['display_name']?.toString() ?? partnerId;
-    final partnerAvatar = _avatar(
-      partnerProfile?['avatar_data_url']?.toString(),
+    final rivalName =
+        rivalProfile?['display_name']?.toString() ?? rivalId;
+    final rivalAvatar = _avatar(
+      rivalProfile?['avatar_data_url']?.toString(),
     );
-    final next = relation.nextLevelThreshold;
-    final progress = next == null || next <= 0
-        ? 1.0
-        : (relation.rivalry / next).clamp(0.0, 1.0).toDouble();
 
     return Column(
       children: [
-        Container(
-          key: const Key('enemy-hero'),
-          padding: const EdgeInsets.fromLTRB(14, 18, 14, 18),
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(26),
-            border: Border.all(color: red, width: 1.5),
-            gradient: const LinearGradient(
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
-              colors: [
-                Color(0xFF260508),
-                Color(0xFF08090D),
-                Color(0xFF170407),
-              ],
-            ),
-            boxShadow: const [
-              BoxShadow(color: Color(0x66FF1024), blurRadius: 28),
-            ],
-          ),
-          child: Column(
-            children: [
-              const Text(
-                'ENEMY ZONE',
-                style: TextStyle(
-                  color: red,
-                  fontSize: 21,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 2.4,
-                  shadows: [
-                    Shadow(color: Color(0xFFFF1327), blurRadius: 14),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: _avatarCard(
-                      image: _avatar(account.avatarDataUrl),
-                      name: account.displayName,
-                      userId: account.userId,
-                    ),
-                  ),
-                  _enemyCore(),
-                  Expanded(
-                    child: _avatarCard(
-                      image: partnerAvatar,
-                      name: partnerName,
-                      userId: partnerId,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Text(
-                    'Enemy Lv.${relation.level}',
-                    style: const TextStyle(
-                      color: red,
-                      fontWeight: FontWeight.w900,
-                      fontSize: 16,
-                    ),
-                  ),
-                  const Spacer(),
-                  Text(
-                    '${relation.rivalry} rivalry',
-                    style: const TextStyle(
-                      color: Color(0xFFBCA4A7),
-                      fontSize: 11,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: LinearProgressIndicator(
-                  minHeight: 9,
-                  value: progress,
-                  backgroundColor: const Color(0xFF25070A),
-                  valueColor: const AlwaysStoppedAnimation<Color>(red),
-                ),
-              ),
-              const SizedBox(height: 7),
-              Text(
-                next == null
-                    ? 'Top configured Enemy level reached'
-                    : '${(next - relation.rivalry).clamp(0, next)} rivalry to next level',
-                style: const TextStyle(
-                  color: Color(0xFF8E777A),
-                  fontSize: 10,
-                ),
-              ),
-            ],
-          ),
+        RelationshipHero(
+          key:const Key('vs-hero'),rivalry:true,level:relation.level,progress:relation.rivalry,
+          startedAt:DateTime.fromMillisecondsSinceEpoch(relation.createdAt),
+          nameA:account.displayName,nameB:rivalName,idA:account.userId,idB:rivalId,
+          imageA:_avatar(account.avatarDataUrl),imageB:rivalAvatar,
+          nextThreshold:relation.nextLevelThreshold,previousThreshold:relation.previousLevelThreshold,
         ),
         const SizedBox(height: 14),
+        OutlinedButton.icon(
+          onPressed:()=>Navigator.push(context,MaterialPageRoute(builder:(_) => RelationshipRankingScreen(state:widget.state,rivalry:true))),
+          icon:const Icon(Icons.leaderboard_rounded),label:const Text('VS Ranking'),
+        ),
         RoyalPanel(
           accentColor: red,
           gradient: const LinearGradient(
@@ -423,7 +344,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Enemy Gifts',
+                'VS Gifts',
                 style: TextStyle(
                   color: red,
                   fontWeight: FontWeight.w900,
@@ -432,7 +353,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
               ),
               const SizedBox(height: 5),
               const Text(
-                'Only Enemy-category gifts exchanged with your connected Enemy raise the Enemy level.',
+                'Only VS-category gifts exchanged with your connected VS raise the VS level.',
                 style: TextStyle(
                   color: Color(0xFF9E898C),
                   fontSize: 11,
@@ -475,18 +396,10 @@ class _EnemyScreenState extends State<EnemyScreen> {
                 width: double.infinity,
                 child: FilledButton.icon(
                   key: const Key('enemy-open-gifts'),
-                  onPressed: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => GiftsScreen(
-                        state: widget.state,
-                        initialCategory: "Enemy's",
-                      ),
-                    ),
-                  ),
+                  onPressed: _openVsGifts,
                   style: FilledButton.styleFrom(backgroundColor: red),
                   icon: const Icon(Icons.card_giftcard_rounded),
-                  label: const Text("Open Enemy's Gifts"),
+                  label: const Text("Open VS's Gifts"),
                 ),
               ),
             ],
@@ -503,7 +416,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
               side: const BorderSide(color: red),
             ),
             icon: const Icon(Icons.link_off_rounded),
-            label: const Text('Remove Enemy'),
+            label: const Text('Remove VS'),
           ),
         ),
       ],
@@ -531,7 +444,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
           ),
           const SizedBox(height: 10),
           Text(
-            incoming ? 'Enemy challenge received' : 'Enemy challenge sent',
+            incoming ? 'VS challenge received' : 'VS challenge sent',
             style: const TextStyle(
               color: Colors.white,
               fontWeight: FontWeight.w900,
@@ -604,7 +517,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
                     ),
                     SizedBox(height: 7),
                     Text(
-                      'Add Enemy',
+                      'Add VS',
                       style: TextStyle(
                         color: Colors.white,
                         fontWeight: FontWeight.w900,
@@ -706,7 +619,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
       appBar: AppBar(
         backgroundColor: black,
         title: const Text(
-          'Enemy',
+          'VS',
           style: TextStyle(
             color: red,
             fontWeight: FontWeight.w900,
@@ -722,6 +635,12 @@ class _EnemyScreenState extends State<EnemyScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(14, 12, 14, 28),
           children: [
+            if(!loading && enemy?.state!='accepted' && enemy?.state!='pending') Padding(
+              padding:const EdgeInsets.only(bottom:12),child:TextField(
+                keyboardType:TextInputType.number,
+                decoration:const InputDecoration(labelText:'User ID',hintText:'Enter a rival ID to send a VS Challenge'),
+                onSubmitted:(id)=>_requestEnemy(id.trim()),
+              )),
             if (loading)
               const Padding(
                 padding: EdgeInsets.all(40),

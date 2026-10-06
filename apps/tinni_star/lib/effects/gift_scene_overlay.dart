@@ -8,6 +8,7 @@ import '../economy/premium_gift_catalog.dart';
 import 'cinematic_video.dart';
 import 'cinematic_lane.dart';
 import 'gift_atmosphere.dart';
+import '../ui/relationship_visuals.dart';
 
 class GiftSceneEvent {
   GiftSceneEvent({required this.gift, required List<String> recipients})
@@ -57,6 +58,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   int _generation = 0;
   bool _foreground = true;
   bool _recipientFlight = false;
+  bool _levelUp = false;
 
   @override
   void initState() {
@@ -107,7 +109,9 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     if (event == null) return;
     setState(() => _event = event);
     _motion.duration =
-        Duration(seconds: PremiumGiftCatalog.holdSeconds(event.gift.id));
+        event.gift.animationUrl?.isNotEmpty == true
+          ? Duration(milliseconds:event.gift.animationDurationMs)
+          : Duration(seconds: PremiumGiftCatalog.holdSeconds(event.gift.id));
     _motion.value = 0;
     _resume();
   }
@@ -139,12 +143,20 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
     _motion.stop();
     _event = null;
     _recipientFlight = false;
+    _levelUp = false;
     if (releaseLane) widget.lane?.cancel(this);
   }
 
   void _finish() {
     final event = _event;
     if (!mounted || event == null) return;
+    if(!_levelUp && ['cp','vs'].contains(event.gift.resolvedCategory) &&
+      relationshipMilestone(event.gift.levelBefore,event.gift.levelAfter)) {
+      _hold?.cancel();_generation++;_motion.stop();
+      setState(()=>_levelUp=true);
+      _motion.duration=const Duration(seconds:3);_motion.value=0;_resume();
+      return;
+    }
     _cancel(releaseLane: false);
     final countryFlag = event.gift.id.startsWith('flag-');
     if (countryFlag) {
@@ -200,7 +212,9 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
   Widget build(BuildContext context) {
     final event = _event;
     if (event == null || !widget.enabled) return const SizedBox.shrink();
-    final fullScreen = PremiumGiftCatalog.isFullScreen(event.gift.id);
+    if(_levelUp) return IgnorePointer(child:RelationshipLevelUpVisual(level:event.gift.levelAfter,
+      rivalry:event.gift.resolvedCategory=='vs',timeline:_motion));
+    final fullScreen = event.gift.effectTier == 'cinematic' || (event.gift.effectTier.isEmpty && PremiumGiftCatalog.isFullScreen(event.gift.id));
     final countryFlag = event.gift.id.startsWith('flag-');
     final reduced = MediaQuery.disableAnimationsOf(context);
     return IgnorePointer(
@@ -224,26 +238,26 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
                         ),
                   child: const SizedBox.expand(),
                 );
-                return GiftAtmosphere(
-                  giftId: event.gift.id,
-                  progress: _motion.value,
-                  reducedMotion: reduced,
-                  child: Center(
+                final content=Center(
                   child: FractionallySizedBox(
                     key: countryFlag ? const Key('country-flag-large-center') : null,
-                    widthFactor: countryFlag ? .96 : fullScreen ? 1 : .72,
-                    heightFactor: countryFlag ? .66 : fullScreen ? 1 : .62,
+                    widthFactor: countryFlag ? .96 : fullScreen ? 1 : event.gift.effectTier=='compact' ? .4 : .72,
+                    heightFactor: countryFlag ? .66 : fullScreen ? 1 : event.gift.effectTier=='compact' ? .4 : .62,
                     child: CinematicVideo(
                       key: ObjectKey(event),
                       sceneId: event.gift.id,
+                      networkUrl: event.gift.animationUrl,
+                      posterUrl: event.gift.posterUrl,
                       fit: countryFlag ? BoxFit.cover : BoxFit.contain,
                       duration: _motion.duration!,
                       timeline: _motion,
                       fallback: fallback,
                     ),
                   ),
-                  ),
-                );
+                  );
+                return event.gift.resolvedCategory=='vs' ? content : GiftAtmosphere(
+                  giftId:event.gift.id,progress:_motion.value,reducedMotion:reduced,child:content);
+
               },
             ),
             Align(
@@ -315,28 +329,39 @@ class _GiftScenePainter extends CustomPainter {
   final GiftDefinition gift;
   final double t;
   @override void paint(Canvas canvas,Size size) {
-    final scene=PremiumGiftCatalog.scene(gift.id);
+    final rival=gift.resolvedCategory=='vs';
+    final romantic=gift.resolvedCategory=='cp';
+    final scene=rival?'rival':PremiumGiftCatalog.scene(gift.id);
     final tier=(gift.price/10000000).clamp(.02,1.0);
     final entrance=(t/.14).clamp(0.0,1.0);
     final fade=t>.94?((1-t)/.06).clamp(0.0,1.0):1.0;
     final center=Offset(size.width/2,size.height*.46);
-    final fullScreen=PremiumGiftCatalog.isFullScreen(gift.id);
+    final fullScreen=gift.effectTier=='cinematic'||PremiumGiftCatalog.isFullScreen(gift.id);
     final radius=math.min(size.width*(fullScreen ? .48 : .30),fullScreen?310.0:140.0);
     canvas.drawRect(Offset.zero&size,Paint()..color=Color.fromRGBO(2,8,20,.55*entrance*fade));
     final glow=Rect.fromCircle(center:center,radius:radius*1.5);
     canvas.drawOval(glow,Paint()..shader=RadialGradient(colors:[
-      Color.fromRGBO(116,65,199,.5*entrance*fade),const Color(0x00040815),
+      Color.fromRGBO(rival?200:romantic?240:116,rival?20:romantic?75:65,rival?40:romantic?135:199,.5*entrance*fade),const Color(0x00040815),
     ]).createShader(glow));
     for(var i=0;i<18+(tier*80).round();i++) {
       final a=i*2.399+t*math.pi;
       final r=radius*(.45+(i%9)/8);
       canvas.drawCircle(center+Offset(math.cos(a)*r,math.sin(a)*r),
-        1.3+(i%3),Paint()..color=Color.fromRGBO(255,204,128,fade*(.2+.5*math.sin(i+t*12).abs())));
+        1.3+(i%3),Paint()..color=Color.fromRGBO(rival?220:255,rival?225:204,rival?235:128,fade*(.2+.5*math.sin(i+t*12).abs())));
     }
     canvas.save();
     canvas.translate(center.dx,center.dy);
     canvas.scale(entrance);
-    if(scene=='food') { _food(canvas,radius,fade); }
+    if(rival) {
+      for(var i=0;i<10;i++) {
+        final x=(i-4.5)*radius*.22;
+        final zig=Path()..moveTo(x,-radius)..lineTo(x+12,-radius*.3)..lineTo(x-6,0)..lineTo(x+18,radius*.8);
+        canvas.drawPath(zig,Paint()..style=PaintingStyle.stroke..strokeWidth=2..color=const Color(0xFFFF3040).withValues(alpha:fade*.5));
+      }
+      _text(canvas,gift.emoji,Offset(0,math.sin(t*12)*8),radius*.9);
+      _text(canvas,'VS',Offset(0,radius*.5),radius*.25);
+    }
+    else if(scene=='food') { _food(canvas,radius,fade); }
     else if(scene=='rose') { _roses(canvas,radius,fade); }
     else if(scene=='dragon') { _dragon(canvas,radius,size,fade); }
     else if(scene=='couple'||scene=='wedding') { _couple(canvas,radius,scene=='wedding'); }

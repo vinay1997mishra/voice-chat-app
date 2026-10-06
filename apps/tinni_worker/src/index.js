@@ -1880,13 +1880,19 @@ export default {
       if (key.startsWith("messages/") || coldStorage.isPrivateStorageKey(key)) {
         return new Response("Not found", { status: 404 });
       }
-      const object = await env.EFFECT_MEDIA.get(key);
+      const range = request.headers.get("range");
+      const object = await env.EFFECT_MEDIA.get(key, range ? {range:request.headers} : undefined);
       if (!object) return new Response("Not found", { status: 404 });
       const headers = new Headers();
       object.writeHttpMetadata(headers);
       headers.set("etag", object.httpEtag);
+      headers.set("accept-ranges", "bytes");
+      if (object.range) {
+        headers.set("content-range", "bytes " + object.range.offset + "-" + (object.range.offset + object.range.length - 1) + "/" + object.size);
+        headers.set("content-length", String(object.range.length));
+      }
       headers.set("cache-control", /^profiles\/[^/]+\/avatar$/.test(key)?"no-store, max-age=0":"public, max-age=604800, immutable");
-      return new Response(object.body, { headers });
+      return new Response(object.body, { headers, status: object.range ? 206 : 200 });
     }
 
     if(url.pathname==="/api/storage-status"&&request.method==="GET") {
@@ -2940,7 +2946,7 @@ export default {
       if (body.confirmed !== true || (current && body.expected_pair !== expected)) {
         return json({ ok: false, error: "Confirm the current CP relationship before removing it" }, 409);
       }
-      try { return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id)); }
+      try { return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id, body.expected_pair)); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to disconnect CP") }, 400); }
     }
 
@@ -3027,7 +3033,7 @@ export default {
       try {
         return json(
           await getAppDirectoryStore(env).enemyDisconnect(
-            appSession.user.user_id,
+            appSession.user.user_id, body.expected_pair,
           ),
         );
       } catch (error) {
@@ -6572,6 +6578,10 @@ export default {
           error: "Name ID can only be created or assigned from the Owner Master Panel",
         }, 403);
       }
+      if (!ownerOnly(session) && String(body.action) === "gift-new" &&
+          ["cp","vs","enemy"].includes(String(body.data?.category || "").toLowerCase())) {
+        return json({ ok: false, error: "Only Owner can manage CP/VS gifts" }, 403);
+      }
       const actionPermissions = {
         "user-search":"users.search","user-name":"users.edit_profile","user-dp":"users.edit_profile","user-ban":"users.ban_id","device-ban":"users.ban_device",
         "user-invisible":"users.invisible","locked-bypass":"users.locked_room_bypass","id-change":"users.change_id","unique-id-new":"users.unique_id","unique-id-price":"users.unique_id",
@@ -6591,6 +6601,8 @@ export default {
       if (catalogAction && !ownerOnly(session)) {
         const item = (await getAppDirectoryStore(env).ownerCatalog()).find((entry) => String(entry.id) === String(body.data?.id || ""));
         if (!item) return json({ ok: false, error: "Catalog item not found" }, 404);
+        if (item.kind === "gift" && ["cp","vs","enemy"].includes(String(item.data?.category || "").toLowerCase()))
+          return json({ ok: false, error: "Only Owner can manage CP/VS gifts" }, 403);
         const operation = String(body.action).replace("catalog-", "");
         const kind = String(item.kind || "");
         if (kind === "vip") requiredPermission = operation === "toggle" ? "vip.toggle" : "vip.edit";
@@ -6628,6 +6640,9 @@ export default {
       const currentItem = (await getAppDirectoryStore(env).ownerCatalog())
         .find((entry) => String(entry.id) === String(catalogId));
       if (!currentItem) return json({ ok: false, error: "Catalog item not found" }, 404);
+      if (!ownerOnly(session) && currentItem.kind === "gift" &&
+          [currentItem.data?.category, body.data?.category].some(category => ["cp","vs","enemy"].includes(String(category || "").toLowerCase())))
+        return json({ ok: false, error: "Only Owner can manage CP/VS gifts" }, 403);
 
       if (!ownerOnly(session)) {
         const kind = String(currentItem.kind || "");

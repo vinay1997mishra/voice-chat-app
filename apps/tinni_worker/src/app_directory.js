@@ -2283,6 +2283,21 @@ export class AppDirectoryStore extends DurableObject {
     });
   }
 
+  _validateGiftCatalogData(data) {
+    const category = String(data.category || "normal").toLowerCase();
+    const price = Number(data.coin_price ?? data.price ?? 0);
+    if (!Number.isSafeInteger(price) || price < 0) throw new Error("Gift coin price must be a non-negative whole number");
+    if (["cp","vs","enemy"].includes(category)) {
+      if (data.lucky === true || data.rebate === true) throw new Error("CP/VS gifts cannot use Lucky progression");
+      const animation = String(data.animation_url || data.asset_url || "");
+      const poster = String(data.poster_url || "");
+      if (!animation.startsWith("https://") || !poster.startsWith("https://"))
+        throw new Error("CP/VS gifts require an uploaded video and poster");
+      if (data.effect_tier && !["compact","overlay","cinematic"].includes(data.effect_tier))
+        throw new Error("Invalid relationship gift effect");
+    }
+  }
+
   ownerCatalogCreate(kindValue, nameValue, dataValue = {}, enabledValue = true) {
     const kind = cleanText(kindValue, 40).toLowerCase();
     const name = cleanText(nameValue, 80);
@@ -2290,6 +2305,7 @@ export class AppDirectoryStore extends DurableObject {
     const now = Date.now();
     const id = kind + "-" + now.toString(36) + "-" + crypto.randomUUID().slice(0, 8);
     const data = dataValue && typeof dataValue === "object" ? dataValue : {};
+    if(kind === "gift") this._validateGiftCatalogData(data);
     this.ctx.storage.sql.exec(
       `INSERT INTO owner_catalog
         (id, kind, name, data_json, enabled, created_at, updated_at)
@@ -2309,6 +2325,7 @@ export class AppDirectoryStore extends DurableObject {
     try { data = JSON.parse(String(current.data_json || "{}")); } catch {}
     const patch = patchValue && typeof patchValue === "object" ? patchValue : {};
     if (patch.data && typeof patch.data === "object") data = { ...data, ...patch.data };
+    if(current.kind === "gift" && patch.data) this._validateGiftCatalogData(data);
     const name = patch.name === undefined ? String(current.name) : cleanText(patch.name, 80);
     const enabled = patch.enabled === undefined
       ? Number(current.enabled) : patch.enabled === true ? 1 : 0;
@@ -2434,6 +2451,7 @@ export class AppDirectoryStore extends DurableObject {
         updated_at: Number(treasury.updated_at || 0),
       },
       company_dollars: this._companyDollarState(500),
+      relationship_ladders: { cp:this._cpLevelThresholds(), vs:this._enemyLevelThresholds() },
       catalog: this.ownerCatalog(),
     };
   }
@@ -4343,7 +4361,8 @@ export class AppDirectoryStore extends DurableObject {
         ends_at: data.ends_at ? Date.parse(String(data.ends_at)) : null,
       });
       case "gift-new": {
-        const lucky = data.lucky === true || String(data.lucky || "").toLowerCase() === "true";
+        const relationship = ["cp","vs","enemy"].includes(String(data.category || "").toLowerCase());
+        const lucky = !relationship && (data.lucky === true || String(data.lucky || "").toLowerCase() === "true");
         return this.ownerCatalogCreate("gift", data.name, {
           coin_price: Math.max(0, Number(data.coin_price || 0)),
           duration_days: Math.max(0, Number(data.duration_days || 0)),
@@ -4424,6 +4443,13 @@ export class AppDirectoryStore extends DurableObject {
       });
       case "policy-new":
       case "policy-set": {
+        if (["cp_coin_thresholds","vs_coin_thresholds"].includes(String(data.key))) {
+          const values = typeof data.value === "string" ? JSON.parse(data.value) : data.value;
+          if (!Array.isArray(values) || !values.length || values.length > 100 ||
+              values.some((value,index) => !Number.isSafeInteger(value) || value <= 0 || (index > 0 && value <= values[index-1])))
+            throw new Error("Level thresholds must be positive increasing whole coin values");
+          return this._setOwnerSetting(data.key, values);
+        }
         const policies = this.ownerState().policies;
         policies[String(data.key || "").trim()] = data.value;
         return this._setOwnerSetting("policies", policies);
@@ -6923,7 +6949,11 @@ export class AppDirectoryStore extends DurableObject {
         ).toArray()[0];
         if (previous) {
           if (previous.fingerprint !== fingerprint) throw new Error("Gift request ID was already used for different details");
-          return { ...JSON.parse(previous.response_json), wallet: this.getWallet(senderId), replayed: true };
+          const saved = JSON.parse(previous.response_json);
+          const category = saved.transactions?.[0]?.category;
+          return { ...saved, wallet:this.getWallet(senderId),
+            cp_state:category==="cp"?this.cpState(senderId):null,
+            vs_state:category==="vs"?this.enemyState(senderId):null,replayed:true };
         }
       }
       const confirmed = this._sendGiftWithRocket(senderId, input);
@@ -6991,6 +7021,7 @@ export class AppDirectoryStore extends DurableObject {
         giftName = builtIn.name;
         unitPrice = builtIn.price;
         giftData = {
+          ...builtIn,
           category: builtIn.category,
           lucky: builtIn.lucky === true,
           rebate: builtIn.lucky === true,
@@ -7002,6 +7033,9 @@ export class AppDirectoryStore extends DurableObject {
     }
     if (catalogRow) {
       const now = Date.now();
+      const sender = this.getUserById(senderId);
+      if (Array.isArray(giftData.countries) && giftData.countries.length &&
+          !giftData.countries.includes(sender?.country_code)) throw new Error("Gift is unavailable in your country");
       if ((giftData.starts_at && Number(giftData.starts_at) > now) ||
           (giftData.ends_at && Number(giftData.ends_at) <= now)) {
         throw new Error("Gift is unavailable");
@@ -7355,6 +7389,8 @@ export class AppDirectoryStore extends DurableObject {
       total_cost: totalCost,
       wallet: this.getWallet(senderId),
       transactions,
+      cp_state: category === "cp" ? this.cpState(senderId) : null,
+      vs_state: category === "vs" ? this.enemyState(senderId) : null,
       lucky: isLucky ? {
         enabled: true,
         multiplier: highestMultiplier,
@@ -7907,6 +7943,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   cpRequest(userIdValue, targetIdValue) {
+    return this.ctx.storage.transactionSync(() => this._atomiccpRequest(userIdValue, targetIdValue));
+  }
+
+  _atomiccpRequest(userIdValue, targetIdValue) {
     const userId = String(userIdValue || "").trim();
     const targetId = String(targetIdValue || "").trim();
     if (!userId || !targetId || userId === targetId) throw new Error("Choose another user for CP");
@@ -7956,6 +7996,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   cpRespond(userIdValue, acceptValue) {
+    return this.ctx.storage.transactionSync(() => this._atomiccpRespond(userIdValue, acceptValue));
+  }
+
+  _atomiccpRespond(userIdValue, acceptValue) {
     const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
     if (!row || row.state !== "pending" || row.requested_by === userId) throw new Error("No CP request is awaiting your response");
     const now = Date.now();
@@ -7967,9 +8011,16 @@ export class AppDirectoryStore extends DurableObject {
     return this.cpState(userId);
   }
 
-  cpDisconnect(userIdValue) {
+  cpDisconnect(userIdValue, expectedPairValue = null) {
+    return this.ctx.storage.transactionSync(() => this._atomiccpDisconnect(userIdValue, expectedPairValue));
+  }
+
+  _atomiccpDisconnect(userIdValue, expectedPairValue = null) {
     const userId = String(userIdValue || "").trim(); const row = this.cpState(userId);
     if (!row) return { ok: true, cp: null, wallet: this.getWallet(userId) };
+    if (expectedPairValue !== null &&
+      expectedPairValue !== row.user_a + ":" + row.user_b + ":" + row.created_at)
+      throw new Error("The relationship changed; confirm the current pair");
     const policies = this.ownerState().policies;
     const price = this._effectivePrice(userId, "cp:disconnect", Math.max(0, Number(policies.cp_disconnect_coins || 0))).price;
     const wallet = this.getWallet(userId);
@@ -8090,6 +8141,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   enemyRequest(userIdValue, targetIdValue) {
+    return this.ctx.storage.transactionSync(() => this._atomicenemyRequest(userIdValue, targetIdValue));
+  }
+
+  _atomicenemyRequest(userIdValue, targetIdValue) {
     const userId = String(userIdValue || "").trim();
     const targetId = String(targetIdValue || "").trim();
     if (!userId || !targetId || userId === targetId) {
@@ -8119,6 +8174,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   enemyRespond(userIdValue, acceptValue) {
+    return this.ctx.storage.transactionSync(() => this._atomicenemyRespond(userIdValue, acceptValue));
+  }
+
+  _atomicenemyRespond(userIdValue, acceptValue) {
     const userId = String(userIdValue || "").trim();
     const row = this.enemyState(userId);
     if (!row || row.state !== "pending" || row.requested_by === userId) {
@@ -8133,10 +8192,17 @@ export class AppDirectoryStore extends DurableObject {
     return this.enemyState(userId);
   }
 
-  enemyDisconnect(userIdValue) {
+  enemyDisconnect(userIdValue, expectedPairValue = null) {
+    return this.ctx.storage.transactionSync(() => this._atomicenemyDisconnect(userIdValue, expectedPairValue));
+  }
+
+  _atomicenemyDisconnect(userIdValue, expectedPairValue = null) {
     const userId = String(userIdValue || "").trim();
     const row = this.enemyState(userId);
     if (!row) return { ok: true, enemy: null };
+    if (expectedPairValue !== null &&
+      expectedPairValue !== row.user_a + ":" + row.user_b + ":" + row.created_at)
+      throw new Error("The relationship changed; confirm the current pair");
     this.ctx.storage.sql.exec(
       "UPDATE enemy_relationships SET state='ended',updated_at=? WHERE user_a=? AND user_b=?",
       Date.now(), row.user_a, row.user_b,

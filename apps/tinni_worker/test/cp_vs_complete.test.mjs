@@ -106,3 +106,26 @@ test('published owner CP/VS gifts are available without changing the app bundle'
   const denied=await r.request('/api/owner/gift-media',a.token,{});
   assert.equal(denied.status,401);
 });
+
+test('only the main Owner can upload CP/VS MP4s and the managed 30 MB limit supports larger cinematics',async t=>{
+  const r=runtime();t.after(r.close);
+  const cookie=await r.ownerCookie();
+  const form=new FormData();
+  const bytes=new Uint8Array(5000000);
+  bytes.set([0,0,0,24,102,116,121,112,105,115,111,109]);
+  form.set('category','vs');form.set('kind','video');
+  form.set('file',new Blob([bytes],{type:'video/mp4'}),'vs.mp4');
+  const response=await r.fetch(new Request('https://test.local/api/owner/gift-media',{
+    method:'POST',headers:{cookie},body:form,
+  }));
+  const result=await response.json();
+  assert.equal(response.status,201,JSON.stringify(result));
+  assert.match(result.url,/media\/gifts\/vs\//);
+  assert.equal(r.mediaObjects.size,1);
+  const invalid=new FormData();
+  invalid.set('category','vs');invalid.set('kind','video');
+  invalid.set('file',new Blob([new Uint8Array(20)],{type:'video/mp4'}),'bad.mp4');
+  const rejected=await r.fetch(new Request('https://test.local/api/owner/gift-media',{method:'POST',headers:{cookie},body:invalid}));
+  assert.equal(rejected.status,400);
+  assert.equal(r.mediaObjects.size,1);
+});

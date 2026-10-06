@@ -8,6 +8,7 @@ import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 import 'cp_screen.dart';
 import 'enemy_screen.dart';
+import '../ui/relationship_visuals.dart';
 import 'personal_profile_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
@@ -745,6 +746,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
+            Positioned(top:0,right:0,child:RelationshipBadge(level:cp?.level ?? 1)),
             Positioned.fill(
               child: CustomPaint(
                 painter: const _RelationWavePainter(
@@ -833,6 +835,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
+            Positioned(top:0,right:0,child:RelationshipBadge(level:enemyRelation?.level ?? 1,rivalry:true)),
             Positioned.fill(
               child: CustomPaint(
                 painter: const _RelationWavePainter(
@@ -854,7 +857,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                     ),
                   ),
                 ),
-                _murderEnemyEmblem(106),
+                Column(mainAxisSize:MainAxisSize.min,children:[_murderEnemyEmblem(72),const Text('VS',style:TextStyle(color:red,fontWeight:FontWeight.w900))]),
                 Expanded(
                   child: Center(
                     child: _relationAvatar(

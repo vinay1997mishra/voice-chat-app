@@ -2209,6 +2209,7 @@ async function loadOwnerState() {
     state.luckyGiftConfig = serverState.lucky_gift_config || {};
     state.treasury = Number(serverState.treasury?.balance || 0);
     state.companyDollars = serverState.company_dollars || { usd_cents: 0, ledger: [] };
+    state.relationshipLadders = serverState.relationship_ladders || {};
     state.catalog = Array.isArray(serverState.catalog) ? serverState.catalog : [];
     state.vips = state.catalog
       .filter((item) => item.kind === "vip")
@@ -2401,7 +2402,127 @@ function renderCatalogList(rootId, kind, emptyText) {
   `).join("");
 }
 
+
+function relationshipCategory(value) {
+  const category = String(value || "").toLowerCase();
+  return category === "enemy" ? "vs" : category;
+}
+
+function renderRelationshipGiftManager(category) {
+  const root = document.getElementById(category + "GiftManager");
+  if (!root) return;
+  if (currentSession?.role !== "owner") { root.hidden = true; return; }
+  root.hidden = false;
+  const label = category.toUpperCase();
+  const items = state.catalog.filter(item => item.kind === "gift" && relationshipCategory(item.data?.category) === category);
+  root.innerHTML = `<div class="panel-head"><div><h2>${label} Gifts</h2><p>${category === "cp" ? "Romantic bond" : "Rivalry clash"} · Owner video management</p></div></div>
+    <form data-relationship-gift="${category}">
+      <label>Gift<select name="catalog_id"><option value="">+ Add new ${label} gift</option>${items.map(item =>
+        `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${item.enabled ? "Enabled" : "Disabled"}</option>`).join("")}</select></label>
+      <label>Level thresholds (coins)<input name="level_thresholds" value="${escapeHtml((state.relationshipLadders?.[category] || []).join(","))}"></label>
+      <button type="button" data-save-ladder>Save ${label} Ladder</button>
+      <label>Name<input name="name" required maxlength="80"></label>
+      <label>Coin price<input name="coin_price" type="number" min="1" step="1" required></label>
+      <label>MP4 animation<input name="video_file" type="file" accept="video/mp4"></label>
+      <label>Poster<input name="poster_file" type="file" accept="image/png,image/jpeg,image/webp"></label>
+      <video data-gift-preview controls muted playsinline style="width:100%;max-height:260px" hidden></video>
+      <img data-poster-preview alt="Gift poster preview" style="max-width:120px" hidden>
+      <label>Effect<select name="effect_tier"><option value="compact">Compact</option><option value="overlay">Room overlay</option><option value="cinematic">Full screen cinematic</option></select></label>
+      <label>Duration (seconds)<input name="duration_seconds" type="number" min="1" max="15" step="0.1" value="5" required></label>
+      <label>Display order<input name="order" type="number" step="1" value="0"></label>
+      <label><input name="enabled" type="checkbox" checked> Enabled</label>
+      <button type="submit" class="btn primary">Publish ${label} Gift</button>
+      <p data-gift-status class="muted" aria-live="polite">Choose media, preview it, then publish.</p>
+    </form>`;
+  const form = root.querySelector("form");
+  form.querySelector("[data-save-ladder]").addEventListener("click",async event=>{
+    const button=event.currentTarget,status=form.querySelector("[data-gift-status]");
+    const values=form.elements.level_thresholds.value.split(",").map(value=>Number(value.trim()));
+    if(!values.length || values.some((value,index)=>!Number.isSafeInteger(value)||value<=0||(index>0&&value<=values[index-1]))) {
+      status.textContent="Enter positive increasing whole coin thresholds.";return;
+    }
+    button.disabled=true;
+    try {await runOwnerAction("policy-set",{key:category+"_coin_thresholds",value:values});toast(label+" ladder saved.");}
+    catch(error){status.textContent=error.message;}
+    finally{button.disabled=false;}
+  });
+  let selected = null;
+  const localUrls = new Map();
+  function preview(kind, url, local = false) {
+    const element = form.querySelector(kind === "video" ? "[data-gift-preview]" : "[data-poster-preview]");
+    if (localUrls.has(kind)) { URL.revokeObjectURL(localUrls.get(kind)); localUrls.delete(kind); }
+    if (local) localUrls.set(kind, url);
+    element.hidden = !url;
+    if (url) element.src = url; else element.removeAttribute("src");
+  }
+  form.elements.catalog_id.addEventListener("change", () => {
+    selected = items.find(item => item.id === form.elements.catalog_id.value) || null;
+    const data = selected?.data || {};
+    form.elements.name.value = selected?.name || "";
+    form.elements.coin_price.value = data.coin_price ?? "";
+    form.elements.order.value = data.order ?? 0;
+    form.elements.effect_tier.value = data.effect_tier || "compact";
+    form.elements.duration_seconds.value = (data.animation_duration_ms || 5000) / 1000;
+    form.elements.enabled.checked = selected?.enabled !== false;
+    form.elements.video_file.value = ""; form.elements.poster_file.value = "";
+    preview("video", data.animation_url || data.asset_url || "");
+    preview("poster", data.poster_url || "");
+  });
+  for (const kind of ["video", "poster"]) form.elements[kind + "_file"].addEventListener("change", () => {
+    const file = form.elements[kind + "_file"].files[0];
+    preview(kind, file ? URL.createObjectURL(file) : "", Boolean(file));
+  });
+  form.addEventListener("submit", async event => {
+    event.preventDefault();
+    const button = form.querySelector('button[type="submit"]'), status = form.querySelector("[data-gift-status]");
+    const name = form.elements.name.value.trim(), price = Number(form.elements.coin_price.value);
+    if (!name || !Number.isSafeInteger(price) || price < 1) { status.textContent = "Enter a name and positive whole coin price."; return; }
+    button.disabled = true;
+    try {
+      let animationUrl = selected?.data?.animation_url || selected?.data?.asset_url || "";
+      let posterUrl = selected?.data?.poster_url || "";
+      async function upload(kind) {
+        const file = form.elements[kind + "_file"].files[0];
+        if (!file) return "";
+        const multipart = new FormData();
+        multipart.append("category", category); multipart.append("kind", kind); multipart.append("file", file);
+        status.textContent = "Uploading " + kind + "…";
+        const response = await fetch(API_BASE + "/api/owner/gift-media", {method:"POST",body:multipart});
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || "Upload failed");
+        return result.url;
+      }
+      animationUrl = await upload("video") || animationUrl;
+      posterUrl = await upload("poster") || posterUrl;
+      if (!animationUrl || !posterUrl) throw new Error("A video and poster are required before publication.");
+      const data = {category,coin_price:price,animation_url:animationUrl,asset_url:animationUrl,
+        poster_url:posterUrl,effect_kind:"scene",effect_tier:form.elements.effect_tier.value,
+        animation_duration_ms:Math.round(Number(form.elements.duration_seconds.value)*1000),
+        order:Number(form.elements.order.value)||0,lucky:false,rebate:false};
+      status.textContent = "Publishing…";
+      if (selected) await api("/api/owner/catalog/" + encodeURIComponent(selected.id), {
+        method:"PATCH",body:JSON.stringify({name,data,enabled:form.elements.enabled.checked}),
+      });
+      else {
+        const response = await api("/api/owner/action", {method:"POST",body:JSON.stringify({
+          action:"gift-new",data:{name,...data,enabled:form.elements.enabled.checked},
+        })});
+        if (!form.elements.enabled.checked) await api("/api/owner/catalog/" + encodeURIComponent(response.result.id), {
+          method:"PATCH",body:JSON.stringify({enabled:false}),
+        });
+      }
+      for (const url of localUrls.values()) URL.revokeObjectURL(url);
+      localUrls.clear();
+      await loadOwnerState();
+      toast(label + " gift saved. Users receive it on catalog refresh.");
+    } catch (error) { status.textContent = error.message; }
+    finally { button.disabled = false; }
+  });
+}
+
 function renderOwnerCatalogs() {
+  renderRelationshipGiftManager('cp');
+  renderRelationshipGiftManager('vs');
   renderCatalogList("giftCatalogList", "gift", "No gifts added from Owner Panel yet.");
   renderCatalogList("entryCatalogList", "entry", "No entry effects added yet.");
   renderCatalogList("profileCardCatalogList", "profile_card", "No profile cards added yet.");
