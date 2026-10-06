@@ -19,6 +19,9 @@ import '../effects/gift_scene_overlay.dart';
 import '../effects/effect_overlay.dart';
 import '../effects/rocket_launch.dart';
 import '../effects/cinematic_lane.dart';
+import '../effects/lucky_combo_timer.dart';
+import '../effects/lucky_gift_queue.dart';
+import '../effects/lucky_gift_overlay.dart';
 import '../identity/owner_tag.dart';
 import '../media/ktv_service.dart';
 import '../moderation/user_safety_menu.dart';
@@ -62,15 +65,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   GiftDefinition? _seatGiftEffect;
   final Set<String> _seatGiftEffectReceiverIds = <String>{};
   GiftDefinition? _luckySeatEffectGift;
-  String? _lastHandledGiftVisualEventId;
+  final _handledGiftVisualEventIds = <String>{};
+  late final _luckyVisuals = LuckyGiftQueue(clock: () => widget.state.roomSession.presence.serverNowMs);
+  final _luckyComboTimer = LuckyComboTimer();
   int _seatGiftEffectSequence = 0;
   Timer? _seatGiftEffectTimer;
   GiftDefinition? _luckyComboGift;
   List<String> _luckyComboRecipients = <String>[];
   int _luckyComboQuantity = 1;
-  int _luckyComboEpoch = 0;
   int _luckyComboCount = 0;
   int _luckyComboWon = 0;
+  int _luckyComboSent = 0;
   int _luckyLastMultiplier = 0;
   int _luckyPoolBalance = 0;
   int _luckyAnimationSequence = 0;
@@ -79,9 +84,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   String? _luckySessionId;
   int _luckySessionHighest = 0;
   Timer? _luckyBubbleTimer;
-  Timer? _luckyComboExpiryTimer;
-  Timer? _luckyComboCountdownTimer;
-  int _luckyComboSecondsLeft = 0;
+  int get _luckyComboSecondsLeft => _luckyComboTimer.secondsLeft;
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
@@ -173,6 +176,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     widget.state.roomSession.addListener(_refresh);
+    _luckyComboTimer.addListener(_onLuckyComboTimer);
     widget.state.social.retainMessageEvents();
     widget.state.social.roomEvents.addListener(_onCountryRibbonEvent);
     _primeRoomSendingSummary();
@@ -843,8 +847,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     _emoteExpiryTimer?.cancel();
     _seatGiftEffectTimer?.cancel();
     _luckyBubbleTimer?.cancel();
-    _luckyComboExpiryTimer?.cancel();
-    _luckyComboCountdownTimer?.cancel();
+    _luckyComboTimer.removeListener(_onLuckyComboTimer);
+    _luckyComboTimer.dispose();
+    _luckyVisuals.dispose();
     _roomRecoveryTimer?.cancel();
     _rocketBannerPoll?.cancel();
     widget.state.social.unreadMessages.removeListener(_refresh);
@@ -1150,33 +1155,42 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _syncGiftVisualEvent() {
-    final event = widget.state.roomSession.latestGiftVisualEvent;
-    if (event == null || event.id == _lastHandledGiftVisualEventId) return;
-    _lastHandledGiftVisualEventId = event.id;
-    if (!_applyRoomSendingSummary(event.roomSummary)) _refreshRoomSendingSummary();
-    if (event.senderId == widget.state.auth.current?.userId) return;
+    final presence = widget.state.roomSession.presence;
+    final latest = widget.state.roomSession.latestGiftVisualEvent;
+    final events = [...presence.giftVisualEvents, if (latest != null) latest];
+    for (final event in events) {
+      if (!_handledGiftVisualEventIds.add(event.id)) continue;
+      if (!_applyRoomSendingSummary(event.roomSummary)) _refreshRoomSendingSummary();
+      final gift = _giftDefinitionForVisualEvent(event);
+      if (event.lucky) {
+        _luckyVisuals.add(event, gift);
+      } else if (event.senderId != widget.state.auth.current?.userId) {
+        _triggerSeatGiftEffect(gift, event.receiverIds);
+      }
+    }
+  }
 
-    final gift = _giftDefinitionForVisualEvent(event);
-    if (event.lucky) {
-      _luckyBubbleTimer?.cancel();
-      _luckySeatEffectGift = gift;
+  void _playLuckySeatVisual(LuckyGiftPresentation presentation) {
+    if (!mounted || !widget.state.roomControls.effectsEnabled ||
+        !widget.state.roomControls.luckyGiftEffectEnabled) return;
+    final event = presentation.event;
+    _luckyBubbleTimer?.cancel();
+    setState(() {
+      _luckySeatEffectGift = presentation.gift;
       _luckyLastMultiplier = event.multiplier;
       _luckyAnimationReceiverIds
         ..clear()
         ..addAll(event.receiverIds);
       _luckyAnimationSequence++;
-      _luckyBubbleTimer = Timer(const Duration(milliseconds: 2100), () {
-        if (!mounted) return;
-        setState(() {
-          _luckyAnimationReceiverIds.clear();
-          _luckyLastMultiplier = 0;
-          _luckySeatEffectGift = null;
-        });
+    });
+    _luckyBubbleTimer = Timer(const Duration(milliseconds: 2100), () {
+      if (!mounted) return;
+      setState(() {
+        _luckyAnimationReceiverIds.clear();
+        _luckyLastMultiplier = 0;
+        _luckySeatEffectGift = null;
       });
-      return;
-    }
-
-    _triggerSeatGiftEffect(gift, event.receiverIds);
+    });
   }
 
   void _syncEntranceQueue() {
@@ -2769,50 +2783,44 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   bool _sameLuckyRecipients(List<String> next) {
-    if (_luckyComboRecipients.length != next.length) return false;
-    for (var index = 0; index < next.length; index++) {
-      if (_luckyComboRecipients[index] != next[index]) return false;
-    }
-    return true;
+    final ids = next.toSet();
+    return _luckyComboRecipients.toSet().length == ids.length &&
+        ids.containsAll(_luckyComboRecipients);
   }
 
-  void _resetLuckyComboState() {
-    _luckyComboExpiryTimer?.cancel();
-    _luckyComboExpiryTimer = null;
-    _luckyComboCountdownTimer?.cancel();
-    _luckyComboCountdownTimer = null;
-    _luckyComboSecondsLeft = 0;
-    _luckyComboEpoch++;
+  void _clearLuckyComboFields() {
     _luckyComboGift = null;
     _luckyComboRecipients = <String>[];
     _luckyComboQuantity = 1;
     _luckyComboCount = 0;
     _luckyComboWon = 0;
-    _luckyLastMultiplier = 0;
+    _luckyComboSent = 0;
     _luckyPoolBalance = 0;
     _luckySessionId = null;
     _luckySessionHighest = 0;
   }
 
+  void _onLuckyComboTimer() {
+    if (!mounted) return;
+    setState(() {
+      if (!_luckyComboTimer.active) _clearLuckyComboFields();
+    });
+  }
+
+  void _resetLuckyComboState() {
+    _clearLuckyComboFields();
+    _luckyComboTimer.clear();
+  }
+
   void _armLuckyComboExpiry() {
-    _luckyComboExpiryTimer?.cancel();
-    _luckyComboCountdownTimer?.cancel();
-    _luckyComboSecondsLeft = 12;
-    final epoch = ++_luckyComboEpoch;
-    _luckyComboCountdownTimer =
-        Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted || epoch != _luckyComboEpoch) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _luckyComboSecondsLeft = math.max(0, _luckyComboSecondsLeft - 1);
-      });
-    });
-    _luckyComboExpiryTimer = Timer(const Duration(seconds: 12), () {
-      if (!mounted || epoch != _luckyComboEpoch) return;
-      setState(_resetLuckyComboState);
-    });
+    final gift = _luckyComboGift;
+    if (gift == null || _luckySessionId == null) return;
+    _luckyComboTimer.success(
+      gift: gift.id, receiverIds: _luckyComboRecipients,
+      session: _luckySessionId!, sendQuantity: _luckyComboQuantity,
+      totalCount: _luckyComboCount, totalWon: _luckyComboWon,
+      totalSent: _luckyComboSent, highestMultiplier: _luckySessionHighest,
+    );
   }
 
   void _triggerSeatGiftEffect(
@@ -2937,21 +2945,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return false;
     }
 
-    final continuesSession = _luckyComboGift?.id == gift.id &&
+    final continuesSession = _luckyComboTimer.active && _luckyComboGift?.id == gift.id &&
         _sameLuckyRecipients(receiverIds) &&
         _luckySessionId != null;
     final sessionId =
         continuesSession ? _luckySessionId! : _newLuckySessionId(account.userId);
 
-    // A tap/send inside the 12-second Combo window counts as activity.
-    // Pause the old expiry immediately so it cannot remove the Combo while
-    // the gift request is in flight; a successful send starts a fresh window.
-    final hadActiveCombo = _luckyComboGift != null;
-    _luckyComboExpiryTimer?.cancel();
-    _luckyComboExpiryTimer = null;
-    _luckyComboCountdownTimer?.cancel();
-    _luckyComboCountdownTimer = null;
-    _luckyComboEpoch++;
+    // Only successful sends renew the nine-second Combo. In-flight and
+    // failed requests leave the original deadline running.
 
     setState(() => _luckyComboSending = true);
     try {
@@ -2965,6 +2966,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         receiverIds: receiverIds,
         luckySessionId: sessionId,
       );
+      if (!mounted || widget.state.auth.current?.userId != account.userId) return false;
       _applyGiftServerWallet(response);
       if (!_applyRoomSendingSummary(response['room_summary'])) _refreshRoomSendingSummary();
 
@@ -2990,20 +2992,40 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       final serverWon = _giftInt(session['total_rebate_coins']);
       final serverHighest = _giftInt(session['highest_multiplier']);
       _luckyComboCount =
-          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount + 1 : 1);
-      _luckyComboWon = serverWon > 0
+          serverCount > 0 ? serverCount : (continuesSession ? _luckyComboCount : 0) + quantity * receiverIds.length;
+      _luckyComboWon = session.containsKey('total_rebate_coins')
           ? serverWon
           : (continuesSession ? _luckyComboWon + rebateCoins : rebateCoins);
+      _luckyComboSent = session.containsKey('total_sent_coins')
+          ? _giftInt(session['total_sent_coins'])
+          : (continuesSession ? _luckyComboSent : 0) + totalCost;
       _luckySessionHighest = continuesSession
           ? math.max(_luckySessionHighest, math.max(serverHighest, multiplier))
           : math.max(serverHighest, multiplier);
-      _luckyLastMultiplier = multiplier;
       _luckyPoolBalance = poolBalance;
-      _luckySeatEffectGift = gift;
-      _luckyAnimationReceiverIds
-        ..clear()
-        ..addAll(receiverIds);
-      _luckyAnimationSequence++;
+      final rawVisual = response['visual_event'];
+      if (rawVisual is Map) {
+        _luckyVisuals.add(RoomGiftVisualEvent.fromJson(
+          Map<String, dynamic>.from(rawVisual)), gift);
+      } else {
+        final transactions = response['transactions'];
+        final first = transactions is List && transactions.isNotEmpty && transactions.first is Map
+            ? Map<String, dynamic>.from(transactions.first as Map) : <String, dynamic>{};
+        final counts = lucky['multiplier_counts'];
+        _luckyVisuals.add(RoomGiftVisualEvent(
+          id: first['id']?.toString() ?? '$sessionId-${DateTime.now().microsecondsSinceEpoch}',
+          senderId: account.userId, senderName: account.displayName,
+          giftId: gift.id, giftName: gift.name, receiverIds: List.unmodifiable(receiverIds),
+          quantity: quantity, lucky: true, multiplier: multiplier, rebateCoins: rebateCoins,
+          sentCoins: totalCost, unitPrice: _giftInt(first['unit_price']),
+          sessionId: sessionId, createdAt: DateTime.now(),
+          multiplierCounts: counts is List ? counts.whereType<Map>().map((row) => <String, int>{
+            'multiplier': _giftInt(row['multiplier']), 'count': _giftInt(row['count']),
+          }).toList() : const [],
+          highWin: lucky['high_win'] == true, bannerWin: lucky['banner_win'] == true,
+          ultraWin: lucky['ultra_win'] == true, bannersEnabled: lucky['banners_enabled'] != false,
+        ), gift);
+      }
       _armLuckyComboExpiry();
 
       final tx = GiftTransaction(
@@ -3022,16 +3044,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       );
       widget.state.identity.gainVipExperience(tx.totalCost ~/ 10);
 
-      _luckyBubbleTimer?.cancel();
-      _luckyBubbleTimer = Timer(const Duration(milliseconds: 1900), () {
-        if (!mounted) return;
-        setState(() {
-          _luckyAnimationReceiverIds.clear();
-          _luckyLastMultiplier = 0;
-        });
-      });
-
-      if (multiplier >= 500) {
+      if (lucky['banner_win'] == true && lucky['banners_enabled'] != false) {
         await _refreshCountryRibbons();
       }
       if (mounted) setState(() {});
@@ -3042,9 +3055,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         await _openRechargeDirect();
       } else if (mounted) {
         _snack(message);
-      }
-      if (mounted && hadActiveCombo && _luckyComboGift != null) {
-        _armLuckyComboExpiry();
       }
       return false;
     } finally {
@@ -3269,182 +3279,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Widget _buildLuckyComboOverlay() {
     final gift = _luckyComboGift;
-    if (gift == null) return const SizedBox.shrink();
+    if (gift == null) return const Positioned(left: 0, top: 0, child: SizedBox.shrink());
     return Positioned(
-      key: const Key('lucky-combo-overlay'),
-      right: 8,
-      bottom: 218,
-      child: Material(
-        color: Colors.transparent,
-        child: Container(
-          constraints: const BoxConstraints(minWidth: 154),
-          padding: const EdgeInsets.fromLTRB(9, 7, 7, 7),
-          decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: <Color>[
-                Color(0xFF2B123E),
-                Color(0xFF511866),
-                Color(0xFF1A0D2B),
-              ],
-            ),
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(
-              color: const Color(0xFFFFD45A),
-              width: 1.2,
-            ),
-            boxShadow: const <BoxShadow>[
-              BoxShadow(
-                color: Color(0x66B55CFF),
-                blurRadius: 15,
-                spreadRadius: 1,
-              ),
-            ],
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Builder(
-                builder: (context) {
-                  final avatar = _luckyAvatarProvider(
-                    widget.state.auth.current?.avatarDataUrl,
-                  );
-                  final name = widget.state.auth.current?.displayName ?? '';
-                  return CircleAvatar(
-                    radius: 13,
-                    backgroundColor: const Color(0xFF2E2140),
-                    backgroundImage: avatar,
-                    child: avatar == null
-                        ? Text(
-                            name.isNotEmpty ? name.characters.first : '?',
-                            style: const TextStyle(
-                              color: Color(0xFFFFD45A),
-                              fontSize: 10,
-                              fontWeight: FontWeight.w900,
-                            ),
-                          )
-                        : null,
-                  );
-                },
-              ),
-              const SizedBox(width: 5),
-              Container(
-                width: 34,
-                height: 34,
-                padding: const EdgeInsets.all(1),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: const RadialGradient(
-                    colors: <Color>[
-                      Color(0x55FFFFFF),
-                      Color(0x448C5CFF),
-                      Colors.transparent,
-                    ],
-                  ),
-                  boxShadow: const <BoxShadow>[
-                    BoxShadow(
-                      color: Color(0x88FFB84D),
-                      blurRadius: 9,
-                    ),
-                  ],
-                ),
-                child: _luckyArtwork(gift, size: 32),
-              ),
-              const SizedBox(width: 6),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    gift.name,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  Text(
-                    '×$_luckyComboCount   +$_luckyComboWon',
-                    style: const TextStyle(
-                      color: Color(0xFFFFD45A),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w900,
-                    ),
-                  ),
-                  if (_luckySessionHighest > 0)
-                    Text(
-                      'Highest ×$_luckySessionHighest',
-                      style: const TextStyle(
-                        color: Color(0xFFFFEFA8),
-                        fontSize: 8,
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  if (_luckyPoolBalance > 0)
-                    Text(
-                      'Pool $_luckyPoolBalance',
-                      style: const TextStyle(
-                        color: Color(0xFFD9C8F4),
-                        fontSize: 8,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(width: 7),
-              InkResponse(
-                key: const Key('lucky-combo-button'),
-                radius: 30,
-                onTap: _luckyComboSending ? null : _repeatLuckyGift,
-                child: Container(
-                  width: 54,
-                  height: 54,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: const RadialGradient(
-                      colors: <Color>[
-                        Color(0xFFFFE985),
-                        Color(0xFFFF9E2C),
-                        Color(0xFF8B2800),
-                      ],
-                    ),
-                    border: Border.all(color: Colors.white, width: 1.2),
-                  ),
-                  child: _luckyComboSending
-                      ? const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ),
-                        )
-                      : Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Text(
-                              'COMBO',
-                              style: TextStyle(
-                                color: Color(0xFF3E1400),
-                                fontSize: 10,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            Text(
-                              '${_luckyComboSecondsLeft}s',
-                              key: const Key('lucky-combo-countdown'),
-                              style: const TextStyle(
-                                color: Color(0xFF6A2100),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ],
-                        ),
-                ),
-              ),
-            ],
-          ),
-        ),
+      key: const Key('lucky-combo-overlay'), right: 8, top: 20,
+      child: LuckyComboPanel(
+        gift: gift, quantity: _luckyComboQuantity, count: _luckyComboCount,
+        wonCoins: _luckyComboWon, sentCoins: _luckyComboSent,
+        highest: _luckySessionHighest, secondsLeft: _luckyComboSecondsLeft,
+        loading: _luckyComboSending, poolCoins: _luckyPoolBalance, avatar: _luckyAvatarProvider(widget.state.auth.current?.avatarDataUrl),
+        onSend: () => unawaited(_repeatLuckyGift()),
       ),
     );
   }
@@ -4163,7 +4006,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           const SizedBox(width: 6),
                           const Expanded(
                             child: Text(
-                              'Lucky quantity • separate result per send',
+                              'Lucky quantity • independent result per unit',
                               style: TextStyle(
                                 color: RoyalPalette.cream,
                                 fontSize: 9,
@@ -8836,73 +8679,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       gift: _luckySeatEffectGift!,
                       seatDiameter: seatDiameter,
                     ),
-                  if (showLuckySeatEffect &&
-                      _luckyLastMultiplier > 0)
-                    Positioned(
-                      top: -(compact ? 30.0 : 38.0),
-                      child: IgnorePointer(
-                        child: TweenAnimationBuilder<double>(
-                          key: ValueKey<String>(
-                            'lucky-multiplier-$_luckyAnimationSequence',
-                          ),
-                          tween: Tween<double>(begin: 0, end: 1),
-                          duration: const Duration(milliseconds: 1500),
-                          builder: (context, value, child) {
-                            final opacity = value < 0.72
-                                ? 1.0
-                                : ((1 - value) / 0.28)
-                                    .clamp(0.0, 1.0)
-                                    .toDouble();
-                            return Transform.translate(
-                              offset: Offset(0, -24 * value),
-                              child: Opacity(
-                                opacity: opacity,
-                                child: child,
-                              ),
-                            );
-                          },
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 4,
-                            ),
-                            decoration: BoxDecoration(
-                              gradient: LinearGradient(
-                                colors: _luckyLastMultiplier >= 200
-                                    ? const <Color>[
-                                        Color(0xFFFFE66D),
-                                        Color(0xFFFF8C26),
-                                        Color(0xFFD82323),
-                                      ]
-                                    : const <Color>[
-                                        Color(0xFF8C5CFF),
-                                        Color(0xFFFF5FCE),
-                                      ],
-                              ),
-                              borderRadius: BorderRadius.circular(14),
-                              border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                width: 1,
-                              ),
-                              boxShadow: const <BoxShadow>[
-                                BoxShadow(
-                                  color: Color(0x88FFB84D),
-                                  blurRadius: 10,
-                                ),
-                              ],
-                            ),
-                            child: Text(
-                              '$_luckyLastMultiplier×',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: compact ? 11 : 14,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+
                 ],
               ),
             ),
@@ -9734,7 +9511,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   onFinished: _finishPremiumEntrance,
                 ),
               ),
-            if (_luckyComboGift != null &&
+            Positioned.fill(child: LuckyGiftOverlay(
+              queue: _luckyVisuals, lane: _cinematicLane,
+              onStarted: _playLuckySeatVisual,
+              enabled: widget.state.roomControls.effectsEnabled &&
+                  widget.state.roomControls.luckyGiftEffectEnabled,
+            )),
+            if (_luckyComboTimer.active && _luckyComboGift != null &&
                 !_fruitJackpotOpen &&
                 !_fruitPartyOpen)
               _buildLuckyComboOverlay(),

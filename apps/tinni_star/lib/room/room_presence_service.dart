@@ -62,6 +62,17 @@ class RoomGiftVisualEvent {
     required this.multiplier,
     required this.rebateCoins,
     required this.createdAt,
+    this.senderName = '',
+    this.sentCoins = 0,
+    this.unitPrice = 0,
+    this.sessionId = '',
+    this.multiplierCounts = const [],
+    this.highWin = false,
+    this.bannerWin = false,
+    this.ultraWin = false,
+    this.bannersEnabled = true,
+    this.visualStartedAtMs = 0,
+    this.visualDurationMs = 0,
   });
 
   final String id;
@@ -75,6 +86,43 @@ class RoomGiftVisualEvent {
   final int multiplier;
   final int rebateCoins;
   final DateTime createdAt;
+  final String senderName;
+  final int sentCoins;
+  final int unitPrice;
+  final String sessionId;
+  final List<Map<String, int>> multiplierCounts;
+  final bool highWin;
+  final bool bannerWin;
+  final bool ultraWin;
+  final bool bannersEnabled;
+  final int visualStartedAtMs;
+  final int visualDurationMs;
+
+  factory RoomGiftVisualEvent.fromJson(Map<String, dynamic> gift) {
+    int number(String key) => int.tryParse(gift[key]?.toString() ?? '') ?? 0;
+    final receivers = gift['receiver_ids'];
+    final counts = gift['multiplier_counts'];
+    return RoomGiftVisualEvent(
+      id: gift['id']?.toString() ?? '', senderId: gift['sender_id']?.toString() ?? '',
+      giftId: gift['gift_id']?.toString() ?? '', giftName: gift['gift_name']?.toString() ?? 'Gift',
+      receiverIds: List.unmodifiable(receivers is List ? receivers
+          .map((value) => value?.toString().trim() ?? '').where((id) => id.isNotEmpty).toSet() : <String>[]),
+      quantity: math.max(1, number('quantity')), lucky: gift['lucky'] == true,
+      multiplier: number('multiplier').clamp(0, 1000).toInt(), rebateCoins: math.max(0, number('rebate_coins')),
+      createdAt: DateTime.fromMillisecondsSinceEpoch(number('created_at')),
+      roomSummary: gift['room_summary'] is Map ? Map<String, dynamic>.from(gift['room_summary'] as Map) : null,
+      senderName: gift['sender_name']?.toString() ?? '', sentCoins: math.max(0, number('sent_coins')),
+      unitPrice: math.max(0, number('unit_price')), sessionId: gift['session_id']?.toString() ?? '',
+      multiplierCounts: List.unmodifiable(counts is List ? counts.whereType<Map>().map((row) => <String, int>{
+        'multiplier': int.tryParse(row['multiplier']?.toString() ?? '') ?? -1,
+        'count': int.tryParse(row['count']?.toString() ?? '') ?? 0,
+      }).where((row) => row['multiplier']! >= 0 && row['multiplier']! <= 1000 &&
+          row['count']! > 0 && row['count']! <= 239970) : <Map<String, int>>[]),
+      highWin: gift['high_win'] == true, bannerWin: gift['banner_win'] == true,
+      ultraWin: gift['ultra_win'] == true, bannersEnabled: gift['banners_enabled'] != false,
+      visualStartedAtMs: number('visual_started_at'), visualDurationMs: number('visual_duration_ms'),
+    );
+  }
 }
 
 class RoomChatEvent {
@@ -187,6 +235,25 @@ class RoomPresenceService extends ChangeNotifier {
   final List<RoomLuckyNumberEvent> luckyNumberEvents =
       <RoomLuckyNumberEvent>[];
   RoomGiftVisualEvent? latestGiftVisualEvent;
+  final List<RoomGiftVisualEvent> giftVisualEvents = [];
+  final Set<String> _giftVisualEventIds = {};
+  int _serverClockOffsetMs = 0;
+  int _lastServerNowMs = 0;
+  int get serverNowMs {
+    _lastServerNowMs = math.max(_lastServerNowMs,
+        DateTime.now().millisecondsSinceEpoch + _serverClockOffsetMs);
+    return _lastServerNowMs;
+  }
+
+  void _acceptGiftVisual(Map<String, dynamic> data) {
+    final event = RoomGiftVisualEvent.fromJson(data);
+    if (event.id.isEmpty || event.receiverIds.isEmpty || !_giftVisualEventIds.add(event.id)) return;
+    final serverTime = _asInt(data['server_time']);
+    if (serverTime > 0) _serverClockOffsetMs = serverTime - DateTime.now().millisecondsSinceEpoch;
+    latestGiftVisualEvent = event;
+    giftVisualEvents.add(event);
+    if (giftVisualEvents.length > 200) giftVisualEvents.removeAt(0);
+  }
   RoomChatEvent? latestChatEvent;
   final List<RoomChatEvent> chatEvents = <RoomChatEvent>[];
   final Set<int> lockedSeats = <int>{};
@@ -251,6 +318,11 @@ class RoomPresenceService extends ChangeNotifier {
     _roomGeneration++;
     _httpRoomId = null;
     _roomJoinedServerAt = 0;
+    latestGiftVisualEvent = null;
+    giftVisualEvents.clear();
+    _giftVisualEventIds.clear();
+    _serverClockOffsetMs = 0;
+    _lastServerNowMs = 0;
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
     _liveReconnectDelaySeconds = 2;
@@ -387,37 +459,8 @@ class RoomPresenceService extends ChangeNotifier {
           final gift = rawGift.map(
             (key, value) => MapEntry(key.toString(), value),
           );
-          final rawReceivers = gift['receiver_ids'];
-          final receiverIds = rawReceivers is List
-              ? rawReceivers
-                  .map((value) => value?.toString().trim() ?? '')
-                  .where((value) => value.isNotEmpty)
-                  .toSet()
-                  .toList(growable: false)
-              : const <String>[];
-          final id = gift['id']?.toString().trim() ?? '';
-          if (id.isNotEmpty && receiverIds.isNotEmpty) {
-            final createdAtMs = _asInt(gift['created_at']);
-            latestGiftVisualEvent = RoomGiftVisualEvent(
-              id: id,
-              senderId: gift['sender_id']?.toString() ?? '',
-              giftId: gift['gift_id']?.toString() ?? '',
-              giftName: gift['gift_name']?.toString() ?? 'Gift',
-              roomSummary: gift['room_summary'] is Map
-                  ? Map<String, dynamic>.from(gift['room_summary'] as Map) : null,
-              receiverIds: receiverIds,
-              quantity: math.max(1, _asInt(gift['quantity'])),
-              lucky: gift['lucky'] == true,
-              multiplier: math.max(0, _asInt(gift['multiplier'])),
-              rebateCoins: math.max(0, _asInt(gift['rebate_coins'])),
-              createdAt: DateTime.fromMillisecondsSinceEpoch(
-                createdAtMs > 0
-                    ? createdAtMs
-                    : DateTime.now().millisecondsSinceEpoch,
-              ),
-            );
-            notifyListeners();
-          }
+          _acceptGiftVisual(gift);
+          notifyListeners();
         }
         return;
       }
@@ -581,6 +624,9 @@ class RoomPresenceService extends ChangeNotifier {
       selfForcedSeatIndex = null;
       pendingSeatInvite = null;
       latestGiftVisualEvent = null;
+      giftVisualEvents.clear();
+      _giftVisualEventIds.clear();
+      _serverClockOffsetMs = 0;
       latestChatEvent = null;
       seatRequests.clear();
       lockedSeats.clear();
@@ -1005,6 +1051,9 @@ class RoomPresenceService extends ChangeNotifier {
 
         if (generation != _roomGeneration) return data;
         _markHttpHealthy();
+        if (data['visual_event'] is Map) {
+          _acceptGiftVisual(Map<String, dynamic>.from(data['visual_event'] as Map));
+        }
         if (applyResponse) {
           _apply(data);
         }
@@ -1311,6 +1360,7 @@ class RoomPresenceService extends ChangeNotifier {
       ..write('|')
       ..write(mutedSeats.join(','));
 
+    buffer.write('|gift:${latestGiftVisualEvent?.id ?? ''}');
     for (final request in seatRequests) {
       buffer
         ..write('|rq:')
@@ -1354,7 +1404,16 @@ class RoomPresenceService extends ChangeNotifier {
   void _apply(Map<String, dynamic> data) {
     final snapshotTime = _asInt(data['server_time']);
     if (snapshotTime > 0 && snapshotTime < _latestSnapshotTime) return;
-    if (snapshotTime > 0) _latestSnapshotTime = snapshotTime;
+    if (snapshotTime > 0) {
+      _latestSnapshotTime = snapshotTime;
+      _serverClockOffsetMs = snapshotTime - DateTime.now().millisecondsSinceEpoch;
+    }
+    final activeLucky = data['active_lucky_visuals'];
+    if (activeLucky is List) {
+      for (final raw in activeLucky.whereType<Map>()) {
+        _acceptGiftVisual(Map<String, dynamic>.from(raw));
+      }
+    }
     if (data['mic_mode'] != null) {
       micMode = data['mic_mode']?.toString() == 'free' ? 'free' : 'apply';
     }

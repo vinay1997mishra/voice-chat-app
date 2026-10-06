@@ -3525,7 +3525,7 @@ export default {
               .map((tx) => String(tx?.receiver_id || "").trim())
               .filter(Boolean),
           )];
-          await bestEffortRoomDirectoryTask("gifts.presence_delivery", () =>
+          const visualDelivery = await bestEffortRoomDirectoryTask("gifts.presence_delivery", () =>
             getRoomPresenceStore(env, roomId).recordGift({
             receivers: [...receiverTotals.entries()].map(
               ([user_id, socialValue]) => ({ user_id, coins: socialValue }),
@@ -3538,9 +3538,18 @@ export default {
                 transactions[0]?.gift_name || body.gift_name || "Gift",
               ),
               receiver_ids: visualReceiverIds,
-              quantity: Math.max(1, Number(body.quantity || 1)),
+              quantity: Math.max(1, Number(transactions[0]?.quantity || 1)),
               room_summary: result?.room_summary || null,
               lucky: Boolean(result?.lucky),
+              sender_name: String(appSession.user.display_name || appSession.user.user_id),
+              sent_coins: Math.max(0, Number(result?.total_cost || 0)),
+              unit_price: Math.max(0, Number(transactions[0]?.unit_price || body.unit_price || 0)),
+              session_id: result?.lucky?.session?.id || "",
+              multiplier_counts: result?.lucky?.multiplier_counts || [],
+              high_win: result?.lucky?.high_win === true,
+              banner_win: result?.lucky?.banner_win === true,
+              ultra_win: result?.lucky?.ultra_win === true,
+              banners_enabled: result?.lucky?.banners_enabled !== false,
               multiplier: Math.max(
                 0,
                 Number(result?.lucky?.multiplier || 0),
@@ -3554,6 +3563,7 @@ export default {
               ),
             },
           }));
+          if (visualDelivery?.visual_event) result.visual_event = visualDelivery.visual_event;
         }
         return json(result, 201);
       } catch (error) {

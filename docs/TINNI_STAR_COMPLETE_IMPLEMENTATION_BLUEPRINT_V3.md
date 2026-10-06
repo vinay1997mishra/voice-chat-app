@@ -161,8 +161,8 @@ Gift panel:
 - Selected recipient(s), selected Lucky gift, and chosen quantity persist into Combo.
 - A valid Lucky Send closes the gift panel **immediately**; it must not stay open covering Combo.
 - Successful Lucky send shows a clear room-screen Combo control.
-- Combo shows a visible **12-second countdown**.
-- Every successful Combo send restarts the 12-second window.
+- Combo shows a visible **9-second countdown**.
+- Every successful Combo send restarts the 9-second window.
 - If no Combo send occurs within the window, Combo disappears.
 - Normal/non-Lucky sending ends an old Lucky Combo sequence.
 - Lucky wallet/rebate state follows authoritative backend response.
@@ -232,7 +232,11 @@ Gift panel:
 
 - Lucky gifts keep colorful artwork.
 - Receiver-seat fly-in / pop / sparkle / impact remains.
-- Higher multiplier results remain visually stronger where implemented.
+- Center Lucky HUD shows the gift artwork, quantity, authoritative sent coins, total return and an animated revealed-return counter. Returns belong to the sender; Lucky room results are public, while Rocket received reward cards remain private.
+- Multiplier bubbles play one at a time: 1–10× pop, 20–50× glow, 75–100× sparks, 200–250× burst, 500× premium, 750× giant, 1000× full-screen celebration. Owner banner flags and self effect settings remain authoritative.
+- All independently rolled units, including 0× and wins after unit 32, are included in compact result counters. Up to 32 winning units show individually; larger batches group equal multipliers with an explicit result count. Nothing is rerolled by the client.
+- The backend reserves ordered room presentation start times. Sender HTTP confirmation and realtime broadcasts share the same event ID, result data and start/duration. Late or resumed clients follow the common clock; completed events are not replayed.
+- During Rocket or large Country presentations, Lucky uses a compact secondary position and suppresses full-screen bursts so those presentations remain readable.
 - Effect toggles remain self-scoped where currently implemented; one user's personal effect setting must not silently disable another user's view.
 
 ## 14. Calls / privacy / verification
@@ -1322,3 +1326,9 @@ The user's latest timing and privacy instructions supersede earlier general cine
 - Keep the locked seven-second server audience eligibility/payout window, ten incremental Rocket thresholds, Lucky 10%/normal 100%, and Host-only diamonds. These changes concern presentation and authenticated reward reads.
 
 - Country follow-up: show a large centered flag stage (96% screen width, 66% screen height), with natural wind ripples. After the two-second hold, shrink the flag during its flight to the exact selected receiver ID/DP.
+
+## 2026-10-06 — Lucky HUD and nine-second Combo
+
+- Every successful Lucky send renews the Combo to exactly nine seconds. Taps, failed requests and requests in flight do not renew the existing deadline. Nine seconds without a successful send hides the control.
+- Same gift and the same receiver set within the active window retain the Lucky session and selected quantity. A different gift, different receiver set, expired window or non-Lucky send ends continuation.
+- Center HUD and queued multiplier effects use the authenticated server result and shared room timeline. The Lucky RNG, maximum configured multiplier, prize pool, prices, sender payouts, recipient eligibility, Host-only Diamonds and Lucky 10% Rocket/social value continue to use their existing server rules.

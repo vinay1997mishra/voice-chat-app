@@ -6442,6 +6442,7 @@ export class AppDirectoryStore extends DurableObject {
         multiplier_sum: 0,
         highest_multiplier: 0,
         recent_multipliers: [],
+        multiplier_counts: [],
       };
     }
 
@@ -6453,12 +6454,14 @@ export class AppDirectoryStore extends DurableObject {
     let multiplierSum = 0;
     let highestMultiplier = 0;
     const recentMultipliers = [];
+    const multiplierCounts = new Map();
     for (let index = 0; index < randomValues.length; index += 1) {
       const multiplier = this._pickLuckyMultiplier(
         randomValues[index],
         table,
       );
       multiplierSum += multiplier;
+      multiplierCounts.set(multiplier, (multiplierCounts.get(multiplier) || 0) + 1);
       highestMultiplier = Math.max(highestMultiplier, multiplier);
       if (recentMultipliers.length < 32) {
         recentMultipliers.push(multiplier);
@@ -6468,6 +6471,7 @@ export class AppDirectoryStore extends DurableObject {
       multiplier_sum: multiplierSum,
       highest_multiplier: highestMultiplier,
       recent_multipliers: recentMultipliers,
+      multiplier_counts: [...multiplierCounts].map(([multiplier, count]) => ({ multiplier, count })),
     };
   }
 
@@ -6883,6 +6887,7 @@ export class AppDirectoryStore extends DurableObject {
           receiver_diamonds: receiverDiamonds,
           roll_count: quantity,
           recent_multipliers: recentMultipliers,
+          multiplier_counts: rolled.multiplier_counts,
         });
       }
     }
@@ -7019,6 +7024,16 @@ export class AppDirectoryStore extends DurableObject {
         multiplier: highestMultiplier,
         rebate_coins: totalRebate,
         results: luckyResults,
+        // Every independently rolled unit is represented, including 0x and rare wins
+        // beyond the legacy 32-unit preview. At most 1,001 counters cross the wire.
+        multiplier_counts: [...luckyResults.reduce((counts, result) => {
+          for (const row of result.multiplier_counts) {
+            counts.set(row.multiplier, (counts.get(row.multiplier) || 0) + row.count);
+          }
+          return counts;
+        }, new Map())].sort((a, b) => a[0] - b[0])
+          .map(([multiplier, count]) => ({ multiplier, count })),
+        banners_enabled: luckyConfig.banners_enabled !== false,
         pool_contribution: totalPoolContribution,
         pool_balance: this.luckyGiftState(senderId).pool_balance,
         max_multiplier: Math.max(1, Math.min(1000, Number(luckyConfig.max_multiplier || 1000))),

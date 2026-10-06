@@ -86,16 +86,8 @@ for (const value of [9, 21, 51, 99, 199, 599, 899, 2999, 7999]) {
     "Lucky preset " + value + " must remain available",
   );
 }
-assert.match(
-  roomScreen,
-  /Timer\(const Duration\(seconds: 12\)/,
-  "Lucky Combo must expire after 12 seconds of inactivity",
-);
-assert.match(
-  roomScreen,
-  /A tap\/send inside the 12-second Combo window counts as activity\.[\s\S]{0,600}_luckyComboExpiryTimer\?\.cancel\(\);[\s\S]{0,220}_luckyComboCountdownTimer\?\.cancel\(\);[\s\S]{0,220}_luckyComboEpoch\+\+;/,
-  "Touching/sending Combo must pause both old 12-second timers while the request is in flight",
-);
+assert.match(roomScreen, /_luckyComboTimer\.active/, "Lucky Combo continuation uses its actual nine-second deadline");
+assert.doesNotMatch(roomScreen, /A tap\/send inside the 12-second Combo window/, "Only successful sends may renew Lucky Combo");
 assert.match(
   roomScreen,
   /_resetLuckyComboState\(\);/,
@@ -113,8 +105,8 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /Key\('lucky-combo-countdown'\)/,
-  "Lucky Combo must visibly show its 12-second countdown on the room screen",
+  /secondsLeft: _luckyComboSecondsLeft/,
+  "Lucky Combo must visibly show its nine-second countdown on the room screen",
 );
 assert.match(
   roomScreen,
@@ -158,7 +150,7 @@ assert.match(
 );
 assert.match(
   roomScreen,
-  /latestGiftVisualEvent[\s\S]{0,1800}_luckyAnimationReceiverIds[\s\S]{0,600}event\.receiverIds/,
+  /latestGiftVisualEvent[\s\S]{0,1800}_playLuckySeatVisual[\s\S]{0,1000}_luckyAnimationReceiverIds[\s\S]{0,600}event\.receiverIds/,
   "Room clients must fan Lucky visual effects only to the broadcast selected receiver IDs",
 );
 assert.match(

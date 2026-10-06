@@ -44,7 +44,7 @@ void main() {
     expect(content.contains('42 seats = 6 seats per row × 7 rows'), true);
     expect(content.contains('Old 7×6 / 7-seats-per-row layout is forbidden'), true);
     expect(content.contains('blurred/dimmed with gold check/glow'), true);
-    expect(content.contains('visible **12-second countdown**'), true);
+    expect(content.contains('visible **9-second countdown**'), true);
     expect(content.contains('simultaneous fan-out to all selected seats'), true);
   });
 }

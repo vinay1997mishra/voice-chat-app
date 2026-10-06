@@ -108,6 +108,10 @@ export class RoomPresenceStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
 
+      CREATE TABLE IF NOT EXISTS room_lucky_visuals (
+        id TEXT PRIMARY KEY, event_json TEXT NOT NULL, ends_at INTEGER NOT NULL
+      );
+
       CREATE TABLE IF NOT EXISTS room_gift_totals (
         user_id TEXT PRIMARY KEY,
         coins INTEGER NOT NULL DEFAULT 0,
@@ -1238,6 +1242,7 @@ export class RoomPresenceStore extends DurableObject {
         created_at: now,
       },
       lucky_number_events: this.luckyNumberEvents(),
+      active_lucky_visuals: this.activeLuckyVisuals(now),
     };
   }
 
@@ -1337,6 +1342,7 @@ export class RoomPresenceStore extends DurableObject {
     }
     if (changed) this._broadcastPresence("gift_received", now);
 
+    let visualEvent = null;
     const rawEvent = input?.event;
     if (rawEvent && typeof rawEvent === "object") {
       const receiverIds = [...new Set(
@@ -1348,9 +1354,7 @@ export class RoomPresenceStore extends DurableObject {
       const senderId = String(rawEvent.sender_id || "").trim().slice(0, 120);
       const giftId = String(rawEvent.gift_id || "").trim().slice(0, 80);
       if (eventId && senderId && giftId && receiverIds.length > 0) {
-        this._broadcastRoomEvent({
-          type: "gift_sent",
-          gift: {
+        visualEvent = {
             id: eventId,
             sender_id: senderId,
             gift_id: giftId,
@@ -1369,8 +1373,51 @@ export class RoomPresenceStore extends DurableObject {
               Math.floor(Number(rawEvent.rebate_coins || 0)),
             ),
             created_at: Number(rawEvent.created_at || now),
-          },
-        });
+            server_time: now,
+            sender_name: String(rawEvent.sender_name || senderId).slice(0, 80),
+            sent_coins: Math.max(0, Math.floor(Number(rawEvent.sent_coins || 0))),
+            unit_price: Math.max(0, Math.floor(Number(rawEvent.unit_price || 0))),
+            session_id: String(rawEvent.session_id || "").slice(0, 96),
+            high_win: rawEvent.high_win === true,
+            banner_win: rawEvent.banner_win === true,
+            ultra_win: rawEvent.ultra_win === true,
+            banners_enabled: rawEvent.banners_enabled !== false,
+            multiplier_counts: (Array.isArray(rawEvent.multiplier_counts) ? rawEvent.multiplier_counts : [])
+              .filter(row => Number.isInteger(row?.multiplier) && row.multiplier >= 0 &&
+                row.multiplier <= 1000 && Number.isInteger(row?.count) && row.count > 0 && row.count <= 239970)
+              .slice(0, 1001).map(row => ({ multiplier: row.multiplier, count: row.count })),
+        };
+        if (visualEvent.lucky) {
+          const existing = this.ctx.storage.sql.exec(
+            "SELECT event_json FROM room_lucky_visuals WHERE id=? LIMIT 1", eventId,
+          ).toArray()[0];
+          if (existing) {
+            visualEvent = { ...JSON.parse(existing.event_json), server_time: now };
+          } else {
+            const wins = visualEvent.multiplier_counts.filter(row => row.multiplier > 0);
+            const winCount = wins.reduce((sum, row) => sum + row.count, 0);
+            // Small sends show each win. Huge batches group identical results with
+            // an explicit count, retaining every unit without hours of playback.
+            const durationFor = multiplier => multiplier >= 1000 ? 2200 :
+              multiplier >= 750 ? 1800 : multiplier >= 500 ? 1400 :
+              multiplier >= 200 ? 1100 : multiplier >= 75 ? 920 :
+              multiplier >= 20 ? 700 : 540;
+            const bubbleDuration = wins.length ? wins.reduce((sum, row) =>
+              sum + durationFor(row.multiplier) * (winCount <= 32 ? row.count : 1), 0) :
+              visualEvent.rebate_coins > 0 ? durationFor(visualEvent.multiplier) : 620;
+            const until = this.ctx.storage.sql.exec(
+              "SELECT MAX(ends_at) AS until_at FROM room_lucky_visuals",
+            ).toArray()[0]?.until_at || 0;
+            visualEvent.visual_started_at = Math.max(now + 450, Number(until));
+            visualEvent.visual_duration_ms = 600 + bubbleDuration + 1400;
+            this.ctx.storage.sql.exec(
+              "INSERT INTO room_lucky_visuals(id,event_json,ends_at) VALUES(?,?,?)",
+              eventId, JSON.stringify(visualEvent), visualEvent.visual_started_at + visualEvent.visual_duration_ms,
+            );
+          }
+          this.ctx.storage.sql.exec("DELETE FROM room_lucky_visuals WHERE ends_at < ?", now - 30000);
+        }
+        this._broadcastRoomEvent({ type: "gift_sent", gift: visualEvent });
       }
     }
 
@@ -1378,7 +1425,14 @@ export class RoomPresenceStore extends DurableObject {
       ok: true,
       server_time: now,
       members: this._members(now),
+      visual_event: visualEvent,
     };
+  }
+
+  activeLuckyVisuals(now = Date.now()) {
+    return this.ctx.storage.sql.exec(
+      "SELECT event_json FROM room_lucky_visuals WHERE ends_at > ? ORDER BY ends_at ASC LIMIT 50", now,
+    ).toArray().map(row => ({ ...JSON.parse(row.event_json), server_time: now }));
   }
 
   _upsert(input) {
@@ -1568,6 +1622,7 @@ export class RoomPresenceStore extends DurableObject {
       self_forced_seat_index: seatForced ? seatIndex : null,
       pending_seat_invite: this.seatInviteFor(userId),
       lucky_number_events: this.luckyNumberEvents(),
+      active_lucky_visuals: this.activeLuckyVisuals(now),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
       muted_seats: this.mutedSeats(),
@@ -1667,6 +1722,7 @@ export class RoomPresenceStore extends DurableObject {
       member_ttl_ms: MEMBER_TTL_MS,
       chat_messages: this.chatMessages(),
       lucky_number_events: this.luckyNumberEvents(),
+      active_lucky_visuals: this.activeLuckyVisuals(now),
       seat_requests: this.seatRequests(),
       locked_seats: this.lockedSeats(),
       muted_seats: this.mutedSeats(),

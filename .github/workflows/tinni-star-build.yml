@@ -207,6 +207,27 @@ jobs:
           path: apps/tinni_star/build/game_previews/*.png
           if-no-files-found: ignore
 
+      - name: Publish Lucky effect review frames
+        if: success()
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          if [ -d apps/tinni_star/build/lucky_previews ]; then
+            mkdir -p tools/lucky/previews
+            cp apps/tinni_star/build/lucky_previews/*.png tools/lucky/previews/
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add -f tools/lucky/previews
+            tree="$(git write-tree)"
+            commit="$(git commit-tree "$tree" -p "$SOURCE_SHA" -m "Lucky HUD and multiplier effect review frames")"
+            branch="lucky-preview-${SOURCE_SHA:0:12}"
+            if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+              git push origin "$commit:refs/heads/$branch"
+            fi
+            echo "Lucky previews: https://github.com/$GITHUB_REPOSITORY/tree/$branch/tools/lucky/previews" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
       - name: Verify live Tinni backend before packaging
         shell: bash
         run: |

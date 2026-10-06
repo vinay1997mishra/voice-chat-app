@@ -9,6 +9,8 @@ class CinematicLane extends ChangeNotifier {
   bool _disposed = false;
   bool _notificationPending = false;
 
+  bool get busy => _owner != null;
+
   bool acquire(Object owner) {
     if (_disposed) return false;
     if (identical(_owner, owner)) return true;
