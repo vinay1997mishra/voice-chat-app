@@ -1,0 +1,45 @@
+name: Tinni gift visual review
+
+on:
+  push:
+    branches: [tinnistar]
+    paths: ['.github/workflows/tinni-gift-visual-review.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gift-preview-b874076d4e0b
+      - name: Compress visual review sheets for direct viewing
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y python3-pil
+          python3 - <<'PY'
+          from pathlib import Path
+          from PIL import Image
+          folder = Path("tools/gifts/previews")
+          for source in sorted(folder.glob("all-gifts-*.png")):
+              Image.open(source).convert("RGB").save(source.with_suffix(".jpg"), quality=90)
+          assert len(list(folder.glob("all-gifts-*.jpg"))) == 2
+          PY
+      - name: Publish the review images
+        env:
+          SOURCE_SHA: b874076d4e0bc3276e2e871c98e98f9706719cd8
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/gifts/previews/*.jpg
+          git commit -m "Compact visual review of all 80 named gift effects"
+          branch="gift-review-${SOURCE_SHA:0:12}"
+          if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git push origin "HEAD:refs/heads/$branch"
+          fi
+          echo "https://github.com/$GITHUB_REPOSITORY/tree/$branch/tools/gifts/previews" >> "$GITHUB_STEP_SUMMARY"
