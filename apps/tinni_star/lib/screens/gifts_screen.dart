@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../economy/economy.dart';
+import '../economy/enemy_gift_catalog.dart';
 import '../economy/premium_gift_catalog.dart';
 import '../effects/cinematic_video.dart';
 import '../effects/effect_queue.dart';
@@ -23,13 +24,13 @@ class GiftsScreen extends StatefulWidget {
     'Normal' => PremiumGiftCatalog.normal,
     'Lucky' => GiftService.luckyCatalog,
     'CP' => PremiumGiftCatalog.cp,
-    "Enemy's" => PremiumGiftCatalog.enemy,
+    "Enemy's" => EnemyGiftCatalog.gifts,
     'Country' => PremiumGiftCatalog.countries,
     'Luxury' => PremiumGiftCatalog.normal.where((gift) => gift.price >= 1000000).toList(growable: false),
     _ => [
       ...PremiumGiftCatalog.normal,
       ...PremiumGiftCatalog.cp,
-      ...PremiumGiftCatalog.enemy,
+      ...EnemyGiftCatalog.gifts,
       ...GiftService.luckyCatalog,
     ],
   };
