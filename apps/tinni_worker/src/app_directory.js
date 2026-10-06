@@ -893,6 +893,21 @@ export class AppDirectoryStore extends DurableObject {
       );
       CREATE INDEX IF NOT EXISTS idx_cp_relationships_users ON cp_relationships(user_a, user_b, state);
 
+      CREATE TABLE IF NOT EXISTS enemy_relationships (
+        user_a TEXT NOT NULL,
+        user_b TEXT NOT NULL,
+        state TEXT NOT NULL DEFAULT 'pending',
+        rivalry INTEGER NOT NULL DEFAULT 0,
+        level INTEGER NOT NULL DEFAULT 1,
+        requested_by TEXT NOT NULL,
+        last_rivalry_at INTEGER,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        PRIMARY KEY(user_a, user_b)
+      );
+      CREATE INDEX IF NOT EXISTS idx_enemy_relationships_users
+        ON enemy_relationships(user_a, user_b, state);
+
       CREATE TABLE IF NOT EXISTS cp_memories (
         id TEXT PRIMARY KEY,
         user_a TEXT NOT NULL,
@@ -7055,13 +7070,24 @@ export class AppDirectoryStore extends DurableObject {
         created_at: now,
       });
 
-      this._recordCpGiftIntimacy(
-        senderId,
-        receiverId,
-        receiverTotal,
-        isLucky,
-        now,
-      );
+      const relationshipCategory =
+        String(giftData.category || "").trim().toLowerCase();
+      if (relationshipCategory === "cp") {
+        this._recordCpGiftIntimacy(
+          senderId,
+          receiverId,
+          receiverTotal,
+          isLucky,
+          now,
+        );
+      } else if (relationshipCategory === "enemy") {
+        this._recordEnemyGiftPower(
+          senderId,
+          receiverId,
+          receiverTotal,
+          now,
+        );
+      }
 
       if (receiverDiamonds > 0) {
         this.ctx.storage.sql.exec(
@@ -7985,6 +8011,150 @@ export class AppDirectoryStore extends DurableObject {
       memory.id, row.user_a, row.user_b, userId, text, memory.created_at,
     );
     return memory;
+  }
+
+  _enemyLevelThresholds() {
+    const configured = this._ownerSetting("enemy_level_thresholds", [200000]);
+    const values = Array.isArray(configured) ? configured : [200000];
+    return values
+      .map((value) => Math.max(1, Math.floor(Number(value || 0))))
+      .filter(Number.isFinite)
+      .sort((a, b) => a - b);
+  }
+
+  _enemyLevelForRivalry(rivalryValue) {
+    const rivalry = Math.max(0, Math.floor(Number(rivalryValue || 0)));
+    let level = 1;
+    for (const threshold of this._enemyLevelThresholds()) {
+      if (rivalry >= threshold) level += 1;
+      else break;
+    }
+    return level;
+  }
+
+  _enemyHasBlockingFlow(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return false;
+    const row = this.ctx.storage.sql.exec(
+      "SELECT state FROM enemy_relationships WHERE user_a=? OR user_b=? ORDER BY updated_at DESC LIMIT 1",
+      userId, userId,
+    ).toArray()[0];
+    const state = String(row?.state || "").trim().toLowerCase();
+    return state === "pending" || state === "accepted";
+  }
+
+  enemyState(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) throw new Error("user ID is required");
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM enemy_relationships WHERE user_a=? OR user_b=? ORDER BY updated_at DESC LIMIT 1",
+      userId, userId,
+    ).toArray()[0];
+    if (!row) return null;
+    const rivalry = Math.max(0, Number(row.rivalry || 0));
+    const thresholds = this._enemyLevelThresholds();
+    const level = Number(row.level || this._enemyLevelForRivalry(rivalry));
+    const nextThreshold =
+      level - 1 < thresholds.length ? thresholds[level - 1] : null;
+    return {
+      ...row,
+      rivalry,
+      level,
+      created_at: Number(row.created_at || 0),
+      updated_at: Number(row.updated_at || 0),
+      enemy_rules: {
+        gift_category: "enemy",
+        reference_coins_per_usd: 45000,
+        tinni_coins_per_usd: 2000000,
+        next_level_threshold: nextThreshold,
+      },
+    };
+  }
+
+  enemyRequest(userIdValue, targetIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const targetId = String(targetIdValue || "").trim();
+    if (!userId || !targetId || userId === targetId) {
+      throw new Error("Choose another user as Enemy");
+    }
+    if (!this.getUserById(targetId)) throw new Error("User not found");
+    if (this._enemyHasBlockingFlow(userId) || this._enemyHasBlockingFlow(targetId)) {
+      throw new Error("An Enemy relation is already active");
+    }
+    const pair = [userId, targetId].sort();
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      \`INSERT INTO enemy_relationships
+        (user_a,user_b,state,rivalry,level,requested_by,last_rivalry_at,created_at,updated_at)
+       VALUES (?,?, 'pending',0,1,?,?,?,?)
+       ON CONFLICT(user_a,user_b) DO UPDATE SET
+         state='pending',
+         rivalry=0,
+         level=1,
+         requested_by=excluded.requested_by,
+         last_rivalry_at=excluded.last_rivalry_at,
+         updated_at=excluded.updated_at\`,
+      pair[0], pair[1], userId, now, now, now,
+    );
+    return this.enemyState(userId);
+  }
+
+  enemyRespond(userIdValue, acceptValue) {
+    const userId = String(userIdValue || "").trim();
+    const row = this.enemyState(userId);
+    if (!row || row.state !== "pending" || row.requested_by === userId) {
+      throw new Error("No Enemy challenge is awaiting your response");
+    }
+    const now = Date.now();
+    this.ctx.storage.sql.exec(
+      "UPDATE enemy_relationships SET state=?,last_rivalry_at=?,updated_at=? WHERE user_a=? AND user_b=?",
+      acceptValue === true ? "accepted" : "refused",
+      now, now, row.user_a, row.user_b,
+    );
+    return this.enemyState(userId);
+  }
+
+  enemyDisconnect(userIdValue) {
+    const userId = String(userIdValue || "").trim();
+    const row = this.enemyState(userId);
+    if (!row) return { ok: true, enemy: null };
+    this.ctx.storage.sql.exec(
+      "DELETE FROM enemy_relationships WHERE user_a=? AND user_b=?",
+      row.user_a, row.user_b,
+    );
+    return { ok: true, enemy: null };
+  }
+
+  _enemyGiftPowerPoints(senderIdValue, receiverIdValue, coinValue) {
+    const senderId = String(senderIdValue || "").trim();
+    const receiverId = String(receiverIdValue || "").trim();
+    const coins = Math.max(0, Math.floor(Number(coinValue || 0)));
+    if (!senderId || !receiverId || coins <= 0) return 0;
+    const enemy = this.enemyState(senderId);
+    if (!enemy || enemy.state !== "accepted") return 0;
+    const pairMatches =
+      (String(enemy.user_a) === senderId && String(enemy.user_b) === receiverId) ||
+      (String(enemy.user_b) === senderId && String(enemy.user_a) === receiverId);
+    if (!pairMatches) return 0;
+    return Math.max(1, Math.floor(coins * 45000 / 2000000));
+  }
+
+  _recordEnemyGiftPower(senderIdValue, receiverIdValue, coinValue, nowValue) {
+    const senderId = String(senderIdValue || "").trim();
+    const enemy = this.enemyState(senderId);
+    if (!enemy || enemy.state !== "accepted") return 0;
+    const points = this._enemyGiftPowerPoints(
+      senderId, receiverIdValue, coinValue,
+    );
+    if (points <= 0) return 0;
+    const rivalry = Math.max(0, Number(enemy.rivalry || 0)) + points;
+    const level = this._enemyLevelForRivalry(rivalry);
+    const now = Number(nowValue || Date.now());
+    this.ctx.storage.sql.exec(
+      "UPDATE enemy_relationships SET rivalry=?,level=?,last_rivalry_at=?,updated_at=? WHERE user_a=? AND user_b=?",
+      rivalry, level, now, now, enemy.user_a, enemy.user_b,
+    );
+    return points;
   }
 
   profileTrends(userIdValue, limitValue = 40) {
