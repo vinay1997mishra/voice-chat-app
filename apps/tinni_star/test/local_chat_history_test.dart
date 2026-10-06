@@ -145,4 +145,18 @@ void main() {
       message: const ChatMessage(id: 'bad', from: 'peer', to: 'user-1',
         text: 'Photo', kind: 'image', mediaUrl: 'https://other.example/message-media/bad')), isNull);
   });
+  test('persistent phone history excludes DP copies', () async {
+    final social = SocialService(localHistory: files);
+    addTearDown(social.dispose);
+    await social.bindLocalAccount('one@example.com', 'user-1');
+    social.messageThreads.add(const MessageThread(
+      userId: 'peer', displayName: 'Friend', isFriend: true,
+      avatarDataUrl: 'data:image/png;base64,OLDPROFILECOPY'));
+    social.applyMessageEvent(message('chat'));
+    await social.flushLocalHistory();
+    final data = await files.load('${social.apiBase.origin}|one@example.com');
+    expect(jsonEncode(data), isNot(contains('OLDPROFILECOPY')));
+    expect((data['threads'] as List).single['last_message']['id'], 'chat');
+  });
+
 }

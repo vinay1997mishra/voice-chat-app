@@ -603,9 +603,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
   }
 
   ImageProvider? _avatarProvider(String? rawAvatar) {
-    if (rawAvatar == null || !rawAvatar.startsWith('data:image/')) {
-      return null;
-    }
+    if (rawAvatar == null || rawAvatar.isEmpty) return null;
+    if (Uri.tryParse(rawAvatar)?.scheme == 'https') return NetworkImage(rawAvatar);
+    if (!rawAvatar.startsWith('data:image/')) return null;
     try {
       return MemoryImage(base64Decode(rawAvatar.split(',').last));
     } catch (_) {
