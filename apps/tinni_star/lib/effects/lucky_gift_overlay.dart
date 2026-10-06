@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../ui/lucky_gift_art.dart';
 import '../economy/economy.dart';
 import 'cinematic_lane.dart';
+import 'gift_atmosphere.dart';
 import 'lucky_gift_queue.dart';
 
 String luckyCoins(int amount) => amount.toString().replaceAllMapped(
@@ -132,6 +133,13 @@ class _LuckyGiftOverlayState extends State<LuckyGiftOverlay>
         final bubbleY = primaryBusy ? height * .24 : height * .34;
         final hudY = primaryBusy ? height * .72 : height * .49;
         return Stack(clipBehavior: Clip.hardEdge, children: [
+          if (!primaryBusy)
+            Positioned(left: 0, top: 0, width: bubbleWidth, height: height * .55,
+              child: GiftAtmosphere(
+                key: const Key('lucky-named-atmosphere'),
+                giftId: event.giftId, progress: progress, reducedMotion: reduced,
+                child: const SizedBox.expand(),
+              )),
           if (ultra && !primaryBusy && !reduced)
             Positioned.fill(
               key: const Key('lucky-fullscreen-celebration'),

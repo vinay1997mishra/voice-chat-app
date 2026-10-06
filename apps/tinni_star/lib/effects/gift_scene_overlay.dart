@@ -7,6 +7,7 @@ import '../economy/economy.dart';
 import '../economy/premium_gift_catalog.dart';
 import 'cinematic_video.dart';
 import 'cinematic_lane.dart';
+import 'gift_atmosphere.dart';
 
 class GiftSceneEvent {
   GiftSceneEvent({required this.gift, required List<String> recipients})
@@ -223,7 +224,11 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
                         ),
                   child: const SizedBox.expand(),
                 );
-                return Center(
+                return GiftAtmosphere(
+                  giftId: event.gift.id,
+                  progress: _motion.value,
+                  reducedMotion: reduced,
+                  child: Center(
                   child: FractionallySizedBox(
                     key: countryFlag ? const Key('country-flag-large-center') : null,
                     widthFactor: countryFlag ? .96 : fullScreen ? 1 : .72,
@@ -236,6 +241,7 @@ class _GiftSceneOverlayState extends State<GiftSceneOverlay>
                       timeline: _motion,
                       fallback: fallback,
                     ),
+                  ),
                   ),
                 );
               },
@@ -400,7 +406,7 @@ class _GiftScenePainter extends CustomPainter {
     }
   }
   void _dragon(Canvas c,double r,Size size,double fade) {
-    c.save();c.translate(0,-size.height*.7*(1-(t/.28).clamp(0.0,1.0)));
+    c.save();
     final flap=math.sin(t*40)*r*.2;
     for(final side in [-1.0,1.0]) {
       final wing=Path()..moveTo(0,-r*.1)..lineTo(side*r*.95,-r*.6+flap)
