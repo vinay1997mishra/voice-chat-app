@@ -17,6 +17,12 @@ class FruitPartyPanel extends StatelessWidget {
       party: true,
       source: game,
       onClose: onClose,
+      liveConnected: () => game.liveConnected,
+      connectLive: () async {
+        final account = state.auth.current;
+        if (account != null) await game.connectLive(account.authToken);
+      },
+      disconnectLive: game.disconnectLive,
       snapshot: () => CasinoSnapshot(
         connected: game.connected, loading: game.loading,
         bettingOpen: game.bettingOpen, spinning: game.inResultSpin,
@@ -24,6 +30,7 @@ class FruitPartyPanel extends StatelessWidget {
         roundDuration: game.roundDurationMs, round: game.currentRoundId,
         balance: game.currentRoundId > 0 ? game.walletBalance : state.wallet.coins,
         mine: game.userTotalBet, winnings: game.todayWinnings,
+        lastBetResult: game.lastBetResult,
         
         error: game.lastError == null ? null : state.backend.userSafeError(StateError(game.lastError!)),
         fruits: [for (final fruit in FruitPartyKind.values) CasinoFruit(

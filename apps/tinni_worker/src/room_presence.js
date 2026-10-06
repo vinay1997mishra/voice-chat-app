@@ -2039,6 +2039,21 @@ export class RoomPresenceStore extends DurableObject {
     await this._handleSocketDisconnect(socket);
   }
 
+  updateRoomDetails(room) {
+    this._broadcastRoomEvent({ type: "room_details", room });
+  }
+
+  updateMemberProfile(user) {
+    const userId = String(user?.user_id || "");
+    if (!this.ctx.storage.sql.exec("SELECT user_id FROM room_members WHERE user_id=? LIMIT 1", userId).toArray().length) return;
+    this.ctx.storage.sql.exec(
+      "UPDATE room_members SET display_name=?,avatar_data_url=?,flag_emoji=?,country_code=? WHERE user_id=?",
+      String(user.display_name || ""), user.avatar_data_url || null,
+      String(user.flag_emoji || ""), String(user.country_code || ""), userId,
+    );
+    this._broadcastPresence("member_updated");
+  }
+
   async join(input) {
     const result = this._upsert(input);
     this._broadcastPresence("member_joined");

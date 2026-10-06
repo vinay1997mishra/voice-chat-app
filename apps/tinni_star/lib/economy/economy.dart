@@ -31,6 +31,8 @@ class WalletService {
   String freezeReason = '';
   int coinSellerBalance = 0;
   int merchantBalance = 0;
+  int coinSellerUsdCents = 0;
+  int merchantUsdCents = 0;
   bool coinSellerActive = false;
   bool merchantActive = false;
   bool coinSellerFrozen = false;
@@ -42,7 +44,15 @@ class WalletService {
   String get withdrawableUsdText =>
       '\$' + (withdrawableUsdCents / 100).toStringAsFixed(2);
 
+  int _remoteUpdatedAt = 0;
+  String? _remoteUserId;
   void applyRemote(RemoteWallet remote) {
+    if (remote.userId != null && remote.userId != _remoteUserId) {
+      _remoteUserId = remote.userId;
+      _remoteUpdatedAt = 0;
+    }
+    if (remote.updatedAt > 0 && remote.updatedAt < _remoteUpdatedAt) return;
+    if (remote.updatedAt > _remoteUpdatedAt) _remoteUpdatedAt = remote.updatedAt;
     coins = remote.coins;
     diamonds = remote.diamonds;
     diamondWalletVisible = remote.diamondWalletVisible;
@@ -59,6 +69,8 @@ class WalletService {
     merchantActive = remote.merchantWallet != null;
     coinSellerBalance = remote.coinSellerWallet?.balance ?? 0;
     merchantBalance = remote.merchantWallet?.balance ?? 0;
+    coinSellerUsdCents = remote.coinSellerWallet?.usdCents ?? 0;
+    merchantUsdCents = remote.merchantWallet?.usdCents ?? 0;
     coinSellerFrozen = remote.coinSellerWallet?.securityFrozen ?? false;
     merchantFrozen = remote.merchantWallet?.securityFrozen ?? false;
   }

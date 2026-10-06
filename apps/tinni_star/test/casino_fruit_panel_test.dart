@@ -32,7 +32,7 @@ class _Game extends ChangeNotifier {
 
 Widget _harness(_Game game, {required String id, bool party = false,
   Future<void> Function()? refresh, Future<String?> Function(String, int)? bet,
-  VoidCallback? close}) => RepaintBoundary(
+  VoidCallback? close, Future<void> Function()? connectLive, VoidCallback? disconnectLive}) => RepaintBoundary(
     key: const Key('casino-preview-root'),
     child: MaterialApp(home: Scaffold(backgroundColor: const Color(0xFF100C1C),
       body: MediaQuery(
@@ -40,6 +40,7 @@ Widget _harness(_Game game, {required String id, bool party = false,
         child: CasinoGameDock(child: CasinoFruitPanel(
           title: party ? 'Fruit Party' : 'Fruit Jackpot', gameId: id,
           party: party, source: game, snapshot: game.snapshot,
+          connectLive: connectLive, disconnectLive: disconnectLive,
           refresh: refresh ?? () async {}, bet: bet ?? (_, _) async => null, onClose: close,
         )),
       ),
@@ -47,6 +48,31 @@ Widget _harness(_Game game, {required String id, bool party = false,
   );
 
 void main() {
+  testWidgets('live game reads once on entry, accepts push, and refreshes only on user request', (tester) async {
+    final game = _Game();
+    var reads = 0, connects = 0, disconnects = 0;
+    await tester.pumpWidget(_harness(game, id: 'fruit-party', party: true,
+      refresh: () async { reads++; },
+      connectLive: () async { connects++; },
+      disconnectLive: () { disconnects++; },
+    ));
+    await tester.pump();
+    expect(reads, 1);
+    expect(connects, 1);
+    await tester.pump(const Duration(minutes: 2));
+    expect(reads, 1);
+    game.balance = 76543;
+    game.change();
+    await tester.pump();
+    expect(find.text('76.5K'), findsWidgets);
+    await tester.tap(find.byKey(const Key('fruit-party-refresh')));
+    await tester.pump();
+    expect(reads, 2);
+    await tester.pumpWidget(const SizedBox.shrink());
+    expect(disconnects, 1);
+    game.dispose();
+  });
+
   test('latest seven results sort by round and remove repeated snapshots', () {
     final rows = [for (var round = 1; round <= 10; round++)
       CasinoResult(round: round, fruit: 'lemon', settledAt: DateTime(2026))];

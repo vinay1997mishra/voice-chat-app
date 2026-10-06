@@ -1,0 +1,48 @@
+name: Tinni realtime budget checks
+on:
+  pull_request:
+    branches: [tinnistar]
+    paths:
+      - 'apps/tinni_star/**'
+      - 'apps/tinni_worker/**'
+      - '.github/workflows/tinni-realtime-budget-check.yml'
+  push:
+    branches: [fix/cloudflare-push-budget]
+permissions:
+  contents: read
+concurrency:
+  group: realtime-budget-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  flutter:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+      - name: Resolve packages
+        working-directory: apps/tinni_star
+        run: flutter pub get
+      - name: Analyze
+        working-directory: apps/tinni_star
+        run: flutter analyze
+      - name: Test all locked behavior and live request budget
+        working-directory: apps/tinni_star
+        run: timeout --signal=TERM --kill-after=10s 600s flutter test --reporter expanded --timeout 45s --fail-fast
+  worker:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - working-directory: apps/tinni_worker
+        run: npm install --no-audit --no-fund
+      - working-directory: apps/tinni_worker
+        run: npm test
+      - working-directory: apps/tinni_worker
+        run: npx wrangler deploy --dry-run --outdir .wrangler-dry-run
