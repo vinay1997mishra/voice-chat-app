@@ -129,3 +129,18 @@ test('only the main Owner can upload CP/VS MP4s and the managed 30 MB limit supp
   assert.equal(rejected.status,400);
   assert.equal(r.mediaObjects.size,1);
 });
+
+test('gift API requires idempotency and replays cannot repeat room recipient credit',async t=>{
+  const {r,a,b,room,d}=await fixture(t);
+  const payload={room_id:room.id,gift_id:'rose',quantity:1,receiver_ids:[b.user_id]};
+  const missing=await r.request('/gifts/send',a.token,payload);
+  assert.equal(missing.status,400);
+  const first=await r.request('/gifts/send',a.token,{...payload,request_id:'route_idem_0001'});
+  assert.equal(first.status,201,JSON.stringify(first.data));
+  const before=d.getWallet(a.user_id).coins;
+  const retry=await r.request('/gifts/send',a.token,{...payload,request_id:'route_idem_0001'});
+  assert.equal(retry.status,201);
+  assert.equal(retry.data.replayed,true);
+  assert.equal(d.getWallet(a.user_id).coins,before);
+  assert.equal(retry.data.transactions[0].id,first.data.transactions[0].id);
+});

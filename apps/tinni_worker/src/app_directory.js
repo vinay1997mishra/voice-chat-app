@@ -6938,7 +6938,7 @@ export class AppDirectoryStore extends DurableObject {
     const fingerprint = JSON.stringify({
       room_id: String(input.room_id || ""), gift_id: String(input.gift_id || ""),
       quantity: Number(input.quantity || 1),
-      receiver_ids: [...new Set((input.receiver_ids || []).map(String))].sort(),
+      receiver_ids: [...new Set((Array.isArray(input.receiver_ids) ? input.receiver_ids : []).map(String))].sort(),
       lucky_session_id: String(input.lucky_session_id || ""),
     });
     const result = this.ctx.storage.transactionSync(() => {
@@ -7966,6 +7966,7 @@ export class AppDirectoryStore extends DurableObject {
     ).price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const pair = [userId, targetId].sort(); const now = Date.now();
     if (price > 0) {
@@ -8025,6 +8026,7 @@ export class AppDirectoryStore extends DurableObject {
     const price = this._effectivePrice(userId, "cp:disconnect", Math.max(0, Number(policies.cp_disconnect_coins || 0))).price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
     if (price > 0) {
@@ -9014,6 +9016,7 @@ export class AppDirectoryStore extends DurableObject {
     const price = effective.price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
     if (price > 0) {
@@ -9077,6 +9080,7 @@ export class AppDirectoryStore extends DurableObject {
     const price = effective.price;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
     if (price > 0) {
@@ -9169,6 +9173,7 @@ export class AppDirectoryStore extends DurableObject {
     const price = effective.price;
     const wallet = this.getWallet(senderId);
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
     if (price > 0) {
@@ -9221,6 +9226,7 @@ export class AppDirectoryStore extends DurableObject {
     const effective = this._effectivePrice(userId, "frame:" + frameId, Math.max(0, Number(frame.price ?? policies.frame_default_coins ?? 0)), frame.data?.duration_days ?? 0);
     const price = effective.price;
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
     if (price > 0) {
@@ -9293,6 +9299,7 @@ export class AppDirectoryStore extends DurableObject {
     const durationDays = effective.duration_days ?? baseDurationDays;
     const wallet = this.getWallet(userId);
     if (wallet.banned) throw new Error("Wallet is restricted");
+    if (wallet.security_frozen) throw new Error("Wallet is security-frozen");
     if (wallet.coins < price) throw new Error("Insufficient coin balance");
     const now = Date.now();
     const current = this.vipState(userId);

@@ -228,6 +228,7 @@ class RoomPresenceService extends ChangeNotifier {
   int _liveGeneration = 0;
   bool _disposed = false;
   final HttpClient _httpClient;
+  final Map<String,String> _pendingGiftRequests = {};
   WebSocket? _liveSocket;
   StreamSubscription<dynamic>? _liveSocketSubscription;
   Timer? _liveReconnectTimer;
@@ -1118,31 +1119,27 @@ class RoomPresenceService extends ChangeNotifier {
   }
 
   Future<Map<String, dynamic>> sendGift({
-    required String roomId,
-    required String authToken,
-    required String giftId,
-    required String giftName,
-    required int quantity,
-    required int unitPrice,
-    required List<String> receiverIds,
-    String? luckySessionId,
-  }) =>
-      _commandPost(
-        '/gifts/send',
-        authToken,
-        <String, Object>{
-          'request_id': 'gift_' + List.generate(24, (_) => math.Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join(),
-          'room_id': roomId,
-          'gift_id': giftId,
-          'gift_name': giftName,
-          'quantity': quantity,
-          'unit_price': unitPrice,
-          'receiver_ids': receiverIds,
-          if (luckySessionId != null && luckySessionId.isNotEmpty)
-            'lucky_session_id': luckySessionId,
-        },
-        applyResponse: false,
-      );
+    required String roomId,required String authToken,required String giftId,
+    required String giftName,required int quantity,required int unitPrice,
+    required List<String> receiverIds,String? luckySessionId,
+  }) async {
+    final receivers=receiverIds.toSet().toList()..sort();
+    final key=jsonEncode([authToken,roomId,giftId,quantity,receivers,luckySessionId??'']);
+    if(!_pendingGiftRequests.containsKey(key) && _pendingGiftRequests.length>=100) {
+      _pendingGiftRequests.remove(_pendingGiftRequests.keys.first);
+    }
+    final requestId=_pendingGiftRequests.putIfAbsent(key,(){
+      final random=math.Random.secure();
+      return 'gift_' + List.generate(24,(_)=>random.nextInt(256).toRadixString(16).padLeft(2,'0')).join();
+    });
+    final result=await _commandPost('/gifts/send',authToken,<String,Object>{
+      'request_id':requestId,'room_id':roomId,'gift_id':giftId,'gift_name':giftName,
+      'quantity':quantity,'unit_price':unitPrice,'receiver_ids':receivers,
+      if(luckySessionId!=null && luckySessionId.isNotEmpty)'lucky_session_id':luckySessionId,
+    },applyResponse:false);
+    if(_pendingGiftRequests[key]==requestId) _pendingGiftRequests.remove(key);
+    return result;
+  }
 
   Future<List<Map<String, dynamic>>> roomGiftFeed({
     required String roomId,

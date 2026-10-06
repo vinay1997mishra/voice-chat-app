@@ -4,9 +4,10 @@ import '../app/tinni_state.dart';
 import '../ui/relationship_visuals.dart';
 
 class RelationshipRankingScreen extends StatefulWidget {
-  const RelationshipRankingScreen({super.key,required this.state,this.rivalry=false});
+  const RelationshipRankingScreen({super.key,required this.state,this.rivalry=false,this.onOpenRelationship});
   final TinniState state;
   final bool rivalry;
+  final VoidCallback? onOpenRelationship;
   @override
   State<RelationshipRankingScreen> createState()=>_RelationshipRankingScreenState();
 }
@@ -36,7 +37,10 @@ class _RelationshipRankingScreenState extends State<RelationshipRankingScreen> {
     final color=widget.rivalry?const Color(0xFFFF3549):const Color(0xFFFFAFCC);
     return Scaffold(key:Key(widget.rivalry?'vs-ranking-screen':'cp-ranking-screen'),
       backgroundColor:widget.rivalry?const Color(0xFF080910):null,
-      appBar:AppBar(title:Text('$label Ranking',style:TextStyle(color:color))),
+      appBar:AppBar(title:Text('$label Ranking',style:TextStyle(color:color)),actions:[
+        if(widget.onOpenRelationship!=null)IconButton(onPressed:widget.onOpenRelationship,
+          tooltip:'My $label',icon:Icon(widget.rivalry?Icons.bolt_rounded:Icons.favorite_rounded)),
+      ]),
       body:RefreshIndicator(onRefresh:_load,child:ListView(padding:const EdgeInsets.all(16),children:[
         if(loading)const Center(child:CircularProgressIndicator()),
         if(error!=null) ...[Text(error!),TextButton(onPressed:_load,child:const Text('Retry'))],

@@ -3706,6 +3706,9 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
+      body.request_id = body.request_id || request.headers.get("Idempotency-Key");
+      if (!body.request_id) return json({ ok: false, error: "Gift request ID is required. Update the app and try again." }, 400);
+
       try {
         const result = await getAppDirectoryStore(env).sendGift(
           appSession.user.user_id,
