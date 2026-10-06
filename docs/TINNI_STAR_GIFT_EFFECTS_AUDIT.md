@@ -1,4 +1,4 @@
-# Gift effects audit and 0.5.47 update
+# Gift effects audit and 0.5.48 update
 
 ## Verified starting point
 
@@ -8,6 +8,8 @@ Android run 37394296618 succeeded, installed the pinned 329-scene local media bu
 The complete feature inventory is consolidated into apps/tinni_star. This is not proof that every external integration works. The inspected readiness report had email OTP unconfigured; real multi-device audio, payment/payout/push and external-provider journeys still need live validation. Owner controls remain the protected owner website.
 
 ## Added name-matched presentation
+
+The standalone Gifts page now uses the same canonical catalog as the room: all Normal, Lucky, CP and Country gifts, the Luxury subset and the existing Backpack entry. Retired prototype IDs/prices are replaced by the actual room gift definitions, and cards show the bundled rendered poster or Lucky artwork. Server-side gift settlement remains authoritative.
 
 All 50 Normal, 20 CP and 10 Lucky gifts have explicit effect profiles over their existing local movies/artwork. There is no generic unmatched fallback for a catalog item. Country gifts keep their real wind-deformed flag movies and existing two-second recipient delivery. Rocket keeps all ten local launch movies and its locked launch/reward rules.
 
@@ -31,3 +33,5 @@ Atmospheres use the existing animation clock and gift hold duration, introduce n
 The update adds full catalog profile coverage, entrance/hold/exit painting checks and a pixel-level reduced-motion check. CI exports two contact sheets showing all 80 Normal/CP/Lucky subjects using the actual bundled posters with their effects. These are visual review artifacts, not screenshots of hardware video decoding.
 
 Original 3D meshes and original Lucky art remain the assets. Added weather/light/particle presentation does not convert basic meshes into photoreal models. Realistic asset refinement and Android playback quality should be judged from the movies and actual device playback, not inferred from a passing analyzer or codec test.
+
+Current app source: 95cd3eccd87d3e7a232cd9df09cbe2de0351d139. Its standalone analyzer and all 229 app tests passed in [run 37403311805](https://github.com/vinay1997mishra/voice-chat-app/actions/runs/37403311805). The full [Android build](https://github.com/vinay1997mishra/voice-chat-app/actions/runs/37403311748) also checks all Worker tests, live health/configuration and final APK identity/signing before publishing. [All gift review sheets](https://github.com/vinay1997mishra/voice-chat-app/tree/gift-review-95cd3eccd87d/tools/gifts/previews) are exported from this same app source. Final APK delivery is recorded by the build/release result.
