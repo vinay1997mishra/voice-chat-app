@@ -1,3 +1,4 @@
+import * as coldStorage from "./cold_storage.js";
 import { DurableObject } from "cloudflare:workers";
 import { saveGameResults, lastGameResult, pendingGameResults, flushGameResults, mainDirectory, recoverMainBets } from "./game_results.js";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
@@ -152,7 +153,10 @@ export class FruitPartyStore extends DurableObject {
     `);
     try { this.ctx.storage.sql.exec("ALTER TABLE party_bets ADD COLUMN main_wallet INTEGER NOT NULL DEFAULT 0"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
     try { this.ctx.storage.sql.exec("ALTER TABLE party_bets ADD COLUMN room_id TEXT"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
+    coldStorage.initGameRetention(this,"party");
   }
+
+  pruneHistory(now=Date.now()) {return coldStorage.pruneGameHistory(this,"party",now);}
 
   _meta(key, fallback = null) {
     const row = this.ctx.storage.sql.exec(
@@ -436,6 +440,8 @@ export class FruitPartyStore extends DurableObject {
          FROM party_results`
     ).toArray()[0] || {};
 
+    const archived=this.ctx.storage.sql.exec("SELECT * FROM game_history_totals WHERE id=1").toArray()[0]||{};
+    const unique=this.ctx.storage.sql.exec("SELECT COUNT(*) AS n FROM (SELECT user_id FROM party_bets UNION SELECT user_id FROM game_history_players)").toArray()[0];
     let player = null;
     if (userId) {
       const mainWallet = await mainDirectory(this).mainGameWallet(userId,"fruit_party",true);
@@ -455,8 +461,8 @@ export class FruitPartyStore extends DurableObject {
       ).toArray()[0];
       player = {
         user_id: userId,
-        bet_count: Number(userBet.bet_count || 0),
-        total_bet: Number(userBet.total_bet || 0),
+        bet_count: Number(userBet.bet_count || 0)+Number(this.ctx.storage.sql.exec("SELECT bet_count FROM game_history_players WHERE user_id=?",userId).toArray()[0]?.bet_count||0),
+        total_bet: Number(userBet.total_bet || 0)+Number(this.ctx.storage.sql.exec("SELECT total_bet FROM game_history_players WHERE user_id=?",userId).toArray()[0]?.total_bet||0),
         balance: Number(mainWallet.coins),
         today_winnings: Number(wallet?.today_winnings || 0),
         net_profit: Number(mainWallet.game_net_coins || 0),
@@ -464,12 +470,12 @@ export class FruitPartyStore extends DurableObject {
     }
 
     return {
-      bet_count: Number(totals.bet_count || 0),
-      total_bet: Number(totals.total_bet || 0),
-      unique_players: Number(totals.unique_players || 0),
-      rounds: Number(resultTotals.rounds || 0),
-      total_payout: Number(resultTotals.total_payout || 0),
-      house_net: Number(totals.total_bet || 0) - Number(resultTotals.total_payout || 0),
+      bet_count: Number(totals.bet_count || 0)+Number(archived.bet_count||0),
+      total_bet: Number(totals.total_bet || 0)+Number(archived.total_bet||0),
+      unique_players: Number(unique?.n||0),
+      rounds: Number(resultTotals.rounds || 0)+Number(archived.rounds||0),
+      total_payout: Number(resultTotals.total_payout || 0)+Number(archived.total_payout||0),
+      house_net: Number(totals.total_bet || 0)+Number(archived.total_bet||0)-Number(resultTotals.total_payout || 0)-Number(archived.total_payout||0),
       player,
     };
   }
@@ -502,6 +508,7 @@ export class FruitPartyStore extends DurableObject {
       `SELECT round_id, fruit_key, mode, bonus_fruits_json,
               total_bet, total_payout, active_players, settled_at
          FROM party_results
+        WHERE settled_at >= ${now - coldStorage.GAME_HISTORY_MS}
         ORDER BY round_id DESC
         LIMIT 20`,
     ).toArray().map((row) => {

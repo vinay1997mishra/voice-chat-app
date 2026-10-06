@@ -1,3 +1,4 @@
+import * as coldStorage from "../../src/cold_storage.js";
 import { saveGameResults, lastGameResult, pendingGameResults, flushGameResults, fruitMultiplier, mainDirectory, recoverMainBets } from '../../src/game_results.js';
 import { openGameSocket, handleGameMessage, notifyGameChanged } from '../../src/game_live.js';
 import { countryDay } from '../../src/country_clock.js';
@@ -18,13 +19,36 @@ function source(file) {
     .replace(/export (?=(?:async )?(?:class|function|const|let) )/g, '');
 }
 function storeClass(file, name) {
-  return new Function('DurableObject', 'countryDay', 'premiumGiftCatalog', 'rocketPolicy', 'rocketAllocation', 'rocketDraw', 'openGameSocket', 'handleGameMessage', 'notifyGameChanged', 'saveGameResults', 'lastGameResult', 'pendingGameResults', 'flushGameResults', 'fruitMultiplier', 'mainDirectory', 'recoverMainBets', source(file) + '\nreturn ' + name)(DurableObject, countryDay, premiumGiftCatalog, rocketPolicy, rocketAllocation, rocketDraw, openGameSocket, handleGameMessage, notifyGameChanged, saveGameResults, lastGameResult, pendingGameResults, flushGameResults, fruitMultiplier, mainDirectory, recoverMainBets);
+  return new Function('coldStorage', 'DurableObject', 'countryDay', 'premiumGiftCatalog', 'rocketPolicy', 'rocketAllocation', 'rocketDraw', 'openGameSocket', 'handleGameMessage', 'notifyGameChanged', 'saveGameResults', 'lastGameResult', 'pendingGameResults', 'flushGameResults', 'fruitMultiplier', 'mainDirectory', 'recoverMainBets', source(file) + '\nreturn ' + name)(coldStorage, DurableObject, countryDay, premiumGiftCatalog, rocketPolicy, rocketAllocation, rocketDraw, openGameSocket, handleGameMessage, notifyGameChanged, saveGameResults, lastGameResult, pendingGameResults, flushGameResults, fruitMultiplier, mainDirectory, recoverMainBets);
 }
 export function runtime({ legacyRoomSettings = false } = {}) {
   const databases = [];
   const objects = new Map();
-  const env = { SESSION_SECRET: 'isolated-test-session-secret',
-    EFFECT_MEDIA: { head: async () => null } };
+  const mediaObjects=new Map(),archiveObjects=new Map();
+  const metadata=(key,value)=>({key,size:value.bytes.byteLength,uploaded:new Date(value.updated_at),
+    httpMetadata:value.options?.httpMetadata||{},customMetadata:value.options?.customMetadata||{},httpEtag:'"test-etag"'});
+  function memoryBucket(mediaObjects) {return {
+      async head(key) {const value=mediaObjects.get(key);return value?metadata(key,value):null;},
+      async put(key,bytes,options={}) {
+        const copied=new Uint8Array(bytes instanceof ArrayBuffer?bytes:bytes.buffer.slice(bytes.byteOffset,bytes.byteOffset+bytes.byteLength));
+        mediaObjects.set(key,{bytes:copied,options,updated_at:Date.now()});
+        return metadata(key,mediaObjects.get(key));
+      },
+      async get(key) {
+        const value=mediaObjects.get(key);if(!value) return null;
+        return {...metadata(key,value),body:new Blob([value.bytes]).stream(),
+          arrayBuffer:async()=>value.bytes.slice().buffer,text:async()=>new TextDecoder().decode(value.bytes),
+          writeHttpMetadata(headers){for(const [name,v] of Object.entries(value.options?.httpMetadata||{})) if(name==='contentType') headers.set('content-type',v);}
+        };
+      },
+      async delete(keys) {for(const key of Array.isArray(keys)?keys:[keys]) mediaObjects.delete(key);},
+      async list({cursor='',limit=1000}={}) {
+        const keys=[...mediaObjects.keys()].sort().filter(key=>key>cursor),selected=keys.slice(0,limit);
+        return {objects:selected.map(key=>metadata(key,mediaObjects.get(key))),truncated:keys.length>limit,cursor:selected.at(-1)};
+      },
+    };}
+  const env = {SESSION_SECRET:"isolated-test-session-secret",EFFECT_MEDIA:memoryBucket(mediaObjects),USER_ARCHIVE:memoryBucket(archiveObjects)};
+
   const classes = {
     AppDirectoryStore: storeClass('app_directory.js', 'AppDirectoryStore'),
     RoomPresenceStore: storeClass('room_presence.js', 'RoomPresenceStore'),
@@ -99,9 +123,9 @@ export function runtime({ legacyRoomSettings = false } = {}) {
       },
     };
   }
-  const exports = new Function('DurableObject', ...Object.keys(classes),
+  const exports = new Function('coldStorage','DurableObject', ...Object.keys(classes),
     source('index.js').replace('export default', 'const worker =') +
-    '\nreturn { worker, createSession };')(DurableObject, ...Object.values(classes));
+    '\nreturn { worker, createSession };')(coldStorage,DurableObject, ...Object.values(classes));
   env.APP_DIRECTORY.get('tinni-app-directory');
   const directory = objects.get('APP_DIRECTORY:tinni-app-directory');
   async function user(index) {
@@ -128,7 +152,7 @@ export function runtime({ legacyRoomSettings = false } = {}) {
     try { data = JSON.parse(text); } catch { data = { text }; }
     return { status: response.status, data };
   }
-  return { env, directory, user, request, objects,
+  return { env, directory, user, request, objects,mediaObjects,archiveObjects,
     direct: (binding, id) => { env[binding].get(id); return objects.get(binding + ':' + id); },
     close: () => databases.forEach(db => db.close()) };
 }
