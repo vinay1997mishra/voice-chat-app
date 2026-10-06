@@ -80,6 +80,7 @@ void main() {
     state.roomSession.controller!.addRoomMessage(
       'Tagged Friend',
       'Hello from tagged user',
+      userId: '92000002',
     );
     await tester.pumpAndSettle();
     expect(

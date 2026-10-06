@@ -1377,3 +1377,11 @@ Latest explicit instructions: save as much of the free SQL storage and daily req
 - Expired login OTP/reset/session rows, grants, rate windows and ribbons receive bounded cleanup. Password credentials, financial balances stay intact; private chat follows the explicit retention policy.
 - App Directory schema/catalog/backfill setup is versioned and runs once per schema version, preventing repeated full-user scans on hibernation wake. Future schema/catalog changes must bump APP_SCHEMA_VERSION.
 - Release signed APK 0.5.50+69 for durable local private chat. Older APKs do not retain server-deleted history in persistent app files. No unrelated game visual, gift-provider or voice-flow redesign.
+
+## 2026-10-06 — Sender DP identity and private profile navigation
+
+- Room All messages and every private conversation message show the sender DP alongside the body without repeating sender names.
+- Resolve room DPs, identity tags and profile actions only by the message sender's stable User ID. Duplicate, changed or reserved display names such as You and System must never select another account.
+- If a room sender has left, keep the message's known DP snapshot or a neutral placeholder; never infer the current user's DP from the sender name. Messages without a sender ID cannot borrow a live member's identity or open that member's profile.
+- The private conversation header name opens that exact peer User ID's public profile. Current public DP/name changes use the existing authenticated profile WebSocket subscription; persisted phone chat history keeps message content and excludes DP copies.
+- Release 0.5.52+71 retains the existing authenticated private-photo access, storage retention, wallet, gift and room behavior. Replacement anime movies and external provider/device validation remain pending; an APK build alone does not complete those dependencies.

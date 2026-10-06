@@ -650,21 +650,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   RoomPresenceMember? _roomCommentMember(RoomMessage message) {
-    final account = widget.state.auth.current;
-    final currentUserId = account?.userId;
-    if (message.userId != null) {
-      return widget.state.roomSession.liveMembers
-          .where((member) => member.userId == message.userId).firstOrNull;
-    }
-    for (final member in widget.state.roomSession.liveMembers) {
-      if (message.author == 'You' && member.userId == currentUserId) {
-        return member;
-      }
-      if (message.author != 'You' && member.displayName == message.author) {
-        return member;
-      }
-    }
-    return null;
+    final senderId = message.userId;
+    if (senderId == null || senderId.isEmpty) return null;
+    return widget.state.roomSession.liveMembers
+        .where((member) => member.userId == senderId).firstOrNull;
   }
 
   String _roomCommentTagLabel(OwnerTag tag) {
@@ -726,7 +715,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     final account = widget.state.auth.current;
     final avatarSource = member != null ? member.avatarDataUrl
-        : (message.userId == account?.userId || message.author == 'You')
+        : (message.userId != null && message.userId == account?.userId)
             ? account?.avatarDataUrl : message.avatarDataUrl;
     final avatar = stableImageProvider(avatarSource);
     return Padding(

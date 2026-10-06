@@ -8,6 +8,7 @@ TinniAccount attachTestAccount(
   String countryCode = 'IN',
   String countryName = 'India',
   String flagEmoji = '🇮🇳',
+  String? avatarDataUrl,
 }) {
   final account = TinniAccount(
     userId: userId,
@@ -19,6 +20,7 @@ TinniAccount attachTestAccount(
     countryName: countryName,
     flagEmoji: flagEmoji,
     gender: 'male',
+    avatarDataUrl: avatarDataUrl,
     providers: const <LoginProvider>{LoginProvider.google},
     authToken: 'test-session-token-$userId',
   );
