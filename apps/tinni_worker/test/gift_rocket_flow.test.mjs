@@ -145,7 +145,7 @@ assert.match(
 );
 assert.match(
   roomPresence,
-  /type: "gift_sent"[\s\S]{0,1000}receiver_ids: receiverIds/,
+  /receiver_ids: receiverIds[\s\S]{0,5000}_broadcastRoomEvent\(\{ type: "gift_sent", gift: visualEvent \}\)/,
   "Room presence websocket must broadcast recipient-targeted gift visual events",
 );
 assert.match(

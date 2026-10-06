@@ -32,7 +32,11 @@ class LuckyComboTimer extends ChangeNotifier {
     _expiresAt = clock().add(window);
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!active) clear(); else notifyListeners();
+      if (!active) {
+        clear();
+      } else {
+        notifyListeners();
+      }
     });
     notifyListeners();
   }

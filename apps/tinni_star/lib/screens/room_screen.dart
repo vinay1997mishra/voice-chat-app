@@ -1157,10 +1157,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   void _syncGiftVisualEvent() {
     final presence = widget.state.roomSession.presence;
     final latest = widget.state.roomSession.latestGiftVisualEvent;
-    final events = [...presence.giftVisualEvents, if (latest != null) latest];
+    final events = <RoomGiftVisualEvent>[...presence.giftVisualEvents];
+    if (latest != null) { events.add(latest); }
     for (final event in events) {
       if (!_handledGiftVisualEventIds.add(event.id)) continue;
-      if (!_applyRoomSendingSummary(event.roomSummary)) _refreshRoomSendingSummary();
+      if (!_applyRoomSendingSummary(event.roomSummary)) { _refreshRoomSendingSummary(); }
+      if (!event.lucky && event.createdAt.millisecondsSinceEpoch < presence.serverNowMs - 5000) continue;
       final gift = _giftDefinitionForVisualEvent(event);
       if (event.lucky) {
         _luckyVisuals.add(event, gift);
