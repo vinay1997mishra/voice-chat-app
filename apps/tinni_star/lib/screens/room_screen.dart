@@ -294,7 +294,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final next = _loadRoomSendingSummary().whenComplete(() {
       _roomSendingRefreshRunning = false;
     });
-    setState(() => _roomSendingSummaryFuture = next);
+    setState(() {
+      _roomSendingSummaryFuture = next;
+    });
   }
 
   Offset _giftFlightOriginOffset(BuildContext context) {
