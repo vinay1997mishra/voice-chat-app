@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math' as math;
 
 import '../infra/backend_http.dart';
+import 'game_live_connection.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -22,6 +24,17 @@ class FruitPartyRemoteService extends ChangeNotifier {
   final Duration requestTimeout;
   Future<void>? _syncFuture;
   bool _disposed = false;
+  int _latestServerTime = 0;
+  late final _live = GameLiveConnection(apiBase: apiBase, path: '/fruit-party/live',
+    onState: (data) {
+      if (_disposed) return;
+      _applyState(data, clientMidpointMs: DateTime.now().millisecondsSinceEpoch);
+      connected = true;
+      lastError = null;
+    }, onStatus: () { if (!_disposed) notifyListeners(); });
+  bool get liveConnected => _live.connected;
+  Future<void> connectLive(String token) => _disposed ? Future<void>.value() : _live.connect(token);
+  void disconnectLive() => _live.disconnect();
 
   bool connected = false;
   bool loading = false;
@@ -31,6 +44,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
   int totalBet = 0;
   int activePlayers = 0;
   int walletBalance = 0;
+  Map<String, dynamic>? lastBetResult;
   int todayWinnings = 0;
   int betLockMs = 0;
   int roundDurationMs = 21000;
@@ -139,6 +153,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
       );
       request.write(
         jsonEncode(<String, Object>{
+          'request_id': List.generate(16, (_) => math.Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join(),
           'fruit_key': fruit.name,
           'amount': amount,
           'room_id': roomId,
@@ -184,6 +199,8 @@ class FruitPartyRemoteService extends ChangeNotifier {
     required int clientMidpointMs,
   }) {
     final serverTime = _asInt(data['server_time']);
+    if (serverTime > 0 && serverTime < _latestServerTime) return;
+    _latestServerTime = serverTime;
     _serverOffsetMs = serverTime - clientMidpointMs;
 
     final round = _asMap(data['round']);
@@ -204,6 +221,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
     activePlayers = _asInt(round['active_players']);
 
     walletBalance = _asInt(data['wallet_balance']);
+    lastBetResult = data['last_bet_result'] is Map ? _asMap(data['last_bet_result']) : null;
     todayWinnings = _asInt(data['today_winnings']);
 
     final rawMyBets = _asMap(data['my_bets']);
@@ -302,6 +320,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _live.disconnect();
     _httpClient.close(force: true);
     super.dispose();
   }

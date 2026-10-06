@@ -44,16 +44,53 @@ class TinniShell extends StatefulWidget {
 
 class _TinniShellState extends State<TinniShell> {
   int index = 0;
+  final _visited = <int>{0};
 
   @override
   void initState() {
     super.initState();
     widget.state.refreshAccountPreferences();
+    widget.state.gameResults.addListener(_showGameResults);
+    if (widget.state.gameResults.value.isNotEmpty) _showGameResults();
+    widget.state.social.retainMessageEvents();
+    final token = widget.state.auth.current?.authToken;
+    if (token != null) widget.state.social.connectMessageEvents(token);
+  }
+
+  @override
+  void dispose() {
+    widget.state.gameResults.removeListener(_showGameResults);
+    widget.state.social.releaseMessageEvents();
+    super.dispose();
+  }
+
+  void _showGameResults() {
+    final results = List<Map<String, dynamic>>.from(widget.state.gameResults.value);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final messenger = ScaffoldMessenger.of(context);
+      for (final result in results) {
+        final title = result['game_key'] == 'fruit_party' ? 'Fruit Party' : 'Fruit Jackpot';
+        final won = (result['winning_coins'] as num?)?.toInt() ?? 0;
+        final bet = (result['bet_coins'] as num?)?.toInt() ?? 0;
+        final credited = result['wallet_type'] == 'main' ? 'main wallet' : 'game wallet';
+        final message = won > 0
+            ? '$title: Won $won coins • Bet $bet • Added to your $credited'
+            : '$title: Lost • Bet $bet coins';
+        messenger.showSnackBar(SnackBar(
+          content: Text(message),
+          duration: const Duration(seconds: 6),
+          action: SnackBarAction(label: 'OK', onPressed: () {}),
+        )).closed.then((_) {
+          if (mounted) widget.state.social.acknowledgeGameResult(result);
+        });
+      }
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final pages = [
+    final pages = <Widget>[
       HomeScreen(state: widget.state),
       DiscoverScreen(state: widget.state),
       MessagesScreen(state: widget.state),
@@ -68,7 +105,10 @@ class _TinniShellState extends State<TinniShell> {
           final session = widget.state.roomSession;
           return Column(
             children: [
-              Expanded(child: IndexedStack(index: index, children: pages)),
+              Expanded(child: IndexedStack(index: index, children: [
+                for (var page = 0; page < pages.length; page++)
+                  _visited.contains(page) ? pages[page] : const SizedBox.shrink(),
+              ])),
               if (session.hasRoom && session.minimized)
                 _MiniRoomBar(
                   state: widget.state,
@@ -127,7 +167,9 @@ class _TinniShellState extends State<TinniShell> {
               widget.state.analytics.event('navigation_tab', <String, Object?>{
                 'tab': labels[value],
               });
-              setState(() => index = value);
+              if (index == value) return;
+              setState(() { index = value; _visited.add(value); });
+              widget.state.pageEntries.value = value;
             },
             destinations: [
               NavigationDestination(

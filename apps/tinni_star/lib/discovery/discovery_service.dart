@@ -223,6 +223,31 @@ class DiscoveryService {
   final Set<String> favorites = <String>{};
   final Set<String> followingRoomIds = <String>{};
 
+  RoomSummary? roomFromLive(Map<String, dynamic> row) => _roomFromServer(row);
+
+  void applyLiveEvent(Map<String, dynamic> event) {
+    if (event['type'] == 'rooms_snapshot' && event['rooms'] is List) {
+      rooms
+        ..clear()
+        ..addAll((event['rooms'] as List).whereType<Map>().map(_roomFromServer).whereType<RoomSummary>());
+    } else if (event['type'] == 'room_updated') {
+      final id = event['room_id']?.toString();
+      final old = rooms.indexWhere((room) => room.id == id);
+      final raw = event['room'];
+      final room = raw is Map ? _roomFromServer(raw) : null;
+      if (room == null) { if (old >= 0) rooms.removeAt(old); }
+      else if (old >= 0) {
+        // Presence deltas must not erase a Rocket priority already received.
+        final current = rooms[old];
+        rooms[old] = room.copyWith(
+          rocketLaunchLevel: current.rocketLaunchLevel,
+          rocketLaunchedAt: current.rocketLaunchedAt,
+          rocketPriorityUntil: current.rocketPriorityUntil,
+        );
+      } else { rooms.add(room); }
+    }
+  }
+
   bool applyRocketPriority(Map<String, dynamic> priority) {
     final id = priority['room_id']?.toString() ?? '';
     final index = rooms.indexWhere((room) => room.id == id);
