@@ -196,7 +196,6 @@ class SocialService {
       'messages': directMessages.map(_messageJson).toList(),
       'threads': messageThreads.map((thread) => {
         'user_id': thread.userId, 'display_name': thread.displayName,
-        'avatar_data_url': thread.avatarDataUrl,
         'last_message': thread.lastMessage == null ? null : _messageJson(thread.lastMessage!),
       }).toList(),
     });
