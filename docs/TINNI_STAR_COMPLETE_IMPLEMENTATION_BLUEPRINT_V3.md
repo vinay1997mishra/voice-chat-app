@@ -1346,3 +1346,5 @@ Latest user instruction: remove automatic page polling and unnecessary blinking;
 - Free-tier request and SQL quotas remain distinct; this change does not guarantee unlimited users or report unconnected dashboard usage.
 
 Build note: Android installs the existing hash-pinned released media using its immutable generation-source checkout, then validates the current app catalog. Renderer development no longer blocks an unrelated transport APK. Idle mic-wave motion stops when there is no voice activity.
+
+Realtime refresh release: app version 0.5.49+68. Fruit boards and Ludo also support pull-to-refresh. Game connection disposal cancels a pending HTTP upgrade and its timer; the release has a regression for leaving during an unfinished connection.

@@ -59,4 +59,30 @@ void main() {
       }
     }, _RealHttp());
   });
+  test('disconnect cancels an unfinished WebSocket upgrade', () async {
+    await HttpOverrides.runWithHttpOverrides(() async {
+      final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+      final arrived = Completer<void>();
+      final listener = server.listen((request) {
+        if (!arrived.isCompleted) arrived.complete();
+        // Intentionally keep the HTTP upgrade pending.
+      });
+      final live = GameLiveConnection(
+        apiBase: Uri.parse('http://127.0.0.1:${server.port}'),
+        path: '/ludo/live', onState: (_) {}, onStatus: () {},
+      );
+      try {
+        final connecting = live.connect('test-token');
+        await arrived.future.timeout(const Duration(seconds: 3));
+        live.disconnect();
+        await connecting.timeout(const Duration(seconds: 3));
+        expect(live.connected, false);
+      } finally {
+        live.disconnect();
+        await listener.cancel();
+        await server.close(force: true);
+      }
+    }, _RealHttp());
+  });
+
 }

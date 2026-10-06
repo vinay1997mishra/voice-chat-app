@@ -277,9 +277,13 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
         Row(children: [_player(LudoPlayer.blue), _player(LudoPlayer.yellow)]),
         const SizedBox(height: 4),
       ]);
-        return viewport.maxHeight < 260
-            ? SingleChildScrollView(child: SizedBox(height: 320, child: content))
-            : content;
+        return RefreshIndicator(
+          onRefresh: _refresh,
+          child: SingleChildScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            child: SizedBox(height: viewport.maxHeight < 260 ? 320 : viewport.maxHeight, child: content),
+          ),
+        );
       })),
     );
   }

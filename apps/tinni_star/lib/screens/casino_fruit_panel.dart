@@ -363,7 +363,10 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
               Expanded(child: LayoutBuilder(builder: (context, constraints) {
                 final height = math.max(168.0, constraints.maxHeight);
                 final cellHeight = (height - 10) / 3;
-                return SingleChildScrollView(
+                return RefreshIndicator(
+                  onRefresh: _refresh,
+                  child: SingleChildScrollView(
+                  physics: const AlwaysScrollableScrollPhysics(),
                   key: Key(widget.gameId + '-board-scroll'),
                   child: SizedBox(height: height, child: GridView.builder(
                     key: Key(widget.gameId + '-board'), padding: EdgeInsets.zero,
@@ -389,6 +392,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                       );
                     },
                   )),
+                  ),
                 );
               })),
               const SizedBox(height: 6),
