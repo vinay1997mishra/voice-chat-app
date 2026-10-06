@@ -1,0 +1,103 @@
+name: Tinni decoded gift movie review
+
+on:
+  push:
+    branches: [tinnistar]
+    paths: ['.github/workflows/tinni-gift-movie-review.yml']
+  workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Exact cinematic source commit
+        type: string
+        default: '9002015b37c0c2f89826fda1dcf79407c7b6885a'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: tinni-decoded-movie-review
+  cancel-in-progress: true
+
+jobs:
+  review:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install movie review tools
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg python3-pil
+      - name: Obtain the immutable rendered movie bundle
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_SHA: ${{ inputs.source_sha || '9002015b37c0c2f89826fda1dcf79407c7b6885a' }}
+        run: |
+          set -euo pipefail
+          tag="cinematic-${SOURCE_SHA:0:12}"
+          found=false
+          for attempt in {1..90}; do
+            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              found=true
+              break
+            fi
+            sleep 30
+          done
+          test "$found" = true
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern 'cinematic-assets.*' --dir /tmp/gift-movie-review
+          python3 - "$SOURCE_SHA" <<'PY'
+          import json,sys
+          from pathlib import Path
+          sha=sys.argv[1]
+          record={"source_commit":sha,
+                  "zip_sha256":Path("/tmp/gift-movie-review/cinematic-assets.sha256").read_text().split()[0]}
+          Path("/tmp/gift-movie-review/lock.json").write_text(json.dumps(record))
+          PY
+          python3 tools/cinematic/catalog.py install --lock /tmp/gift-movie-review/lock.json --archive /tmp/gift-movie-review/cinematic-assets.zip --destination /tmp/gift-movie-review/assets
+      - name: Decode entrance hold and exit frames from every refined movie
+        run: |
+          python3 - <<'PY'
+          import io,json,subprocess
+          from pathlib import Path
+          from PIL import Image,ImageDraw,ImageFont
+          specs=[s for s in json.loads(Path("tools/cinematic/catalog.json").read_text())["scenes"]
+                 if s["builder"] not in ("country","rocket")]
+          font=ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",15)
+          output=Path("tools/gifts/movie-previews")
+          output.mkdir(parents=True,exist_ok=True)
+          records=[]
+          for batch in range(0,len(specs),4):
+              chunk=specs[batch:batch+4]
+              sheet=Image.new("RGB",(810,4*512),(8,12,22))
+              draw=ImageDraw.Draw(sheet)
+              for row,spec in enumerate(chunk):
+                  draw.text((8,row*512+7),spec["name"]+" / "+spec["id"],font=font,fill="#ffdb95")
+                  movie=Path("/tmp/gift-movie-review/assets")/(spec["id"]+".mp4")
+                  samples=[]
+                  for column,phase in enumerate((.18,.50,.86)):
+                      second=spec["duration"]*phase
+                      frame=subprocess.run(["ffmpeg","-v","error","-ss",str(second),"-i",str(movie),
+                              "-frames:v","1","-f","image2pipe","-vcodec","png","-"],
+                              check=True,stdout=subprocess.PIPE,timeout=60).stdout
+                      image=Image.open(io.BytesIO(frame)).convert("RGB").resize((270,480))
+                      sheet.paste(image,(column*270,row*512+32))
+                      samples.append(round(second,3))
+                  records.append({"id":spec["id"],"seconds":samples})
+              sheet.save(output/("motion-%02d.jpg"%(batch//4)),quality=84,optimize=True)
+          (output/"frames.json").write_text(json.dumps(records,indent=2)+"\n")
+          assert len(records)==70
+          print("Decoded and reviewed 210 video frames covering all 70 refined movies")
+          PY
+      - name: Publish decoded movie review sheets
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha || '9002015b37c0c2f89826fda1dcf79407c7b6885a' }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tools/gifts/movie-previews
+          git commit -m "Decoded entrance hold and exit frames for every refined gift movie"
+          branch="cinematic-motion-review-${SOURCE_SHA:0:12}"
+          if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            git push origin "HEAD:refs/heads/$branch"
+          fi
