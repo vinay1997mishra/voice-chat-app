@@ -312,7 +312,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
     final next = relation.nextLevelThreshold;
     final progress = next == null || next <= 0
         ? 1.0
-        : (relation.rivalry / next).clamp(0.0, 1.0);
+        : (relation.rivalry / next).clamp(0.0, 1.0).toDouble();
 
     return Column(
       children: [
@@ -373,7 +373,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
               Row(
                 children: [
                   Text(
-                    'Enemy Lv.\${relation.level}',
+                    'Enemy Lv.${relation.level}',
                     style: const TextStyle(
                       color: red,
                       fontWeight: FontWeight.w900,
@@ -382,7 +382,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
                   ),
                   const Spacer(),
                   Text(
-                    '\${relation.rivalry} rivalry',
+                    '${relation.rivalry} rivalry',
                     style: const TextStyle(
                       color: Color(0xFFBCA4A7),
                       fontSize: 11,
@@ -404,7 +404,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
               Text(
                 next == null
                     ? 'Top configured Enemy level reached'
-                    : '\${(next - relation.rivalry).clamp(0, next)} rivalry to next level',
+                    : '${(next - relation.rivalry).clamp(0, next)} rivalry to next level',
                 style: const TextStyle(
                   color: Color(0xFF8E777A),
                   fontSize: 10,
