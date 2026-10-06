@@ -31,6 +31,8 @@ class WalletService {
   String freezeReason = '';
   int coinSellerBalance = 0;
   int merchantBalance = 0;
+  int coinSellerUsdCents = 0;
+  int merchantUsdCents = 0;
   bool coinSellerActive = false;
   bool merchantActive = false;
   bool coinSellerFrozen = false;
@@ -67,6 +69,8 @@ class WalletService {
     merchantActive = remote.merchantWallet != null;
     coinSellerBalance = remote.coinSellerWallet?.balance ?? 0;
     merchantBalance = remote.merchantWallet?.balance ?? 0;
+    coinSellerUsdCents = remote.coinSellerWallet?.usdCents ?? 0;
+    merchantUsdCents = remote.merchantWallet?.usdCents ?? 0;
     coinSellerFrozen = remote.coinSellerWallet?.securityFrozen ?? false;
     merchantFrozen = remote.merchantWallet?.securityFrozen ?? false;
   }

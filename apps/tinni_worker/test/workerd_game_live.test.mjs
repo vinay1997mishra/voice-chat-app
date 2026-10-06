@@ -30,7 +30,7 @@ test('real Workers sockets push private account state and all game states withou
   t.after(async () => { await mf.dispose(); rmSync(folder,{recursive:true,force:true}); });
   async function seed(index,createRoom=false) {
     const response = await mf.dispatchFetch('https://test.local/__fixture/user', {
-      method:'POST', body:JSON.stringify({index,createRoom}),
+      method:'POST', body:JSON.stringify({index,createRoom,coins:100000}),
     });
     assert.equal(response.status,200,await response.clone().text());
     const data = await response.json();
@@ -82,6 +82,22 @@ test('real Workers sockets push private account state and all game states withou
     await until(()=>live.events.filter(x=>x.type==='game_state').length>=2);
     if(path.startsWith('/ludo')) assert.equal(live.events.at(-1).state.player_color,'red');
   }
+  // Real DO RPC + SQL: both games share one main wallet, and repeat delivery is safe.
+  const phase=Date.now()%26000;
+  if(phase>19000) await new Promise(resolve=>setTimeout(resolve,26000-phase+25));
+  for(const path of ['/fruit-game/bet','/fruit-party/bet']) {
+    const bet={room_id:owner.room.id,fruit_key:'lemon',amount:5000,
+      request_id:path.includes('party')?'workerd-party-bet-0001':'workerd-jackpot-bet-0001'};
+    await action(path,guest,bet);
+    await action(path,guest,bet);
+  }
+  account.socket.send(JSON.stringify({type:'account_state'}));
+  await until(()=>account.events.some(x=>x.type==='account_state'&&x.wallet.coins===90000));
+  const main=await action('/wallet',guest);
+  assert.equal(main.wallet.coins,90000);
+  const gameState=await action('/fruit-party/state',guest);
+  assert.equal(gameState.wallet_balance,90000);
+
   const forbidden=await mf.dispatchFetch('https://test.local/ludo/live?room_id=missing',{
     headers:{Upgrade:'websocket',authorization:'Bearer '+guest.token},
   });

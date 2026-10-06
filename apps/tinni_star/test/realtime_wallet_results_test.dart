@@ -20,7 +20,8 @@ void main() {
     state.auth.setAuthenticatedAccount(TinniAccount.fromServer({'user_id': 'alice', 'display_name': 'Alice'}, token: 'test'));
     final event = <String, dynamic>{
       'user': {'user_id': 'alice', 'display_name': 'Alice'},
-      'wallet': {'user_id': 'alice', 'coins': 25000, 'diamonds': 0, 'updated_at': 20},
+      'wallet': {'user_id': 'alice', 'coins': 25000, 'diamonds': 0, 'updated_at': 20,
+        'merchant_wallet': {'active': true, 'balance': 2000, 'usd_cents': 12345}},
       'game_results': [{'id': 'fruit_party:10:alice', 'user_id': 'alice', 'game_key': 'fruit_party',
         'round_id': 10, 'winning_coins': 25000, 'bet_coins': 5000, 'outcome': 'win', 'wallet_type': 'main'}],
     };
@@ -28,6 +29,7 @@ void main() {
     state.gameResults.addListener(() { notices++; });
     state.social.accountEvents.value = event;
     expect(state.wallet.coins, 25000);
+    expect(state.wallet.merchantUsdCents, 12345);
     expect(state.gameResults.value.single['outcome'], 'win');
     state.social.accountEvents.value = {...event};
     expect(notices, 1);

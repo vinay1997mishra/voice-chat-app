@@ -116,3 +116,14 @@ test('room DP and member DP push without changing seats or exposing locked rooms
   assert.equal(updated.members.find(x=>x.user_id===guest.user_id).avatar_data_url,'https://media.example.test/avatar.jpg');
   assert.equal(updated.members.find(x=>x.user_id===guest.user_id).seat_index,null);
 });
+
+test('role dollar balances push privately through the same account snapshot',async t=>{
+  const r=runtime();t.after(r.close);const user=await r.user(1);
+  r.directory.ctx.storage.sql.exec("INSERT INTO owner_wallets(user_id,wallet_type,balance,banned,updated_at) VALUES(?,'merchant',0,0,?)",user.user_id,Date.now());
+  const client=socket({userId:user.user_id});
+  r.directory.ctx.getWebSockets=()=>[client];
+  r.directory._creditRoleDollars(user.user_id,'merchant',12345);
+  assert.equal(client.events.at(-1).type,'account_changed');
+  await r.directory._sendAccountState(client,client.attachment);
+  assert.equal(client.events.at(-1).wallet.merchant_wallet.usd_cents,12345);
+});

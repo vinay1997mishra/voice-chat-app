@@ -1358,3 +1358,5 @@ Latest explicit user instruction: Fruit Jackpot and Fruit Party debit the user's
 - Server round settlement saves its receipt and payout delivery queue atomically. Main wallet credits, guard updates, bet settlement markers and permanent winning ledger entries commit together. Failed delivery retries without a game viewer and cannot duplicate credits.
 - The latest personal win/lose result arrives privately through the account socket, including after app reconnect, and remains available in game history. A seen acknowledgement suppresses later repeats. Public game invalidations never include another player's balance.
 - Keep intentional game visuals, bet amounts, multipliers, Lucky selection and unrelated financial rules. Idle refresh remains disabled.
+
+- Private wallet snapshots also include seller/merchant dollar balances, and open dollar/role balance views apply them directly without polling. Snapshot timestamps include role and settlement updates.

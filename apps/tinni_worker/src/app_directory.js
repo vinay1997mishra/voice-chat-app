@@ -3671,6 +3671,7 @@ export class AppDirectoryStore extends DurableObject {
       cents, Date.now(), this._resolveOwnerUserId(userIdValue),
       String(walletTypeValue || "").trim().toLowerCase(),
     );
+    this._notifyAccountChanged(this._resolveOwnerUserId(userIdValue));
     return {
       before: Math.max(0, Number(row?.usd_cents || 0)),
       after: Math.max(0, Number(row?.usd_cents || 0)) + cents,
@@ -8376,6 +8377,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE role_dollar_balances SET usd_cents=?,updated_at=? WHERE user_id=? AND wallet_type=?",
       senderAfter, now, senderId, walletType,
     );
+    this._notifyAccountChanged(senderId);
 
     let recipientBefore = null;
     let recipientAfter = null;
@@ -8904,7 +8906,7 @@ export class AppDirectoryStore extends DurableObject {
     const commissionUsdCents = (isAgency || isBd) ? Number(settlement?.usd_cents || 0) : 0;
     const withdrawableUsdCents = diamondUsdCents + commissionUsdCents;
     const privilegedRows = this.ctx.storage.sql.exec(
-      "SELECT wallet_type,banned,updated_at FROM owner_wallets WHERE user_id=? AND wallet_type IN ('coin_seller','merchant')",
+      "SELECT w.wallet_type,w.banned,w.updated_at,COALESCE(d.usd_cents,0) AS usd_cents,COALESCE(d.updated_at,0) AS dollar_updated_at FROM owner_wallets w LEFT JOIN role_dollar_balances d ON d.user_id=w.user_id AND d.wallet_type=w.wallet_type WHERE w.user_id=? AND w.wallet_type IN ('coin_seller','merchant')",
       userId,
     ).toArray();
     const privileged = {};
@@ -8915,6 +8917,7 @@ export class AppDirectoryStore extends DurableObject {
       privileged[walletType] = {
         active: true,
         balance: guard.security_frozen ? 0 : guard.balance,
+        usd_cents: Number(privilegedRow.usd_cents || 0),
         banned: Number(privilegedRow.banned || 0) === 1,
         security_frozen: guard.security_frozen,
         freeze_reason: guard.freeze_reason,
@@ -8947,7 +8950,8 @@ export class AppDirectoryStore extends DurableObject {
       freeze_reason: coinGuard.freeze_reason,
       coin_seller_wallet: privileged.coin_seller || null,
       merchant_wallet: privileged.merchant || null,
-      updated_at: Number(row?.updated_at || now),
+      updated_at: Math.max(Number(row?.updated_at || now), Number(settlement?.updated_at || 0),
+        ...privilegedRows.map(item => Math.max(Number(item.updated_at || 0), Number(item.dollar_updated_at || 0)))),
     };
   }
 
@@ -9063,6 +9067,7 @@ export class AppDirectoryStore extends DurableObject {
       "UPDATE role_dollar_balances SET usd_cents=?,updated_at=? WHERE user_id=? AND wallet_type=?",
       recipientAfter, now, recipient.user_id, recipient.role,
     );
+    this._notifyAccountChanged(recipient.user_id);
 
     this._recordPrivilegedWalletTransaction({
       userId: recipient.user_id,
