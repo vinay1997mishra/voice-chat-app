@@ -8,10 +8,12 @@ class AnimatedAvatarFrame extends StatefulWidget {
     required this.child,
     required this.frameId,
     required this.size,
+    this.avatarScale = .72,
   });
   final Widget child;
   final String? frameId;
   final double size;
+  final double avatarScale;
 
   @override
   State<AnimatedAvatarFrame> createState() => _AnimatedAvatarFrameState();
@@ -41,8 +43,8 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame>
         animation: _controller,
         child: RepaintBoundary(
           child: SizedBox(
-            width: widget.size * .72,
-            height: widget.size * .72,
+            width: widget.size * widget.avatarScale,
+            height: widget.size * widget.avatarScale,
             child: widget.child,
           ),
         ),
