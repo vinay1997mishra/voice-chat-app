@@ -64,41 +64,29 @@ void main() {
     await tester.pumpAndSettle();
 
     final controller = state.roomSession.controller!;
-    controller.clearRoomMessages();
-    controller.addRoomMessage('Previous name', 'First sender',
-        userId: '92000002');
-    controller.addRoomMessage('Duplicate', 'Second sender',
-        userId: '92000003');
-    controller.addRoomMessage('Duplicate', 'No sender ID');
-    controller.addRoomMessage('You', 'Departed sender',
-        userId: '92000004');
-    controller.addRoomMessage(account.displayName, 'My message',
-        userId: account.userId);
-    await tester.pumpAndSettle();
-
+    Future<void> showMessage(String author, String text, {String? userId}) async {
+      controller.clearRoomMessages();
+      controller.addRoomMessage(author, text, userId: userId);
+      await tester.pumpAndSettle();
+      expect(find.text(text), findsOneWidget);
+    }
     CircleAvatar avatar(String key) =>
         tester.widget<CircleAvatar>(find.byKey(Key(key)));
+
+    await showMessage('Previous name', 'First sender', userId: '92000002');
     expect(avatar('room-comment-dp-92000002').backgroundImage, isNull);
-    expect(avatar('room-comment-dp-92000003').backgroundImage,
-        same(stableImageProvider(_pixel)));
-    expect(avatar('room-comment-dp-Duplicate').backgroundImage, isNull);
-    expect(avatar('room-comment-dp-92000004').backgroundImage, isNull);
-    expect(avatar('room-comment-dp-${account.userId}').backgroundImage,
-        same(stableImageProvider(_pixel)));
     expect(find.byKey(const Key('room-comment-tag-92000002-First Host')),
         findsOneWidget);
     expect(find.byKey(const Key('room-comment-tag-92000003-Second Host')),
+        findsNothing);
+
+    await showMessage('Duplicate', 'Second sender', userId: '92000003');
+    expect(avatar('room-comment-dp-92000003').backgroundImage,
+        same(stableImageProvider(_pixel)));
+    expect(find.byKey(const Key('room-comment-tag-92000003-Second Host')),
         findsOneWidget);
-
-    final unknownDp = find.byKey(const Key('room-comment-dp-Duplicate'));
-    await tester.ensureVisible(unknownDp);
-    await tester.tap(unknownDp);
-    await tester.pumpAndSettle();
-    expect(find.byKey(const Key('room-user-profile-card-92000002')),
+    expect(find.byKey(const Key('room-comment-tag-92000002-First Host')),
         findsNothing);
-    expect(find.byKey(const Key('room-user-profile-card-92000003')),
-        findsNothing);
-
     final secondDp = find.byKey(const Key('room-comment-dp-92000003'));
     await tester.ensureVisible(secondDp);
     await tester.tap(secondDp);
@@ -108,12 +96,35 @@ void main() {
     await tester.binding.handlePopRoute();
     await tester.pumpAndSettle();
 
+    await showMessage('Duplicate', 'No sender ID');
+    expect(avatar('room-comment-dp-Duplicate').backgroundImage, isNull);
+    expect(find.byKey(const Key('room-comment-tag-92000002-First Host')),
+        findsNothing);
+    expect(find.byKey(const Key('room-comment-tag-92000003-Second Host')),
+        findsNothing);
+    final unknownDp = find.byKey(const Key('room-comment-dp-Duplicate'));
+    await tester.ensureVisible(unknownDp);
+    await tester.tap(unknownDp);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('room-user-profile-card-92000002')),
+        findsNothing);
+    expect(find.byKey(const Key('room-user-profile-card-92000003')),
+        findsNothing);
+
+    await showMessage('You', 'Departed sender', userId: '92000004');
+    expect(avatar('room-comment-dp-92000004').backgroundImage, isNull);
     final departedDp = find.byKey(const Key('room-comment-dp-92000004'));
     await tester.ensureVisible(departedDp);
     await tester.tap(departedDp);
     await tester.pumpAndSettle();
     expect(find.byKey(const Key('chat-user-profile-92000004')),
         findsOneWidget);
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+
+    await showMessage(account.displayName, 'My message', userId: account.userId);
+    expect(avatar('room-comment-dp-${account.userId}').backgroundImage,
+        same(stableImageProvider(_pixel)));
 
     await tester.pumpWidget(const SizedBox.shrink());
     await tester.pumpAndSettle();
