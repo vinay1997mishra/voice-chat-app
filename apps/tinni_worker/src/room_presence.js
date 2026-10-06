@@ -2054,6 +2054,25 @@ export class RoomPresenceStore extends DurableObject {
     this._broadcastPresence("member_updated");
   }
 
+  updateMemberFrame(userIdValue, frameIdValue) {
+    const userId = String(userIdValue || "").trim();
+    if (!userId) return { ok: false, updated: false };
+    const member = this.ctx.storage.sql.exec(
+      "SELECT user_id,equipped_frame_id FROM room_members WHERE user_id=? LIMIT 1",
+      userId,
+    ).toArray()[0];
+    if (!member) return { ok: true, updated: false };
+    const frameId = String(frameIdValue || "").trim().slice(0, 80) || null;
+    const previous = String(member.equipped_frame_id || "").trim() || null;
+    if (previous === frameId) return { ok: true, updated: false };
+    this.ctx.storage.sql.exec(
+      "UPDATE room_members SET equipped_frame_id=?,last_seen=? WHERE user_id=?",
+      frameId, Date.now(), userId,
+    );
+    this._broadcastPresence("member_frame_changed");
+    return { ok: true, updated: true, equipped_frame_id: frameId };
+  }
+
   async join(input) {
     const result = this._upsert(input);
     this._broadcastPresence("member_joined");
@@ -2064,7 +2083,7 @@ export class RoomPresenceStore extends DurableObject {
     const userId = String(input?.user_id || "").trim();
     const before = userId
       ? this.ctx.storage.sql.exec(
-          "SELECT seat_index, mic_enabled FROM room_members WHERE user_id = ? LIMIT 1",
+          "SELECT seat_index, mic_enabled, equipped_frame_id FROM room_members WHERE user_id = ? LIMIT 1",
           userId,
         ).toArray()[0]
       : null;
@@ -2072,10 +2091,11 @@ export class RoomPresenceStore extends DurableObject {
       ? null
       : Number(before.seat_index);
     const beforeMic = Number(before?.mic_enabled || 0) === 1;
+    const beforeFrame = String(before?.equipped_frame_id || "").trim() || null;
     const result = this._upsert(input);
     const after = userId
       ? this.ctx.storage.sql.exec(
-          "SELECT seat_index, mic_enabled FROM room_members WHERE user_id = ? LIMIT 1",
+          "SELECT seat_index, mic_enabled, equipped_frame_id FROM room_members WHERE user_id = ? LIMIT 1",
           userId,
         ).toArray()[0]
       : null;
@@ -2083,8 +2103,11 @@ export class RoomPresenceStore extends DurableObject {
       ? null
       : Number(after.seat_index);
     const afterMic = Number(after?.mic_enabled || 0) === 1;
+    const afterFrame = String(after?.equipped_frame_id || "").trim() || null;
     if (beforeSeat !== afterSeat || beforeMic !== afterMic) {
       this._broadcastPresence("seat_changed");
+    } else if (beforeFrame !== afterFrame) {
+      this._broadcastPresence("member_frame_changed");
     }
     return result;
   }
