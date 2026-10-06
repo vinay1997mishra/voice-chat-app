@@ -1174,7 +1174,9 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   void _playLuckySeatVisual(LuckyGiftPresentation presentation) {
     if (!mounted || !widget.state.roomControls.effectsEnabled ||
-        !widget.state.roomControls.luckyGiftEffectEnabled) return;
+        !widget.state.roomControls.luckyGiftEffectEnabled) {
+      return;
+    }
     final event = presentation.event;
     _luckyBubbleTimer?.cancel();
     setState(() {
