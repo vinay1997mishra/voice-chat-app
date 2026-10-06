@@ -31,7 +31,9 @@ class RoomSeat {
 }
 
 class RoomMessage {
-  const RoomMessage(this.author, this.text);
+  const RoomMessage(this.author, this.text, {this.userId, this.avatarDataUrl});
   final String author;
   final String text;
+  final String? userId;
+  final String? avatarDataUrl;
 }

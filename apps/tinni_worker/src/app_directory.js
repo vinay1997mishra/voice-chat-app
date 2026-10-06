@@ -5016,6 +5016,7 @@ export class AppDirectoryStore extends DurableObject {
       catch(error) {console.error("Obsolete DP cleanup will retry",String(error?.message||error));}
     }
     this._notifyAccountChanged(userId);
+    this._notifyProfileChanged(userId);
     const owned = this.findOwnedRoomByUserId(userId);
     if (owned) this._notifyRoomChanged(owned.id);
     const updated = await this.getUserById(userId);
@@ -10216,6 +10217,34 @@ export class AppDirectoryStore extends DurableObject {
     for (const socket of sockets) { try { socket.send(payload); } catch {} }
   }
 
+  _publicChatProfile(userId) {
+    return this.ctx.storage.sql.exec(
+      "SELECT user_id,display_name,avatar_data_url,age,gender,country_code,country_name,flag_emoji,signature FROM app_users WHERE user_id=?",
+      userId,
+    ).toArray()[0] || null;
+  }
+
+  _notifyProfileChanged(userId) {
+    const watchers=(this.ctx.getWebSockets?.()||[]).filter(socket =>
+      socket.deserializeAttachment?.()?.profileUserIds?.includes(userId));
+    if(!watchers.length) return;
+    const user=this._publicChatProfile(userId);
+    if(!user) return;
+    const payload=JSON.stringify({type:"profile_changed",user});
+    for(const socket of watchers) {
+      try {
+        const identity=socket.deserializeAttachment();
+        if((identity.expiresAt&&identity.expiresAt<=Date.now())||
+            (identity.tokenHash&&this.isSessionRevoked(identity.tokenHash))) {
+          socket.close(1008,"Session expired");
+          continue;
+        }
+        if(this.isBlockedBetween(identity.userId,userId)) continue;
+        socket.send(payload);
+      } catch {}
+    }
+  }
+
   _notifyMessageSocket(userIdValue, payload = {}) {
     const userId = String(userIdValue || "").trim();
     if (!userId) return;
@@ -10272,6 +10301,17 @@ export class AppDirectoryStore extends DurableObject {
     }
     let event;
     try { event = JSON.parse(message); } catch { event = {}; }
+    if(event.type === "subscribe_profiles") {
+      const ids=[...new Set((Array.isArray(event.user_ids)?event.user_ids:[]).slice(0,4)
+        .map(id=>String(id||"").trim().slice(0,80)).filter(Boolean))];
+      if(JSON.stringify(ids)===JSON.stringify(attachment.profileUserIds||[])) return;
+      attachment.profileUserIds=ids;
+      socket.serializeAttachment(attachment);
+      const users=ids.filter(id=>!this.isBlockedBetween(attachment.userId,id))
+        .map(id=>this._publicChatProfile(id)).filter(Boolean);
+      socket.send(JSON.stringify({type:"profiles_state",users}));
+      return;
+    }
     if (event.type === "account_state") {
       if (Date.now() - Number(attachment.lastAccountRead || 0) < 200) return;
       attachment.lastAccountRead = Date.now();

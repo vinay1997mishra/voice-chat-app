@@ -42,6 +42,7 @@ import 'fruit_party_panel.dart';
 import 'ludo_screen.dart';
 import 'messages_screen.dart';
 import 'recharge_screen.dart';
+import 'chat_user_profile_screen.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -651,6 +652,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   RoomPresenceMember? _roomCommentMember(RoomMessage message) {
     final account = widget.state.auth.current;
     final currentUserId = account?.userId;
+    if (message.userId != null) {
+      return widget.state.roomSession.liveMembers
+          .where((member) => member.userId == message.userId).firstOrNull;
+    }
     for (final member in widget.state.roomSession.liveMembers) {
       if (message.author == 'You' && member.userId == currentUserId) {
         return member;
@@ -711,16 +716,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     children.add(
       TextSpan(
-        text: message.author + ': ',
-        style: const TextStyle(
-          color: FeaturePalette.message,
-          fontWeight: FontWeight.w900,
-          fontSize: 12,
-        ),
-      ),
-    );
-    children.add(
-      TextSpan(
         text: message.text,
         style: const TextStyle(
           color: RoyalPalette.cream,
@@ -729,11 +724,35 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       ),
     );
 
+    final account = widget.state.auth.current;
+    final avatarSource = member != null ? member.avatarDataUrl
+        : (message.userId == account?.userId || message.author == 'You')
+            ? account?.avatarDataUrl : message.avatarDataUrl;
+    final avatar = stableImageProvider(avatarSource);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 5),
-      child: Text.rich(
-        TextSpan(children: children),
-        style: const TextStyle(fontSize: 12, height: 1.25),
+      padding: const EdgeInsets.only(bottom: 7),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          GestureDetector(
+            onTap: member != null ? () => _showUserProfile(member)
+                : message.userId == null ? null : () {
+                    Navigator.of(context).push(MaterialPageRoute<void>(builder: (_) =>
+                      ChatUserProfileScreen(state: widget.state, userId: message.userId!,
+                        displayName: message.author, avatarDataUrl: avatarSource)));
+                  },
+            child: CircleAvatar(
+              key: Key('room-comment-dp-${message.userId ?? message.author}'),
+              radius: 14, backgroundColor: RoyalPalette.panel,
+              backgroundImage: avatar,
+              child: avatar == null ? Icon(message.author == 'System'
+                  ? Icons.info_outline_rounded : Icons.person_rounded, size: 17) : null,
+            ),
+          ),
+          const SizedBox(width: 7),
+          Expanded(child: Text.rich(TextSpan(children: children),
+            style: const TextStyle(fontSize: 12, height: 1.25))),
+        ],
       ),
     );
   }
@@ -2488,7 +2507,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
           ImageProvider? avatar;
           final avatarData = currentMember.avatarDataUrl;
-          if (avatarData != null && avatarData.startsWith('data:image/')) {
+          if (avatarData != null) {
             try {
               avatar = stableImageProvider(avatarData);
             } catch (_) {
@@ -6540,7 +6559,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           final currentName = account.displayName;
           ImageProvider? currentAvatar;
           final avatarData = account.avatarDataUrl;
-          if (avatarData != null && avatarData.startsWith('data:image/')) {
+          if (avatarData != null) {
             try {
               currentAvatar =
                   stableImageProvider(avatarData);
@@ -6856,8 +6875,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         (ownerId == account.userId ? account.avatarDataUrl : null);
 
     ImageProvider? ownerAvatar;
-    if (ownerAvatarValue != null &&
-        ownerAvatarValue.startsWith('data:image/')) {
+    if (ownerAvatarValue != null) {
       try {
         ownerAvatar = stableImageProvider(ownerAvatarValue);
       } catch (_) {
@@ -7111,7 +7129,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 .toList(growable: false);
 
             ImageProvider? avatarFor(String? data) {
-              if (data == null || !data.startsWith('data:image/')) {
+              if (data == null || data.isEmpty) {
                 return null;
               }
               try {
@@ -9066,8 +9084,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                       final visible = ordered.take(3).toList(growable: false);
 
                       ImageProvider? avatarFor(String? data) {
-                        if (data == null ||
-                            !data.startsWith('data:image/')) {
+                        if (data == null || data.isEmpty) {
                           return null;
                         }
                         try {
@@ -10091,7 +10108,7 @@ class _RoomMemberProfilePage extends StatelessWidget {
 
   ImageProvider? get _avatar {
     final value = member.avatarDataUrl;
-    if (value == null || !value.startsWith('data:image/')) return null;
+    if (value == null || value.isEmpty) return null;
     try {
       return stableImageProvider(value);
     } catch (_) {
