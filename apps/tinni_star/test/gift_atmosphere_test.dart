@@ -80,11 +80,14 @@ void main() {
         cache.parent.path != cache.path) {
       cache = cache.parent;
     }
-    final loader = FontLoader('GiftPreview')..addFont(
-      File('${cache.path}/artifacts/material_fonts/Roboto-Regular.ttf').readAsBytes()
-        .then((bytes) => ByteData.sublistView(bytes)),
-    );
-    await loader.load();
+    await tester.runAsync(() async {
+      final loader = FontLoader('GiftPreview')..addFont(
+        File('${cache.path}/artifacts/material_fonts/Roboto-Regular.ttf').readAsBytes()
+          .then((bytes) => ByteData.sublistView(bytes)),
+      );
+      await loader.load();
+    });
+    await tester.pumpWidget(const MaterialApp(home: Scaffold()));
     final folder = Directory('build/gift_previews')..createSync(recursive: true);
     final gifts = _gifts;
     for (var batch = 0; batch < gifts.length; batch += 40) {
@@ -96,6 +99,8 @@ void main() {
         final poster = gift.lucky ? gift.artworkAsset! : 'assets/cinematic/${gift.id}.png';
         final key = GlobalKey();
         final imageProvider = AssetImage(poster);
+        await tester.runAsync(() => precacheImage(imageProvider,
+          tester.element(find.byType(Scaffold))));
         await tester.pumpWidget(MaterialApp(theme: ThemeData(fontFamily: 'GiftPreview'),
           home: RepaintBoundary(key: key, child: Scaffold(
             backgroundColor: const Color(0xFF09111D),
@@ -113,7 +118,6 @@ void main() {
             ]),
           )),
         ));
-        await tester.runAsync(() => precacheImage(imageProvider, key.currentContext!));
         await tester.pump();
         expect(tester.takeException(), isNull, reason: gift.id);
         final boundary = key.currentContext!.findRenderObject()! as RenderRepaintBoundary;
