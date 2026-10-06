@@ -53,7 +53,17 @@ jobs:
           else
             tag="$(python3 -c "import json; print(json.load(open('tools/cinematic/bundle-lock.json'))['release_tag'])")"
             gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern cinematic-assets.zip --dir /tmp/tinni-cinematic-bundle
-            python3 tools/cinematic/catalog.py install --archive /tmp/tinni-cinematic-bundle/cinematic-assets.zip
+            # Validate the released media against its immutable generation source.
+            # App transport fixes must not regenerate or silently replace this bundle.
+            media_source="$(python3 -c "import json; print(json.load(open('tools/cinematic/bundle-lock.json'))['source_commit'])")"
+            git fetch --depth=1 origin "$media_source"
+            media_verify="$RUNNER_TEMP/tinni-pinned-media-source"
+            mkdir -p "$media_verify"
+            git archive "$media_source" tools/cinematic | tar -x -C "$media_verify"
+            python3 "$media_verify/tools/cinematic/catalog.py" install \
+              --archive /tmp/tinni-cinematic-bundle/cinematic-assets.zip \
+              --lock "$GITHUB_WORKSPACE/tools/cinematic/bundle-lock.json" \
+              --destination "$GITHUB_WORKSPACE/apps/tinni_star/assets/cinematic"
             python3 tools/cinematic/catalog.py validate
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi

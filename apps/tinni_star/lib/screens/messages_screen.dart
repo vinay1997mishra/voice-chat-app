@@ -56,6 +56,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.pageEntries.addListener(_onPageEntered);
     widget.state.social.retainMessageEvents();
     widget.state.social.messageEvents.addListener(_handleMessageEvent);
     final account = widget.state.auth.current;
@@ -67,11 +68,14 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   @override
   void dispose() {
+    widget.state.pageEntries.removeListener(_onPageEntered);
     widget.state.social.messageEvents.removeListener(_handleMessageEvent);
     unawaited(widget.state.social.releaseMessageEvents());
     controller.dispose();
     super.dispose();
   }
+
+  void _onPageEntered() { if (_isInbox && widget.state.pageEntries.value == 2) _refreshSilently(); }
 
   void _handleMessageEvent() {
     final event = widget.state.social.messageEvents.value;
@@ -104,49 +108,26 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
   }
 
-  Future<void> _refreshForIncomingMessage(
-    Map<String, dynamic> event,
-  ) async {
-    final account = widget.state.auth.current;
-    if (account == null) return;
-    final rawMessage = event['message'];
-    final message = rawMessage is Map
-        ? rawMessage.map(
-            (key, value) => MapEntry(key.toString(), value),
-          )
-        : const <String, dynamic>{};
-    final from = message['from']?.toString() ?? '';
-    final to = message['to']?.toString() ?? '';
-
-    try {
-      if (_isInbox) {
-        await widget.state.social.syncInbox(account.authToken);
-        await _loadActivity();
-      } else if (from == _targetUserId || to == _targetUserId) {
-        await widget.state.social.loadConversation(
-          authToken: account.authToken,
-          myUserId: _myUserId,
-          peerUserId: _targetUserId,
-        );
-        await _loadInviteStatuses();
-        final tagData = await widget.state.backend.userTagsAndMedals(
-          account.authToken,
-          _targetUserId,
-        );
-        final rawIdentityTags = tagData['identity_tags'];
-        targetIdentityTags = rawIdentityTags is List
-            ? rawIdentityTags
-                .whereType<Map>()
-                .map((row) => Map<String, dynamic>.from(row))
-                .toList(growable: false)
-            : const <Map<String, dynamic>>[];
-      } else {
-        return;
-      }
-      if (mounted) setState(() {});
-    } catch (_) {
-      // The next message event, manual pull-to-refresh, or re-entry retries.
+  Future<void> _refreshForIncomingMessage(Map<String, dynamic> event) async {
+    // SocialService already applies the complete, authenticated message payload.
+    final message = event['message'];
+    if (!_isInbox && message is Map && message['from']?.toString() == _targetUserId &&
+        (ModalRoute.of(context)?.isCurrent ?? false)) {
+      widget.state.social.markLiveConversationSeen(_targetUserId);
     }
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _loadIdentityTags() async {
+    final account = widget.state.auth.current;
+    if (account == null || _isInbox) return;
+    try {
+      final tagData = await widget.state.backend.userTagsAndMedals(account.authToken, _targetUserId);
+      final rows = tagData['identity_tags'];
+      targetIdentityTags = rows is List
+          ? rows.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false)
+          : const <Map<String, dynamic>>[];
+    } catch (_) {}
   }
 
   Future<void> _load() async {
@@ -176,7 +157,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           peerUserId: _targetUserId,
         );
       }
-      if (!_isInbox) await _loadInviteStatuses();
+      if (!_isInbox) { await _loadInviteStatuses(); await _loadIdentityTags(); }
       await _checkIncoming();
       if (mounted) {
         setState(() {
@@ -208,7 +189,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
           peerUserId: _targetUserId,
         );
       }
-      if (!_isInbox) await _loadInviteStatuses();
+      if (!_isInbox) { await _loadInviteStatuses(); await _loadIdentityTags(); }
       await _checkIncoming();
       if (mounted) setState(() {});
     } catch (_) {

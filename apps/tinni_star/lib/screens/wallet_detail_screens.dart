@@ -300,7 +300,21 @@ class _DiamondsWalletScreenState extends State<DiamondsWalletScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
     _load();
+  }
+
+  void _onLiveChanged() {
+    if (mounted) {
+      setState(() {
+        data = {...data, 'current_diamonds': widget.state.wallet.diamonds};
+      });
+    }
+  }
+  @override
+  void dispose() {
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -532,7 +546,25 @@ class _RoleWalletDetailScreenState extends State<RoleWalletDetailScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
     _load();
+  }
+
+  void _onLiveChanged() {
+    if (mounted) {
+      setState(() {
+        final seller = widget.walletType == 'coin_seller';
+      data = {...data,
+        'balance_coins': seller ? widget.state.wallet.coinSellerBalance : widget.state.wallet.merchantBalance,
+        'total_usd_cents': seller ? widget.state.wallet.coinSellerUsdCents : widget.state.wallet.merchantUsdCents,
+      };
+      });
+    }
+  }
+  @override
+  void dispose() {
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
+    super.dispose();
   }
 
   Future<void> _load() async {
@@ -941,7 +973,21 @@ class _ReceivedDollarsScreenState extends State<ReceivedDollarsScreen> {
   @override
   void initState() {
     super.initState();
+    widget.state.realtimeChanges.addListener(_onLiveChanged);
     _load();
+  }
+
+  void _onLiveChanged() {
+    if (!mounted) return;
+    setState(() {
+      data = {...data, 'total_usd_cents': widget.walletType == 'coin_seller'
+          ? widget.state.wallet.coinSellerUsdCents : widget.state.wallet.merchantUsdCents};
+    });
+  }
+  @override
+  void dispose() {
+    widget.state.realtimeChanges.removeListener(_onLiveChanged);
+    super.dispose();
   }
 
   Future<void> _load() async {

@@ -4156,7 +4156,10 @@ export default {
       }
       const headers = new Headers(request.headers);
       headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      headers.delete("x-tinni-game-key");
       headers.set("x-tinni-country-code", String(appSession.user.country_code || "IN"));
+      headers.set("x-tinni-session-expires", String(appSession.exp));
+      headers.set("x-tinni-session-hash", await sessionTokenHash(bearerToken(request)));
       const forwarded = new Request(request.url, {
         method: "GET",
         headers,
@@ -4435,6 +4438,23 @@ export default {
           error: String(error?.message || "Unable to add room theme"),
         }, 400);
       }
+    }
+
+    if (["/fruit-game/live", "/fruit-party/live", "/ludo/live"].includes(url.pathname) && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
+        return json({ ok: false, error: "WebSocket upgrade required" }, 426);
+      }
+      const headers = new Headers(request.headers);
+      headers.set("x-tinni-user-id", String(appSession.user.user_id));
+      headers.set("x-tinni-room-id", String(url.searchParams.get("room_id") || "").trim());
+      headers.set("x-tinni-game-key", "ludo");
+      headers.set("x-tinni-session-expires", String(appSession.exp));
+      const store = url.pathname === "/fruit-game/live" ? getFruitGameStore(env)
+        : url.pathname === "/fruit-party/live" ? getFruitPartyStore(env) : getAppDirectoryStore(env);
+      try { return await store.fetch(new Request(request.url, { method: "GET", headers })); }
+      catch (error) { return json({ ok: false, error: String(error?.message || "Game is unavailable") }, 403); }
     }
 
     if (url.pathname === "/fruit-game/state" && request.method === "GET") {
