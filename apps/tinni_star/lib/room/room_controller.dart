@@ -251,11 +251,11 @@ class RoomController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void addRoomMessage(String author, String text) {
+  void addRoomMessage(String author, String text, {String? userId, String? avatarDataUrl}) {
     final cleanAuthor = author.trim().isEmpty ? 'User' : author.trim();
     final cleanText = text.trim();
     if (cleanText.isEmpty) return;
-    messages.add(RoomMessage(cleanAuthor, cleanText));
+    messages.add(RoomMessage(cleanAuthor, cleanText, userId: userId, avatarDataUrl: avatarDataUrl));
     notifyListeners();
   }
 

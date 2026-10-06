@@ -208,4 +208,29 @@ void main() {
   });
 
 
+  testWidgets('every private message has a sender DP and header opens the peer profile',
+      (tester) async {
+    final state = makeState();
+    state.social.friends.add('friend-1');
+    state.social.directMessages.addAll([
+      const ChatMessage(id: 'incoming-dp', from: 'friend-1', to: '91000001', text: 'Incoming body'),
+      const ChatMessage(id: 'outgoing-dp', from: '91000001', to: 'friend-1', text: 'Outgoing body'),
+    ]);
+    await tester.pumpWidget(MaterialApp(home: MessagesScreen(
+      state: state, targetUserId: 'friend-1', targetName: 'Friend One')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+    expect(find.byKey(const Key('message-sender-dp-incoming-dp')), findsOneWidget);
+    expect(find.byKey(const Key('message-sender-dp-outgoing-dp')), findsOneWidget);
+    expect(find.text('Incoming body'), findsOneWidget);
+    expect(find.text('Outgoing body'), findsOneWidget);
+    expect(find.text('Friend One'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('message-conversation-profile')));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+    expect(find.byKey(const Key('chat-user-profile-friend-1')), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    state.social.dispose();
+  });
+
 }
