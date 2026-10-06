@@ -4536,7 +4536,7 @@ export class AppDirectoryStore extends DurableObject {
     const language = SUPPORTED_LANGUAGES.has(requestedLanguage)
       ? requestedLanguage
       : "English";
-    const avatarDataUrl = input?.avatar_data_url
+    let avatarDataUrl = input?.avatar_data_url
       ? String(input.avatar_data_url)
       : null;
 
@@ -4566,6 +4566,10 @@ export class AppDirectoryStore extends DurableObject {
 
     const userId = this._nextUserId();
     const now = Date.now();
+    if(avatarDataUrl?.startsWith("data:image/")&&this.env.EFFECT_MEDIA&&this.env.USER_ARCHIVE) {
+      avatarDataUrl=await coldStorage.copyInlineAvatar(this,userId,avatarDataUrl,now);
+    }
+
     try {
       this.ctx.storage.sql.exec(
         `INSERT INTO app_users
@@ -4622,11 +4626,6 @@ export class AppDirectoryStore extends DurableObject {
       language,
       now,
     );
-    if(avatarDataUrl?.startsWith("data:image/")&&this.env.EFFECT_MEDIA&&this.env.USER_ARCHIVE) {
-      try { await coldStorage.moveInlineAvatar(this,now,userId); }
-      catch(error) { console.error("Current DP migration will retry",String(error?.message||error)); }
-    }
-
     return this.getUserById(userId);
   }
 

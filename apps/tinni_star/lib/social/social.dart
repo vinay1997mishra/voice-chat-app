@@ -483,7 +483,7 @@ class SocialService {
     final index = messageThreads.indexWhere((thread) => thread.userId == from);
     final old = index < 0 ? null : messageThreads.removeAt(index);
     messageThreads.insert(0, MessageThread(
-      userId: from, displayName: old?.displayName ?? row['from_name']?.toString() ?? from,
+      userId: from, displayName: row['from_name']?.toString() ?? old?.displayName ?? from,
       avatarDataUrl: old?.avatarDataUrl, isFriend: old?.isFriend ?? friends.contains(from),
       lastMessage: message, unreadCount: (old?.unreadCount ?? 0) + 1,
     ));

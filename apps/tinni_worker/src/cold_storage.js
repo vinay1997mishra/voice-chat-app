@@ -326,31 +326,34 @@ export async function deleteOldAvatar(store,previous,next,userId) {
   await store.env.EFFECT_MEDIA?.delete(oldKey);
   return true;
 }
-export async function moveInlineAvatar(store,now=Date.now(),userId=null) {
-  const row=userId?one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE user_id=? AND avatar_data_url LIKE 'data:image/%'",userId):one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE avatar_data_url LIKE 'data:image/%' LIMIT 1");
-  if(!row) return 0;
-  const match=/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(row.avatar_data_url);
-  if(!match) return 0;
+export async function copyInlineAvatar(store,userId,dataUrl,now=Date.now()) {
+  const match=/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(dataUrl);
+  if(!match) throw new Error("DP must be a JPEG, PNG or WebP image");
   const bytes=Uint8Array.from(atob(match[2]),char=>char.charCodeAt(0));
-  const key="profiles/"+row.user_id+"/avatar",lease=crypto.randomUUID();
+  const key="profiles/"+userId+"/avatar",lease=crypto.randomUUID();
   await reserveMediaBudget(store,key,bytes.byteLength,lease);
   let attempted=false;
   try {
     const previous=await store.env.EFFECT_MEDIA.head(key);
     attempted=true;
-    await store.env.EFFECT_MEDIA.put(key,bytes,{httpMetadata:{contentType:match[1]},customMetadata:{user_id:row.user_id,slot:"avatar",updated_at:String(now)}});
+    await store.env.EFFECT_MEDIA.put(key,bytes,{httpMetadata:{contentType:match[1]},customMetadata:{user_id:userId,slot:"avatar",updated_at:String(now)}});
     const copied=await store.env.EFFECT_MEDIA.get(key);
     if(!copied||!safeBytesEqual(bytes,new Uint8Array(await copied.arrayBuffer()))) throw new Error("DP copy verification failed");
     completeMediaBudget(store,lease,Number(previous?.size||0));
-    const url=(store.env.PUBLIC_API_ORIGIN||"https://tinni-star-api.mishrajii7991.workers.dev")+"/media/"+encodeURIComponent(key)+"?v="+now;
-    exec(store,"UPDATE app_users SET avatar_data_url=? WHERE user_id=? AND avatar_data_url=?",url,row.user_id,row.avatar_data_url);
-    exec(store,"UPDATE country_ribbons SET avatar_data_url=? WHERE user_id=?",url,row.user_id);
-    store._notifyAccountChanged(row.user_id);
-    const user=await store.getUserById(row.user_id);
-    const presence=one(store,"SELECT room_id FROM app_user_presence WHERE user_id=?",row.user_id);
-    if(presence?.room_id&&store.env.ROOM_PRESENCE) await store.env.ROOM_PRESENCE.get(store.env.ROOM_PRESENCE.idFromName(presence.room_id)).updateMemberProfile(user);
-    return 1;
+    return (store.env.PUBLIC_API_ORIGIN||"https://tinni-star-api.mishrajii7991.workers.dev")+"/media/"+encodeURIComponent(key)+"?v="+now;
   } catch(error) {abortMediaBudget(store,lease,attempted);throw error;}
+}
+export async function moveInlineAvatar(store,now=Date.now(),userId=null) {
+  const row=userId?one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE user_id=? AND avatar_data_url LIKE 'data:image/%'",userId):one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE avatar_data_url LIKE 'data:image/%' LIMIT 1");
+  if(!row) return 0;
+  const url=await copyInlineAvatar(store,row.user_id,row.avatar_data_url,now);
+  exec(store,"UPDATE app_users SET avatar_data_url=? WHERE user_id=? AND avatar_data_url=?",url,row.user_id,row.avatar_data_url);
+  exec(store,"UPDATE country_ribbons SET avatar_data_url=? WHERE user_id=?",url,row.user_id);
+  store._notifyAccountChanged(row.user_id);
+  const user=await store.getUserById(row.user_id);
+  const presence=one(store,"SELECT room_id FROM app_user_presence WHERE user_id=?",row.user_id);
+  if(presence?.room_id&&store.env.ROOM_PRESENCE) await store.env.ROOM_PRESENCE.get(store.env.ROOM_PRESENCE.idFromName(presence.room_id)).updateMemberProfile(user);
+  return 1;
 }
 function safeBytesEqual(a,b) {return a.length===b.length&&a.every((value,index)=>value===b[index]);}
 export function cleanupExpiredRows(store,now=Date.now()) {

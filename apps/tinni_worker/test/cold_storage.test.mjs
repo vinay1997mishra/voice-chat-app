@@ -192,3 +192,17 @@ test('rehydrating a directory skips catalog seeding and full user/wallet backfil
   assert.equal(seen.some(q=>q.includes('INSERT OR IGNORE INTO owner_catalog')),false);
   assert.equal(seen.some(q=>q.includes('SELECT auth_provider, auth_subject, user_id')),false);
 });
+
+test('new inline signup DP is verified in R2 before inserting small SQL profile data',async t=>{
+  const r=runtime();t.after(r.close);
+  const input={auth_provider:'google',auth_subject:'signup-avatar',email:'avatar@example.test',
+    display_name:'Avatar Test',age:25,signature:'',country_code:'IN',country_name:'India',
+    flag_emoji:'🇮🇳',gender:'male',language:'English',avatar_data_url:'data:image/png;base64,AQIDBA=='};
+  const account=await r.directory.createUser(input);
+  assert.ok(account.avatar_data_url.includes('/media/'));
+  assert.equal(sql(r,"SELECT avatar_data_url FROM app_users WHERE user_id=?",account.user_id).one().avatar_data_url,account.avatar_data_url);
+  assert.deepEqual([...r.mediaObjects.get('profiles/'+account.user_id+'/avatar').bytes],[1,2,3,4]);
+  r.env.R2_BYTE_LIMIT_BYTES=1;
+  await assert.rejects(r.directory.createUser({...input,auth_subject:'over-budget-avatar',email:'other@example.test'}),/Storage budget/);
+  assert.equal(sql(r,"SELECT COUNT(*) n FROM app_users WHERE email='other@example.test'").one().n,0);
+});
