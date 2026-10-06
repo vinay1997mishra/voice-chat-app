@@ -68,6 +68,21 @@ jobs:
             echo "ready=true" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Reject embedded release secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          leaked_keys="$(find apps/tinni_star -type f \( -name '*.keystore' -o -name '*.jks' -o -name '*.p12' -o -name '*.pfx' \) -print)"
+          if [ -n "$leaked_keys" ]; then
+            echo "::error::Release signing material must never be committed to the app tree."
+            printf '%s\n' "$leaked_keys"
+            exit 1
+          fi
+          if grep -RInE --exclude-dir=build --exclude='*.lock'             'BEGIN [A-Z ]*PRIVATE KEY|LIVEKIT_API_SECRET|SESSION_SECRET|OWNER_PASSWORD|CLOUDFLARE_API_TOKEN|RESEND_API_KEY|FACEBOOK_APP_SECRET'             apps/tinni_star; then
+            echo "::error::Server-side secret material or secret variable names were found in the Android app tree."
+            exit 1
+          fi
+
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -85,7 +100,14 @@ jobs:
         run: flutter create . --platforms=android --org com.tinnistar
 
       - name: Configure Tinni Star Android
+        id: signing
         working-directory: apps/tinni_star
+        env:
+          TINNI_RELEASE_KEYSTORE_B64: ${{ secrets.TINNI_RELEASE_KEYSTORE_B64 }}
+          TINNI_RELEASE_STORE_PASSWORD: ${{ secrets.TINNI_RELEASE_STORE_PASSWORD }}
+          TINNI_RELEASE_KEY_PASSWORD: ${{ secrets.TINNI_RELEASE_KEY_PASSWORD }}
+          TINNI_RELEASE_KEY_ALIAS: ${{ secrets.TINNI_RELEASE_KEY_ALIAS }}
+          TINNI_RELEASE_CERT_SHA256: ${{ secrets.TINNI_RELEASE_CERT_SHA256 }}
         run: |
           cp tool/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
           sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
@@ -94,15 +116,51 @@ jobs:
           mkdir -p android/app/src/main/kotlin/com/tinnistar/tinni_star
           cp tool/MainActivity.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/MainActivity.kt
           cp tool/TinniRoomForegroundService.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/TinniRoomForegroundService.kt
-          mkdir -p "$HOME/.android"
-          cp tool/tinni-dev-debug.keystore "$HOME/.android/debug.keystore"
-          cp tool/tinni-dev-debug.keystore android/app/tinni-release.keystore
-          cat >> android/key.properties <<'EOF'
-          storePassword=android
-          keyPassword=android
-          keyAlias=androiddebugkey
-          storeFile=tinni-release.keystore
-          EOF
+          missing=0
+          for name in             TINNI_RELEASE_KEYSTORE_B64             TINNI_RELEASE_STORE_PASSWORD             TINNI_RELEASE_KEY_PASSWORD             TINNI_RELEASE_KEY_ALIAS             TINNI_RELEASE_CERT_SHA256; do
+            if [ -z "${!name:-}" ]; then
+              echo "::warning::Missing secure signing secret: $name"
+              missing=1
+            fi
+          done
+          if [ "$missing" -ne 0 ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            if [ "$GITHUB_EVENT_NAME" = "push" ] && [ "$GITHUB_REF" = "refs/heads/tinnistar" ]; then
+              echo "::error::Secure release signing is required on tinnistar. The old committed debug key is retired."
+              exit 1
+            fi
+          else
+            printf '%s' "$TINNI_RELEASE_KEYSTORE_B64" | base64 --decode > android/app/tinni-release.keystore
+            chmod 600 android/app/tinni-release.keystore
+            python3 - <<'PY'
+          import os
+          from pathlib import Path
+          def esc(value: str) -> str:
+              return (value.replace('\\', '\\\\')
+                           .replace('=', '\\=')
+                           .replace(':', '\\:')
+                           .replace(' ', '\\ '))
+          props = {
+              'storePassword': os.environ['TINNI_RELEASE_STORE_PASSWORD'],
+              'keyPassword': os.environ['TINNI_RELEASE_KEY_PASSWORD'],
+              'keyAlias': os.environ['TINNI_RELEASE_KEY_ALIAS'],
+              'storeFile': 'tinni-release.keystore',
+          }
+          Path('android/key.properties').write_text(
+              ''.join(f"{k}={esc(v)}\n" for k, v in props.items())
+          )
+          PY
+            actual="$(
+              keytool -list -v                 -keystore android/app/tinni-release.keystore                 -storepass "$TINNI_RELEASE_STORE_PASSWORD"                 -alias "$TINNI_RELEASE_KEY_ALIAS" |
+              sed -n 's/^[[:space:]]*SHA256: //p' |
+              head -1 |
+              tr -d ':' |
+              tr '[:upper:]' '[:lower:]'
+            )"
+            expected="$(printf '%s' "$TINNI_RELEASE_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+            test -n "$actual" && test "$actual" = "$expected"
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
           python3 - <<'PY'
           from pathlib import Path
           p = Path("android/app/build.gradle.kts")
@@ -118,9 +176,14 @@ jobs:
           PY
 
       - name: Verify Android signing fingerprint
+        if: steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
+        env:
+          TINNI_RELEASE_STORE_PASSWORD: ${{ secrets.TINNI_RELEASE_STORE_PASSWORD }}
+          TINNI_RELEASE_KEY_ALIAS: ${{ secrets.TINNI_RELEASE_KEY_ALIAS }}
         run: |
-          keytool -list -v -keystore tool/tinni-dev-debug.keystore -storepass android | grep -E 'SHA1:|SHA256:'
+          keytool -list -v             -keystore android/app/tinni-release.keystore             -storepass "$TINNI_RELEASE_STORE_PASSWORD"             -alias "$TINNI_RELEASE_KEY_ALIAS" |
+            grep -E 'SHA1:|SHA256:'
 
       - name: Get packages
         working-directory: apps/tinni_star
@@ -293,21 +356,30 @@ jobs:
           PY
 
       - name: Build installable APK
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: flutter build apk --release --split-per-abi
 
       - name: Verify built APK signing certificate
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
+        env:
+          TINNI_RELEASE_CERT_SHA256: ${{ secrets.TINNI_RELEASE_CERT_SHA256 }}
         run: |
           APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
-          "$APKSIGNER" verify --print-certs "$APK"
-          "$APKSIGNER" verify --print-certs "$APK" | grep -F "8f6be8da2c2509bf2a248f72b81391e6b05e860e"
+          "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/tinni-apk-certs.txt
+          actual="$(
+            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/tinni-apk-certs.txt |
+            head -1 |
+            tr -d ':' |
+            tr '[:upper:]' '[:lower:]'
+          )"
+          expected="$(printf '%s' "$TINNI_RELEASE_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
+          test -n "$actual" && test "$actual" = "$expected"
 
       - name: Upload Tinni Star ARM64 APK
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-ARM64
@@ -315,7 +387,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload Tinni Star split APKs
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Split-APKs
@@ -323,7 +395,7 @@ jobs:
           if-no-files-found: error
 
       - name: Build separate Tinni Star Final APK
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: |
           python3 - <<'PY'
@@ -344,7 +416,7 @@ jobs:
           cp build/app/outputs/flutter-apk/app-*-release.apk build/final-apks/
 
       - name: Verify separate APK identity and signing
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
         run: |
           APK="build/final-apks/app-arm64-v8a-release.apk"
@@ -355,7 +427,7 @@ jobs:
           "$AAPT" dump badging "$APK" | grep -F "application-label:'Tinni Star Final'"
 
       - name: Upload one Tinni Star Final ARM64 APK
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Final-ARM64
@@ -363,7 +435,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload separate Tinni Star Final APKs
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Final-Separate-APKs
@@ -371,7 +443,7 @@ jobs:
           if-no-files-found: error
 
       - name: Upload provider readiness report
-        if: steps.cinematic.outputs.ready == 'true'
+        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: Tinni-Star-Final-Provider-Readiness
@@ -379,7 +451,7 @@ jobs:
           if-no-files-found: error
 
       - name: Publish direct signed update APK
-        if: github.event_name == 'push' && github.ref == 'refs/heads/tinnistar' && steps.cinematic.outputs.ready == 'true'
+        if: github.event_name == 'push' && github.ref == 'refs/heads/tinnistar' && steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           APK_SOURCE_SHA: ${{ inputs.source_sha || github.sha }}

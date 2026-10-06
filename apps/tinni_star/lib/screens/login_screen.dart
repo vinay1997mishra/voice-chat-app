@@ -62,6 +62,7 @@ class _LoginScreenState extends State<LoginScreen> {
   String? pendingProvider;
   String? pendingGoogleIdToken;
   String? pendingFacebookRequestId;
+  String? pendingFacebookPollSecret;
   String? pendingAccountLabel;
 
   String? emailOtpRequestId;
@@ -142,15 +143,20 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     final requestId = uri.queryParameters['request_id']?.trim() ?? '';
-    if (requestId.isEmpty) return;
+    final pollSecret = pendingFacebookPollSecret;
+    if (requestId.isEmpty ||
+        pollSecret == null ||
+        pollSecret.isEmpty ||
+        pendingFacebookRequestId != requestId) {
+      return;
+    }
 
     final attempt = ++_facebookAttempt;
     setState(() {
       busy = false;
       waitingFacebook = true;
-      pendingFacebookRequestId = requestId;
     });
-    unawaited(_pollFacebook(requestId, attempt));
+    unawaited(_pollFacebook(requestId, pollSecret, attempt));
   }
 
     int get signatureWords {
@@ -294,6 +300,8 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
       final start = await _api.startFacebookLogin();
+      pendingFacebookRequestId = start.requestId;
+      pendingFacebookPollSecret = start.pollSecret;
 
       // Prefer the installed Facebook app on Android. If Facebook is not
       // installed or does not accept the native URI, fall back to the normal
@@ -334,7 +342,7 @@ class _LoginScreenState extends State<LoginScreen> {
         busy = false;
         waitingFacebook = true;
       });
-      await _pollFacebook(start.requestId, attempt);
+      await _pollFacebook(start.requestId, start.pollSecret, attempt);
     } catch (error) {
       if (!mounted) return;
       setState(() {
@@ -345,7 +353,11 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  Future<void> _pollFacebook(String requestId, int attempt) async {
+  Future<void> _pollFacebook(
+    String requestId,
+    String pollSecret,
+    int attempt,
+  ) async {
     try {
       for (var index = 0; index < 90; index += 1) {
         if (!mounted || attempt != _facebookAttempt) return;
@@ -355,7 +367,10 @@ class _LoginScreenState extends State<LoginScreen> {
           if (!mounted || attempt != _facebookAttempt) return;
         }
 
-        final poll = await _api.pollFacebookLogin(requestId);
+        final poll = await _api.pollFacebookLogin(
+          requestId,
+          pollSecret: pollSecret,
+        );
         if (poll.pending) continue;
 
         final result = poll.login;
@@ -372,6 +387,7 @@ class _LoginScreenState extends State<LoginScreen> {
         pendingProvider = 'facebook';
         pendingGoogleIdToken = null;
         pendingFacebookRequestId = poll.requestId ?? requestId;
+        pendingFacebookPollSecret = pollSecret;
         _applyDraft(
           result.draft,
           fallbackName: 'Facebook User',
@@ -393,7 +409,11 @@ class _LoginScreenState extends State<LoginScreen> {
 
   void _cancelFacebookWait() {
     _facebookAttempt += 1;
-    setState(() => waitingFacebook = false);
+    setState(() {
+      waitingFacebook = false;
+      pendingFacebookRequestId = null;
+      pendingFacebookPollSecret = null;
+    });
   }
 
   void _openEmailMode() {
@@ -704,13 +724,18 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       } else if (provider == 'facebook') {
         final requestId = pendingFacebookRequestId;
-        if (requestId == null || requestId.isEmpty) {
+        final pollSecret = pendingFacebookPollSecret;
+        if (requestId == null ||
+            requestId.isEmpty ||
+            pollSecret == null ||
+            pollSecret.isEmpty) {
           throw StateError(
             'Facebook login session expired. Please sign in again.',
           );
         }
         result = await _api.completeFacebookLogin(
           requestId: requestId,
+          pollSecret: pollSecret,
           profile: profile,
         );
       } else if (provider == 'email') {

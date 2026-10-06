@@ -96,6 +96,10 @@ function json(data, status = 200, headers = {}) {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      "content-security-policy": "default-src 'none'; frame-ancestors 'none'; base-uri 'none'",
+      "referrer-policy": "no-referrer",
+      "x-content-type-options": "nosniff",
+      "x-frame-options": "DENY",
       ...headers,
     },
   });
@@ -407,6 +411,13 @@ function safeEqualBytes(a, b) {
   return diff === 0;
 }
 
+function safeEqualText(a, b) {
+  return safeEqualBytes(
+    encoder.encode(String(a || "")),
+    encoder.encode(String(b || "")),
+  );
+}
+
 async function hmacBytes(value, secret) {
   const key = await crypto.subtle.importKey(
     "raw",
@@ -459,9 +470,12 @@ async function createSession(
   secret,
   maxAgeMs = 12 * 60 * 60 * 1000,
 ) {
+  const now = Date.now();
   const sessionPayload = JSON.stringify({
     ...payload,
-    exp: Date.now() + maxAgeMs,
+    iat: now,
+    jti: crypto.randomUUID(),
+    exp: now + maxAgeMs,
   });
   const encoded = stringToBase64Url(sessionPayload);
   const signature = await hmacBytes(encoded, secret);
@@ -504,6 +518,49 @@ async function sessionTokenHash(token) {
   const bytes = new TextEncoder().encode(String(token || ""));
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return toBase64Url(new Uint8Array(digest));
+}
+
+function requestClientAddress(request) {
+  const cfAddress = String(request.headers.get("cf-connecting-ip") || "").trim();
+  if (cfAddress) return cfAddress.slice(0, 80);
+  const forwarded = String(request.headers.get("x-forwarded-for") || "").split(",")[0].trim();
+  return (forwarded || "unknown").slice(0, 80);
+}
+
+async function securityRateLimitKey(request, scope, subject = "") {
+  const raw = [
+    String(scope || ""),
+    requestClientAddress(request),
+    String(subject || "").trim().toLowerCase(),
+  ].join("|");
+  const digest = await crypto.subtle.digest("SHA-256", encoder.encode(raw));
+  return toBase64Url(new Uint8Array(digest));
+}
+
+async function enforceSecurityRateLimit(
+  request,
+  env,
+  scope,
+  subject,
+  limit,
+  windowMs,
+) {
+  const key = await securityRateLimitKey(request, scope, subject);
+  const result = await getAppDirectoryStore(env).consumeSecurityRateLimit(
+    key,
+    limit,
+    windowMs,
+  );
+  if (result?.allowed !== false) return null;
+  const retrySeconds = Math.max(
+    1,
+    Math.ceil(Number(result.retry_after_ms || 1000) / 1000),
+  );
+  return json(
+    { ok: false, error: "Too many attempts. Please try again later." },
+    429,
+    { "retry-after": String(retrySeconds) },
+  );
 }
 
 async function verifyAppSession(request, env) {
@@ -1878,6 +1935,10 @@ export default {
       if (!env.SESSION_SECRET) {
         return json({ ok: false, error: "App session secret is not configured" }, 503);
       }
+      const googleThrottle = await enforceSecurityRateLimit(
+        request, env, "app_google_login_ip", "", 30, 10 * 60 * 1000,
+      );
+      if (googleThrottle) return googleThrottle;
       const body = await request.json().catch(() => ({}));
       try {
         const google = await verifyGoogleIdToken(body.id_token, env);
@@ -1950,6 +2011,11 @@ export default {
         return json({ ok: false, error: "Facebook login is not configured yet" }, 503);
       }
 
+      const facebookThrottle = await enforceSecurityRateLimit(
+        request, env, "app_facebook_start_ip", "", 20, 60 * 60 * 1000,
+      );
+      if (facebookThrottle) return facebookThrottle;
+
       const store = getAppDirectoryStore(env);
       const pending = await store.startFacebookLogin();
       const callbackUrl = new URL("/app-auth/facebook/callback", env.PUBLIC_API_ORIGIN || request.url).toString();
@@ -1963,6 +2029,7 @@ export default {
       return json({
         ok: true,
         request_id: pending.request_id,
+        poll_secret: pending.poll_secret,
         auth_url: authUrl.toString(),
       }, 201);
     }
@@ -2066,7 +2133,11 @@ export default {
         return json({ ok: false, error: "App session secret is not configured" }, 503);
       }
       const requestId = String(url.searchParams.get("request_id") || "").trim();
+      const pollSecret = String(url.searchParams.get("poll_secret") || "").trim();
       const store = getAppDirectoryStore(env);
+      if (!(await store.verifyFacebookPollSecret(requestId, pollSecret))) {
+        return json({ ok: false, error: "Facebook login session is invalid" }, 401);
+      }
       const pending = await store.getFacebookLogin(requestId);
       if (!pending) return json({ ok: false, error: "Facebook login request not found" }, 404);
       if (pending.status === "failed" || pending.status === "expired") {
@@ -2115,10 +2186,14 @@ export default {
       }
       const body = await request.json().catch(() => ({}));
       const requestId = String(body.request_id || "").trim();
+      const pollSecret = String(body.poll_secret || "").trim();
       const profile = body.profile && typeof body.profile === "object"
         ? body.profile
         : null;
       const store = getAppDirectoryStore(env);
+      if (!(await store.verifyFacebookPollSecret(requestId, pollSecret))) {
+        return json({ ok: false, error: "Facebook login session is invalid" }, 401);
+      }
       const pending = await store.getFacebookLogin(requestId);
 
       if (!pending || pending.status !== "authorized" || !pending.facebook_id) {
@@ -2187,9 +2262,18 @@ export default {
       }
 
       const body = await request.json().catch(() => ({}));
+      const email = String(body.email || "").trim().toLowerCase();
+      const otpIpThrottle = await enforceSecurityRateLimit(
+        request, env, "app_email_otp_ip", "", 20, 60 * 60 * 1000,
+      );
+      if (otpIpThrottle) return otpIpThrottle;
+      const otpEmailThrottle = await enforceSecurityRateLimit(
+        request, env, "app_email_otp_email", email, 6, 60 * 60 * 1000,
+      );
+      if (otpEmailThrottle) return otpEmailThrottle;
       const store = getAppDirectoryStore(env);
       try {
-        const pending = await store.startEmailOtp(body.email);
+        const pending = await store.startEmailOtp(email);
         await sendEmailOtp(pending.email, pending.otp, env);
         return json({
           ok: true,
@@ -2297,8 +2381,17 @@ export default {
       }
 
       const body = await request.json().catch(() => ({}));
+      const email = String(body.email || "").trim().toLowerCase();
+      const emailLoginIpThrottle = await enforceSecurityRateLimit(
+        request, env, "app_email_login_ip", "", 40, 15 * 60 * 1000,
+      );
+      if (emailLoginIpThrottle) return emailLoginIpThrottle;
+      const emailLoginThrottle = await enforceSecurityRateLimit(
+        request, env, "app_email_login_identity", email, 12, 15 * 60 * 1000,
+      );
+      if (emailLoginThrottle) return emailLoginThrottle;
       const store = getAppDirectoryStore(env);
-      const verified = await store.verifyEmailPassword(body.email, body.password);
+      const verified = await store.verifyEmailPassword(email, body.password);
       if (!verified) {
         return json({ ok: false, error: "Invalid email or Tinni password" }, 401);
       }
@@ -5660,9 +5753,18 @@ export default {
       const email = String(body.email || "").trim().toLowerCase();
       const password = String(body.password || "");
 
+      const panelIpThrottle = await enforceSecurityRateLimit(
+        request, env, "owner_staff_login_ip", "", 30, 15 * 60 * 1000,
+      );
+      if (panelIpThrottle) return panelIpThrottle;
+      const panelLoginThrottle = await enforceSecurityRateLimit(
+        request, env, "owner_staff_login_identity", email, 10, 15 * 60 * 1000,
+      );
+      if (panelLoginThrottle) return panelLoginThrottle;
+
       const ownerEmail = String(env.OWNER_EMAIL || "").trim().toLowerCase();
       if (ownerEmail && email === ownerEmail) {
-        if (!env.OWNER_PASSWORD || password !== env.OWNER_PASSWORD) {
+        if (!env.OWNER_PASSWORD || !safeEqualText(password, env.OWNER_PASSWORD)) {
           return json({ ok: false, error: "Invalid email or password" }, 401);
         }
         const session = await createSession(

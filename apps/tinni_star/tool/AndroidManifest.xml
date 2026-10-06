@@ -17,7 +17,10 @@
         android:label="Tinni Star"
         android:name="${applicationName}"
         android:icon="@drawable/tinni_star_icon"
-        android:roundIcon="@drawable/tinni_star_icon">
+        android:roundIcon="@drawable/tinni_star_icon"
+        android:allowBackup="false"
+        android:fullBackupContent="false"
+        android:usesCleartextTraffic="false">
         <activity
             android:name=".MainActivity"
             android:exported="true"
