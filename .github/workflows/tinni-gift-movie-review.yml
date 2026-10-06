@@ -21,7 +21,7 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-24.04
-    timeout-minutes: 60
+    timeout-minutes: 110
     steps:
       - uses: actions/checkout@v4
       - name: Install movie review tools
@@ -36,7 +36,7 @@ jobs:
           set -euo pipefail
           tag="cinematic-${SOURCE_SHA:0:12}"
           found=false
-          for attempt in {1..90}; do
+          for attempt in {1..180}; do
             if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
               found=true
               break
@@ -54,7 +54,7 @@ jobs:
           Path("/tmp/gift-movie-review/lock.json").write_text(json.dumps(record))
           PY
           python3 tools/cinematic/catalog.py install --lock /tmp/gift-movie-review/lock.json --archive /tmp/gift-movie-review/cinematic-assets.zip --destination /tmp/gift-movie-review/assets
-      - name: Decode entrance hold and exit frames from every refined movie
+      - name: Decode early middle and late frames from every refined movie
         run: |
           python3 - <<'PY'
           import io,json,subprocess
@@ -86,7 +86,7 @@ jobs:
               sheet.save(output/("motion-%02d.jpg"%(batch//4)),quality=84,optimize=True)
           (output/"frames.json").write_text(json.dumps(records,indent=2)+"\n")
           assert len(records)==70
-          print("Decoded and reviewed 210 video frames covering all 70 refined movies")
+          print("Decoded 210 video frames prepared for visual review covering all 70 refined movies")
           PY
       - name: Publish decoded movie review sheets
         env:
@@ -96,7 +96,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add tools/gifts/movie-previews
-          git commit -m "Decoded entrance hold and exit frames for every refined gift movie"
+          git commit -m "Decoded early middle and late frames for every refined gift movie"
           branch="cinematic-motion-review-${SOURCE_SHA:0:12}"
           if ! git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
             git push origin "HEAD:refs/heads/$branch"
