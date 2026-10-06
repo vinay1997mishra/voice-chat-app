@@ -283,8 +283,14 @@ export class FruitPartyStore extends DurableObject {
   async _sync(now = Date.now()) {
     const recoveryPhase = roundIdAt(now) + ":" + (now >= bettingEndAt(roundIdAt(now)));
     if (this._meta("main_wallet_mode") && this._mainRecoveryPhase !== recoveryPhase) {
-      await recoverMainBets(this, "party", "fruit_party");
-      this._mainRecoveryPhase = recoveryPhase;
+      try {
+        await recoverMainBets(this, "party", "fruit_party");
+        this._mainRecoveryPhase = recoveryPhase;
+      } catch (error) {
+        console.error("Funded bet recovery will retry", String(error?.message || error));
+        await this.ctx.storage.setAlarm(now + 15000);
+        return;
+      }
     }
     const currentRound = roundIdAt(now);
     const startedRound = Number(this._meta("started_round", currentRound));
@@ -544,7 +550,7 @@ export class FruitPartyStore extends DurableObject {
         lucky_fruit_count: 3,
         fruits: PARTY_FRUITS,
       },
-      last_bet_result: lastGameResult(this, "party", userId),
+      last_bet_result: mainWallet.last_bet_result || lastGameResult(this, "party", userId),
       wallet_balance: wallet.balance,
       today_winnings: wallet.today_winnings,
       my_bets: myBets,

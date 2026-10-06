@@ -120,3 +120,36 @@ test('a zero main wallet gets no free game coins and simultaneous games cannot o
   assert.equal(r.directory.getWallet(user.user_id).coins,0);
   assert.equal(r.directory.getWallet(user.user_id).security_frozen,false);
 });
+
+test('funded games follow an Owner-changed public ID without losing winnings',async t=>{
+  const s=await setup(t,'FRUIT_PARTY'),{r,user,room,game}=s;
+  for(const fruit of fruits) await game.placeBet({
+    user_id:user.user_id,room_id:room.id,fruit_key:fruit,amount:5000,request_id:'changing-wallet-request-'+fruit,
+  });
+  const newId='98765';r.directory._changeUserId(user.user_id,newId);
+  s.advance(21001);await game.alarm();
+  const receipt=r.directory.pendingGameResults(newId)[0];
+  assert.equal(receipt.user_id,newId);
+  assert.equal(r.directory.getWallet(newId).coins,960000+receipt.winning_coins);
+  assert.equal((await game.state(newId)).last_bet_result.id,receipt.id);
+});
+
+test('failed payouts survive newer rounds and settle all main-wallet credits after recovery',async t=>{
+  const s=await setup(t,'FRUIT_PARTY'),{r,user,room,game}=s;
+  const deliver=r.directory.recordGameResults.bind(r.directory);
+  r.directory.recordGameResults=()=>{throw new Error('Temporary payout outage');};
+  for(const fruit of fruits) await game.placeBet({
+    user_id:user.user_id,room_id:room.id,fruit_key:fruit,amount:5000,request_id:'outage-first-request-'+fruit,
+  });
+  s.advance(21001);await game.alarm();s.advance(5000);
+  for(const fruit of fruits) await game.placeBet({
+    user_id:user.user_id,room_id:room.id,fruit_key:fruit,amount:5000,request_id:'outage-second-request-'+fruit,
+  });
+  s.advance(21001);await game.alarm();
+  const rows=game.ctx.storage.sql.exec('SELECT payload FROM party_result_outbox').toArray();
+  assert.equal(rows.length,2);
+  const winnings=rows.reduce((sum,row)=>sum+JSON.parse(row.payload).winning_coins,0);
+  r.directory.recordGameResults=deliver;s.advance(15000);await game.alarm();
+  assert.equal(r.directory.getWallet(user.user_id).coins,920000+winnings);
+  assert.equal(game.ctx.storage.sql.exec('SELECT payload FROM party_result_outbox').toArray().length,0);
+});

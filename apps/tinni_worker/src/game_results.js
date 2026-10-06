@@ -73,7 +73,8 @@ export async function recoverMainBets(store, prefix, gameKey) {
     const bets = await mainDirectory(store).pendingMainGameBets(gameKey,cursor);
     store.ctx.storage.transactionSync(() => {
       for (const bet of bets) store.ctx.storage.sql.exec(
-        'INSERT OR IGNORE INTO ' + prefix + '_bets(id,round_id,user_id,fruit_key,amount,room_id,created_at,main_wallet) VALUES(?,?,?,?,?,?,?,1)',
+        'INSERT INTO ' + prefix + '_bets(id,round_id,user_id,fruit_key,amount,room_id,created_at,main_wallet) VALUES(?,?,?,?,?,?,?,1) ' +
+        'ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id',
         bet.id,bet.round_id,bet.user_id,bet.fruit_key,bet.amount,bet.room_id,bet.created_at,
       );
     });

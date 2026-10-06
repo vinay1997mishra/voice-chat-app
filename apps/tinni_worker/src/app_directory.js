@@ -3873,6 +3873,7 @@ export class AppDirectoryStore extends DurableObject {
       ["app_user_identities","user_id"], ["app_wallets","user_id"],
       ["wallet_coin_guards","user_id"], ["privileged_wallet_coin_guards","user_id"],
       ["wallet_transactions","user_id"], ["vip_entitlements","user_id"],
+      ["main_game_bets","user_id"], ["latest_game_results","user_id"],
       ["call_verification_submissions","user_id"], ["random_call_stats","user_id"],
       ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
       ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
@@ -3923,6 +3924,9 @@ export class AppDirectoryStore extends DurableObject {
         newId, oldId,
       );
     }
+    this.ctx.storage.sql.exec(
+      "UPDATE latest_game_results SET payload=json_set(payload,'$.user_id',?) WHERE user_id=?",newId,newId,
+    );
     if (oldRoomId) {
       const conflictingRoom = this.ctx.storage.sql.exec(
         "SELECT id FROM app_rooms WHERE public_id = ? AND id <> ? LIMIT 1",
@@ -10056,12 +10060,16 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   mainGameWallet(userId, gameKey) {
+    userId = this._resolveOwnerUserId(userId);
     const wallet = this.getWallet(userId), start = Math.floor(Date.now() / 86400000) * 86400000;
     const today = this.ctx.storage.sql.exec(
       "SELECT COALESCE(SUM(winning_coins),0) AS winnings FROM main_game_bets WHERE user_id=? AND game_key=? AND settled_at>=?",
       String(userId),String(gameKey),start,
     ).toArray()[0];
-    return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0)};
+    const last = this.ctx.storage.sql.exec(
+      "SELECT payload FROM latest_game_results WHERE user_id=? AND game_key=?",String(userId),String(gameKey),
+    ).toArray()[0];
+    return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0),last_bet_result:last ? JSON.parse(last.payload) : null};
   }
 
   recordGameResults(results) {
@@ -10069,7 +10077,7 @@ export class AppDirectoryStore extends DurableObject {
     const changed = new Set();
     this.ctx.storage.transactionSync(() => {
       for (const result of results) {
-        const userId = String(result?.user_id || "").trim();
+        const userId = this._resolveOwnerUserId(String(result?.user_id || "").trim());
         const gameKey = String(result?.game_key || "");
         if (!userId || !["fruit_jackpot", "fruit_party"].includes(gameKey) ||
             !Number.isSafeInteger(result.round_id) || !Number.isSafeInteger(result.winning_coins) ||
@@ -10100,7 +10108,7 @@ export class AppDirectoryStore extends DurableObject {
             expected,result.settled_at,item.id,
           );
         }
-        let receipt = result;
+        let receipt = {...result,user_id:userId,main_bets:undefined};
         if (mainBets.length) {
           // Reserved coins and payout are audited in the same main-wallet database.
           // A frozen wallet retains earned coins until the existing freeze is lifted.
@@ -10114,7 +10122,7 @@ export class AppDirectoryStore extends DurableObject {
             );
             changed.add(userId);
           }
-          receipt = {...result,main_bets:undefined,wallet_balance:guard.coins + newlyPaid,wallet_type:"main"};
+          receipt = {...result,user_id:userId,main_bets:undefined,wallet_balance:guard.coins + newlyPaid,wallet_type:"main"};
         }
         const old = this.ctx.storage.sql.exec(
           "SELECT round_id FROM latest_game_results WHERE user_id=? AND game_key=?", userId, gameKey,
