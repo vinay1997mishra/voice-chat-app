@@ -114,7 +114,8 @@ void main() {
 
   test('latest room comment layout stays locked and old tag UI stays removed', () {
     final room = File('lib/screens/room_screen.dart').readAsStringSync();
-    expect(room, contains("Key(\n              'room-comment-tag-'"));
+    expect(room, contains("'room-comment-tag-'"));
+    expect(room, contains("'room-comment-medal-'"));
     expect(room, contains('controller: _roomMessageScrollController'));
     expect(room, contains('_scrollRoomCommentsToNewest();'));
     expect(room, contains('horizontal: 8, vertical: 3'));

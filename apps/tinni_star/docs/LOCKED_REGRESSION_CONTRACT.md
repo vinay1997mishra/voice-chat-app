@@ -39,7 +39,7 @@ This file defines features that must survive future updates. A feature may be ch
 - Gift category bar keeps Normal, Lucky, CP, Country and Luxury.
 - Lucky quantity selector keeps + and preset quantities 9/21/51/99/199/599/899/2999/7999.
 - Popular and New must show only rooms with at least one currently live room member. A stale saved room count must never keep an empty room in these public feeds.
-- Room comments keep identity/official tags inside the comment line; tags/medals must not appear beside seat names, in the old separate live-tag strip, or in the member-profile tag sections.
+- Room comments show the sender DP on the left, the sender name with official tags beside it, that sender's medals underneath, and the message text below the medals. Resolve all identity fields and profile taps by sender User ID; duplicate or reserved names cannot borrow another account's DP, tags or medals. Tags/medals must not appear beside seat names, in the old separate live-tag strip, or in the member-profile tag sections.
 - Room comments automatically follow the newest message, and the latest readable comment-tag sizing stays preserved.
 - The room Game Center keeps the floating game logo; the old duplicate Game tool must not return.
 - The floating Game logo is locked to a **compact black-and-white keyboard/keys design** with **6 white keys plus black keys** and a slightly compressed/flat shape. The old purple/pink controller icon must not return.
