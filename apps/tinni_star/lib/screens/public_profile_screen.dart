@@ -8,6 +8,7 @@ import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 import 'cp_screen.dart';
 import 'enemy_screen.dart';
+import 'chat_user_profile_screen.dart';
 import '../ui/relationship_visuals.dart';
 import 'personal_profile_screen.dart';
 
@@ -172,6 +173,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       }
       cpPartnerProfile = partnerProfile;
       enemyRelation = enemyResult;
+      widget.state.vsRelationship = enemyResult;
       enemyPartnerProfile = resolvedEnemyPartner;
       loading = false;
     });
@@ -770,12 +772,32 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 _glowingCpHeart(104),
                 Expanded(
                   child: Center(
-                    child: _relationAvatar(
-                      image: partnerAvatar,
-                      fallback: '',
-                      accent: const Color(0xFFFF8FC3),
-                      size: 92,
-                      add: cp == null,
+                    child: GestureDetector(
+                      onTap: cp == null
+                          ? null
+                          : () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatUserProfileScreen(
+                                    state: widget.state,
+                                    userId: cp.userA == account.userId
+                                        ? cp.userB
+                                        : cp.userA,
+                                    displayName: cpPartnerProfile?['display_name']
+                                            ?.toString() ??
+                                        '',
+                                    avatarDataUrl: cpPartnerProfile?['avatar_data_url']
+                                        ?.toString(),
+                                  ),
+                                ),
+                              ),
+                      child: _relationAvatar(
+                        image: partnerAvatar,
+                        fallback: '',
+                        accent: const Color(0xFFFF8FC3),
+                        size: 92,
+                        add: cp == null,
+                      ),
                     ),
                   ),
                 ),

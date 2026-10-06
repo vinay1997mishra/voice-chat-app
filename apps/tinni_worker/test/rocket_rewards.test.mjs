@@ -65,7 +65,7 @@ test('real gift launch is global, waits seven seconds, grants top frame and coin
  const room=await r.directory.createRoom(a.user_id,{title:'Global launch',seat_count:12});
  r.directory.getWallet(a.user_id);
  r.directory._creditNormalWalletAuthorized(a.user_id,8000000,'test_fixture');
- const sent=await r.request('/gifts/send',a.token,{room_id:room.id,gift_id:'hot-biryani',quantity:160,receiver_ids:[b.user_id]});
+ const sent=await r.request('/gifts/send',a.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:'hot-biryani',quantity:160,receiver_ids:[b.user_id]});
  assert.equal(sent.status,201,JSON.stringify(sent.data));
  assert.equal(sent.data.wallet.coins,0);
  const us=r.directory.countryRibbons('US'),inr=r.directory.countryRibbons('IN');

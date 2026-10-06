@@ -56,7 +56,7 @@ test('CP and VS remain independent and gifts to an unrelated user give zero pair
 
 test('insufficient coins, disabled gifts and failed transactions cannot award progress',async t=>{
   const {d,a,send}=await fixture(t);
-  d.ctx.storage.sql.exec("INSERT INTO owner_catalog(id,kind,name,data_json,enabled,created_at,updated_at) VALUES('cp-infinity-love','gift','Disabled','{}',0,1,1)");
+  d.ctx.storage.sql.exec("INSERT OR REPLACE INTO owner_catalog(id,kind,name,data_json,enabled,created_at,updated_at) VALUES('cp-infinity-love','gift','Disabled','{}',0,1,1)");
   const before=d.getWallet(a.user_id).coins;
   assert.throws(()=>send('cp-infinity-love','disabled_cp_0001'),/unavailable/);
   assert.equal(d.getWallet(a.user_id).coins,before);

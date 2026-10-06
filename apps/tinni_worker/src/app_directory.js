@@ -1,5 +1,5 @@
 import * as coldStorage from "./cold_storage.js";
-const APP_SCHEMA_VERSION = "2026-10-06-cp-vs-transactions-1";
+const APP_SCHEMA_VERSION = "2026-10-06-cp-vs-transactions-2";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
@@ -1543,6 +1543,18 @@ export class AppDirectoryStore extends DurableObject {
         }),
         Date.now(),
         Date.now(),
+      );
+    }
+
+    for (const [giftId, gift] of Object.entries(premiumGiftCatalog)) {
+      if (!["cp","vs","enemy"].includes(gift.category)) continue;
+      this.ctx.storage.sql.exec(
+        `INSERT OR IGNORE INTO owner_catalog(id,kind,name,data_json,enabled,created_at,updated_at)
+         VALUES(?,'gift',?,?,1,?,?)`,
+        giftId,gift.name,JSON.stringify({...gift,coin_price:gift.price,
+          category:gift.category==="enemy"?"vs":gift.category,effect_kind:"scene",
+          effect_tier:gift.effect_tier || (gift.price>=2000000?"cinematic":gift.price>=100000?"overlay":"compact"),
+          animation_duration_ms:5000,lucky:false,rebate:false}),Date.now(),Date.now(),
       );
     }
 

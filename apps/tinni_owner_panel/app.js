@@ -2422,6 +2422,7 @@ function renderRelationshipGiftManager(category) {
         `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name)} · ${item.enabled ? "Enabled" : "Disabled"}</option>`).join("")}</select></label>
       <label>Level thresholds (coins)<input name="level_thresholds" value="${escapeHtml((state.relationshipLadders?.[category] || []).join(","))}"></label>
       <button type="button" data-save-ladder>Save ${label} Ladder</button>
+      <button type="button" data-toggle-relationship-gift>Enable / Disable Selected Gift</button>
       <label>Name<input name="name" required maxlength="80"></label>
       <label>Coin price<input name="coin_price" type="number" min="1" step="1" required></label>
       <label>MP4 animation<input name="video_file" type="file" accept="video/mp4"></label>
@@ -2448,6 +2449,16 @@ function renderRelationshipGiftManager(category) {
     finally{button.disabled=false;}
   });
   let selected = null;
+  form.querySelector("[data-toggle-relationship-gift]").addEventListener("click",async event=>{
+    const button=event.currentTarget,status=form.querySelector("[data-gift-status]");
+    if(!selected){status.textContent="Select an existing gift first.";return;}
+    button.disabled=true;
+    try{
+      await api("/api/owner/catalog/"+encodeURIComponent(selected.id),{method:"PATCH",body:JSON.stringify({enabled:!selected.enabled})});
+      await loadOwnerState();toast(label+" gift availability updated.");
+    }catch(error){status.textContent=error.message;}
+    finally{button.disabled=false;}
+  });
   const localUrls = new Map();
   root._giftPreviewUrls = localUrls;
   function preview(kind, url, local = false) {
