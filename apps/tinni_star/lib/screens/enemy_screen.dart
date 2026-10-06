@@ -442,7 +442,7 @@ class _EnemyScreenState extends State<EnemyScreen> {
               const SizedBox(height: 12),
               Row(
                 children: [
-                  for (final gift in PremiumGiftCatalog.enemy.take(4))
+                  for (final gift in EnemyGiftCatalog.gifts.take(4))
                     Expanded(
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 3),
