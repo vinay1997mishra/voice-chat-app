@@ -2934,6 +2934,12 @@ export default {
     if (url.pathname === "/cp/disconnect" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const current = await getAppDirectoryStore(env).cpState(appSession.user.user_id);
+      const expected = current ? current.user_a + ":" + current.user_b + ":" + current.created_at : "";
+      if (body.confirmed !== true || (current && body.expected_pair !== expected)) {
+        return json({ ok: false, error: "Confirm the current CP relationship before removing it" }, 409);
+      }
       try { return json(await getAppDirectoryStore(env).cpDisconnect(appSession.user.user_id)); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to disconnect CP") }, 400); }
     }
@@ -2960,7 +2966,7 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
-    if (url.pathname === "/enemy" && request.method === "GET") {
+    if ((url.pathname === "/vs" || url.pathname === "/enemy") && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
@@ -2969,7 +2975,7 @@ export default {
       });
     }
 
-    if (url.pathname === "/enemy/request" && request.method === "POST") {
+    if ((url.pathname === "/vs/request" || url.pathname === "/enemy/request") && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -2989,7 +2995,7 @@ export default {
       }
     }
 
-    if (url.pathname === "/enemy/respond" && request.method === "POST") {
+    if ((url.pathname === "/vs/respond" || url.pathname === "/enemy/respond") && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -3009,9 +3015,15 @@ export default {
       }
     }
 
-    if (url.pathname === "/enemy/disconnect" && request.method === "POST") {
+    if ((url.pathname === "/vs/disconnect" || url.pathname === "/enemy/disconnect") && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      const body = await request.json().catch(() => ({}));
+      const current = await getAppDirectoryStore(env).enemyState(appSession.user.user_id);
+      const expected = current ? current.user_a + ":" + current.user_b + ":" + current.created_at : "";
+      if (body.confirmed !== true || (current && body.expected_pair !== expected)) {
+        return json({ ok: false, error: "Confirm the current VS relationship before removing it" }, 409);
+      }
       try {
         return json(
           await getAppDirectoryStore(env).enemyDisconnect(
@@ -3672,6 +3684,18 @@ export default {
       return json({ ok: true, vip: items.filter((item) => item.enabled !== false) });
     }
 
+    if (url.pathname === "/gifts/catalog" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, gifts: await getAppDirectoryStore(env).giftCatalog(appSession.user.user_id) });
+    }
+
+    if (url.pathname === "/vs/ranking" && request.method === "GET") {
+      const appSession = await verifyAppSession(request, env);
+      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
+      return json({ ok: true, ranking: await getAppDirectoryStore(env).vsRanking(url.searchParams.get("limit")) });
+    }
+
     if (url.pathname === "/gifts/send" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
@@ -3685,7 +3709,7 @@ export default {
         const transactions = Array.isArray(result?.transactions)
           ? result.transactions
           : [];
-        if (roomId && transactions.length > 0) {
+        if (!result.replayed && roomId && transactions.length > 0) {
           const receiverTotals = new Map();
           for (const tx of transactions) {
             const receiverId = String(tx?.receiver_id || "").trim();
@@ -3723,6 +3747,15 @@ export default {
               gift_name: String(
                 transactions[0]?.gift_name || body.gift_name || "Gift",
               ),
+              category: transactions[0]?.category || "",
+              animation_url: transactions[0]?.animation_url || "",
+              poster_url: transactions[0]?.poster_url || "",
+              effect_tier: transactions[0]?.effect_tier || "",
+              animation_duration_ms: transactions[0]?.animation_duration_ms || 5000,
+              cp_progress: transactions[0]?.cp_progress || 0,
+              vs_progress: transactions[0]?.vs_progress || 0,
+              level_before: transactions[0]?.level_before || 1,
+              level_after: transactions[0]?.level_after || 1,
               receiver_ids: visualReceiverIds,
               quantity: Math.max(1, Number(transactions[0]?.quantity || 1)),
               room_summary: result?.room_summary || null,
@@ -5903,6 +5936,36 @@ export default {
         return json({ ok: false, error: "Unauthorized" }, 401);
       }
       return Response.redirect(new URL("/login", env.PUBLIC_API_ORIGIN || request.url), 302);
+    }
+
+    if (url.pathname === "/api/owner/gift-media" && request.method === "POST") {
+      if (!ownerOnly(session)) return json({ ok: false, error: "Owner access required" }, 403);
+      if (!env.EFFECT_MEDIA) return json({ ok: false, error: "Gift media storage is not configured" }, 503);
+      const maxBytes = 30 * 1024 * 1024;
+      if (Number(request.headers.get("content-length") || 0) > maxBytes + 65536)
+        return json({ ok: false, error: "Maximum upload size is 30 MB" }, 413);
+      const form = await request.formData();
+      const category = String(form.get("category") || "").toLowerCase();
+      const kind = String(form.get("kind") || "");
+      const file = form.get("file");
+      if (!["cp","vs"].includes(category) || !["video","poster"].includes(kind) ||
+          !file || typeof file.arrayBuffer !== "function")
+        return json({ ok: false, error: "CP/VS category and a media file are required" }, 400);
+      const allowed = kind === "video" ? ["video/mp4"] : ["image/png","image/jpeg","image/webp"];
+      const cap = kind === "video" ? maxBytes : 2 * 1024 * 1024;
+      if (!allowed.includes(file.type) || file.size < 12 || file.size > cap)
+        return json({ ok: false, error: "Use MP4 up to 30 MB or a poster image up to 2 MB" }, 400);
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      if (kind === "video" && String.fromCharCode(...bytes.slice(4,8)) !== "ftyp")
+        return json({ ok: false, error: "Invalid MP4 video" }, 400);
+      const ext = file.type === "video/mp4" ? "mp4" : file.type === "image/png" ? "png" : file.type === "image/webp" ? "webp" : "jpg";
+      const key = "gifts/" + category + "/" + crypto.randomUUID() + "." + ext;
+      await coldStorage.managedMediaPut(env, key, bytes, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: { category, kind, uploaded_by: session.email },
+      });
+      await writeAudit(env, session, "gift.media.upload", "gift", key, {category,kind,bytes:file.size});
+      return json({ ok: true, url: new URL("/media/" + key, env.PUBLIC_API_ORIGIN || request.url).toString() }, 201);
     }
 
     if (url.pathname === "/auth/session" && request.method === "GET") {

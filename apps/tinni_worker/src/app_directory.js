@@ -1,5 +1,5 @@
 import * as coldStorage from "./cold_storage.js";
-const APP_SCHEMA_VERSION = "2026-10-06-cold-storage-2";
+const APP_SCHEMA_VERSION = "2026-10-06-cp-vs-transactions-1";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
@@ -908,6 +908,24 @@ export class AppDirectoryStore extends DurableObject {
       CREATE INDEX IF NOT EXISTS idx_enemy_relationships_users
         ON enemy_relationships(user_a, user_b, state);
 
+
+      CREATE TABLE IF NOT EXISTS gift_send_receipts (
+        sender_id TEXT NOT NULL, request_id TEXT NOT NULL,
+        fingerprint TEXT NOT NULL, response_json TEXT NOT NULL,
+        created_at INTEGER NOT NULL, PRIMARY KEY(sender_id, request_id)
+      );
+      CREATE TABLE IF NOT EXISTS cp_gift_progress (
+        transaction_id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL,
+        pair_started_at INTEGER NOT NULL, progress INTEGER NOT NULL,
+        level_before INTEGER NOT NULL, level_after INTEGER NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE TABLE IF NOT EXISTS vs_gift_progress (
+        transaction_id TEXT PRIMARY KEY, user_a TEXT NOT NULL, user_b TEXT NOT NULL,
+        pair_started_at INTEGER NOT NULL, progress INTEGER NOT NULL,
+        level_before INTEGER NOT NULL, level_after INTEGER NOT NULL, created_at INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_cp_progress_pair ON cp_gift_progress(user_a,user_b,pair_started_at);
+      CREATE INDEX IF NOT EXISTS idx_vs_progress_pair ON vs_gift_progress(user_a,user_b,pair_started_at);
       CREATE TABLE IF NOT EXISTS cp_memories (
         id TEXT PRIMARY KEY,
         user_a TEXT NOT NULL,
@@ -1436,6 +1454,10 @@ export class AppDirectoryStore extends DurableObject {
       "ALTER TABLE lucky_gift_results ADD COLUMN social_value_coins INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE app_user_presence ADD COLUMN room_socket_connected INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE room_locks ADD COLUMN display_password TEXT",
+      "ALTER TABLE gift_transactions ADD COLUMN category TEXT NOT NULL DEFAULT ''",
+      "ALTER TABLE gift_transactions ADD COLUMN cp_progress INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE gift_transactions ADD COLUMN vs_progress INTEGER NOT NULL DEFAULT 0",
+      "ALTER TABLE gift_transactions ADD COLUMN relationship_pair TEXT",
       "ALTER TABLE cp_relationships ADD COLUMN last_intimacy_at INTEGER",
       "ALTER TABLE cp_relationships ADD COLUMN decay_applied_days INTEGER NOT NULL DEFAULT 0",
       "ALTER TABLE cp_relationships ADD COLUMN cycle_started_at INTEGER",
@@ -1706,6 +1728,14 @@ export class AppDirectoryStore extends DurableObject {
 
     coldStorage.initColdStorage(this);
     coldStorage.initMainGameRetention(this);
+    // One-time 100x conversion retains the established level pattern and history.
+    this.ctx.storage.transactionSync(() => {
+      if (!this._ownerSetting("relationship_coin_scale_v1", false)) {
+        this.ctx.storage.sql.exec("UPDATE cp_relationships SET intimacy=intimacy*100");
+        this.ctx.storage.sql.exec("UPDATE enemy_relationships SET rivalry=rivalry*100");
+        this._setOwnerSetting("relationship_coin_scale_v1", true);
+      }
+    });
     this.ctx.storage.sql.exec("INSERT INTO app_schema_versions(id,version) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version",APP_SCHEMA_VERSION);
     this._armStorageSweep();
   }
@@ -4049,7 +4079,11 @@ export class AppDirectoryStore extends DurableObject {
       ["client_crash_reports","user_id"], ["owner_user_price_overrides","user_id"],
       ["user_inventory","user_id"], ["user_equipment","user_id"],
       ["cp_relationships","user_a"], ["cp_relationships","user_b"],
-      ["cp_relationships","requested_by"], ["cp_memories","user_a"],
+      ["cp_relationships","requested_by"], ["enemy_relationships","user_a"],
+      ["enemy_relationships","user_b"], ["enemy_relationships","requested_by"],
+      ["cp_gift_progress","user_a"], ["cp_gift_progress","user_b"],
+      ["vs_gift_progress","user_a"], ["vs_gift_progress","user_b"],
+      ["gift_send_receipts","sender_id"], ["cp_memories","user_a"],
       ["cp_memories","user_b"], ["families","leader_user_id"],
       ["family_members","user_id"], ["family_join_requests","user_id"],
       ["family_daily_logins","user_id"], ["family_received_coins","sender_user_id"],
@@ -4313,7 +4347,11 @@ export class AppDirectoryStore extends DurableObject {
         return this.ownerCatalogCreate("gift", data.name, {
           coin_price: Math.max(0, Number(data.coin_price || 0)),
           duration_days: Math.max(0, Number(data.duration_days || 0)),
-          asset_url: String(data.asset_url || ""),
+          asset_url: String(data.animation_url || data.asset_url || ""),
+          animation_url: String(data.animation_url || data.asset_url || ""),
+          poster_url: String(data.poster_url || ""),
+          effect_tier: String(data.effect_tier || "compact"),
+          animation_duration_ms: Math.max(1000, Math.min(15000, Number(data.animation_duration_ms || 5000))),
           effect_kind: lucky ? "lucky" : String(data.effect_kind || ""),
           category: lucky ? "Lucky" : String(data.category || ""),
           lucky,
@@ -6867,17 +6905,39 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  sendGift(senderIdValue, input) {
-    const result = this.ctx.storage.transactionSync(() => this._sendGiftWithRocket(senderIdValue,input));
-    this._publishCountryRibbons();
-    // Optional visual enrichment must never turn a committed payment into an error.
+  sendGift(senderIdValue, input = {}) {
+    const senderId = String(senderIdValue || "").trim();
+    const requestId = String(input.request_id || "").trim();
+    if (requestId && !/^[a-zA-Z0-9_-]{8,96}$/.test(requestId)) throw new Error("Invalid gift request ID");
+    const fingerprint = JSON.stringify({
+      room_id: String(input.room_id || ""), gift_id: String(input.gift_id || ""),
+      quantity: Number(input.quantity || 1),
+      receiver_ids: [...new Set((input.receiver_ids || []).map(String))].sort(),
+      lucky_session_id: String(input.lucky_session_id || ""),
+    });
+    const result = this.ctx.storage.transactionSync(() => {
+      if (requestId) {
+        const previous = this.ctx.storage.sql.exec(
+          "SELECT fingerprint,response_json FROM gift_send_receipts WHERE sender_id=? AND request_id=?",
+          senderId, requestId,
+        ).toArray()[0];
+        if (previous) {
+          if (previous.fingerprint !== fingerprint) throw new Error("Gift request ID was already used for different details");
+          return { ...JSON.parse(previous.response_json), wallet: this.getWallet(senderId), replayed: true };
+        }
+      }
+      const confirmed = this._sendGiftWithRocket(senderId, input);
+      if (requestId) this.ctx.storage.sql.exec(
+        "INSERT INTO gift_send_receipts(sender_id,request_id,fingerprint,response_json,created_at) VALUES(?,?,?,?,?)",
+        senderId, requestId, fingerprint, JSON.stringify(confirmed), Date.now(),
+      );
+      return confirmed;
+    });
+    if (!result.replayed) { try { this._publishCountryRibbons(); } catch (_) {} }
     try {
-      const roomId = String(input?.room_id || "").trim();
-      result.room_summary = {
-        room_id: roomId,
-        lifetime_total: Number(this.ctx.storage.sql.exec(
-          "SELECT total FROM rocket_rooms WHERE room_id=?",roomId).toArray()[0]?.total || 0),
-      };
+      const roomId = String(input.room_id || "").trim();
+      result.room_summary = { room_id: roomId, lifetime_total: Number(this.ctx.storage.sql.exec(
+        "SELECT total FROM rocket_rooms WHERE room_id=?", roomId).toArray()[0]?.total || 0) };
     } catch (_) {}
     return result;
   }
@@ -6900,6 +6960,7 @@ export class AppDirectoryStore extends DurableObject {
     let giftName = "";
     let unitPrice = 0;
     let giftData = {};
+    if (catalogRow && Number(catalogRow.enabled || 0) !== 1) throw new Error("Gift is unavailable");
     if (catalogRow && Number(catalogRow.enabled || 0) === 1) {
       try { giftData = JSON.parse(String(catalogRow.data_json || "{}")); } catch {}
       giftName = cleanText(catalogRow.name, 80);
@@ -6947,9 +7008,11 @@ export class AppDirectoryStore extends DurableObject {
       }
     }
 
-    const isLucky = giftData.lucky === true ||
+    const giftCategory = String(giftData.category || "normal").trim().toLowerCase();
+    const category = giftCategory === "enemy" ? "vs" : giftCategory;
+    const isLucky = category !== "cp" && category !== "vs" && (giftData.lucky === true ||
       giftData.rebate === true ||
-      String(giftData.category || "").toLowerCase() === "lucky";
+      String(giftData.category || "").toLowerCase() === "lucky");
     const luckyConfig = this._luckyGiftConfig();
     if (isLucky && luckyConfig.enabled === false) {
       throw new Error("Lucky gifts are temporarily unavailable");
@@ -7068,26 +7131,39 @@ export class AppDirectoryStore extends DurableObject {
         receiver_diamonds: receiverDiamonds,
         ranking_value: socialValueCoins,
         created_at: now,
+        category,
+        animation_url: String(giftData.animation_url || giftData.asset_url || ""),
+        poster_url: String(giftData.poster_url || ""),
+        effect_tier: String(giftData.effect_tier || (chargedUnitPrice >= 2000000 ? "cinematic" : chargedUnitPrice >= 100000 ? "overlay" : "compact")),
+        animation_duration_ms: Math.max(1000, Math.min(15000, Number(giftData.animation_duration_ms || 5000))),
       });
 
-      const relationshipCategory =
-        String(giftData.category || "").trim().toLowerCase();
-      if (relationshipCategory === "cp") {
-        this._recordCpGiftIntimacy(
-          senderId,
-          receiverId,
-          receiverTotal,
-          isLucky,
-          now,
-        );
-      } else if (relationshipCategory === "enemy") {
-        this._recordEnemyGiftPower(
-          senderId,
-          receiverId,
-          receiverTotal,
-          now,
-        );
-      }
+      const cp = category === "cp" ? this.cpState(senderId) : null;
+      const vs = category === "vs" ? this.enemyState(senderId) : null;
+      const relation = cp || vs;
+      const matches = relation?.state === "accepted" &&
+        ((relation.user_a === senderId && relation.user_b === receiverId) ||
+         (relation.user_b === senderId && relation.user_a === receiverId));
+      const eligible = matches && !isCpInvite ? receiverTotal : 0;
+      const before = relation?.level || 1;
+      const points = eligible > 0 ? (category === "cp"
+        ? this._recordCpGiftIntimacy(senderId, receiverId, eligible, false, now)
+        : this._recordEnemyGiftPower(senderId, receiverId, eligible, now)) : 0;
+      const after = points > 0 ? (category === "cp" ? this.cpState(senderId) : this.enemyState(senderId)).level : before;
+      const pairKey = matches ? relation.user_a + ":" + relation.user_b + ":" + relation.created_at : null;
+      const tx = transactions[transactions.length - 1];
+      Object.assign(tx, { cp_progress: category === "cp" ? points : 0,
+        vs_progress: category === "vs" ? points : 0, relationship_pair: pairKey,
+        level_before: before, level_after: after });
+      this.ctx.storage.sql.exec(
+        "UPDATE gift_transactions SET category=?,cp_progress=?,vs_progress=?,relationship_pair=? WHERE id=?",
+        category, tx.cp_progress, tx.vs_progress, pairKey, id,
+      );
+      if (points > 0) this.ctx.storage.sql.exec(
+        "INSERT INTO " + (category === "cp" ? "cp_gift_progress" : "vs_gift_progress") +
+        "(transaction_id,user_a,user_b,pair_started_at,progress,level_before,level_after,created_at) VALUES(?,?,?,?,?,?,?,?)",
+        id, relation.user_a, relation.user_b, relation.created_at, points, before, after, now,
+      );
 
       if (receiverDiamonds > 0) {
         this.ctx.storage.sql.exec(
@@ -7689,6 +7765,32 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, id, room_id: roomId, user_id: userId, game_key: gameKey, action, result, created_at: now };
   }
 
+  vsRanking(limitValue = 100) {
+    const limit = Math.max(1, Math.min(200, Math.floor(Number(limitValue) || 100)));
+    return this.ctx.storage.sql.exec(
+      `SELECT c.*,ua.display_name AS user_a_name,ua.avatar_data_url AS user_a_avatar,
+        ub.display_name AS user_b_name,ub.avatar_data_url AS user_b_avatar
+       FROM enemy_relationships c LEFT JOIN app_users ua ON ua.user_id=c.user_a
+       LEFT JOIN app_users ub ON ub.user_id=c.user_b WHERE c.state='accepted'
+       ORDER BY c.rivalry DESC,c.updated_at ASC LIMIT ?`, limit,
+    ).toArray().map((row,index) => ({...row, rank:index+1, level:this._enemyLevelForRivalry(row.rivalry)}));
+  }
+
+  giftCatalog(userIdValue) {
+    const user = this.getUserById(String(userIdValue));
+    const now = Date.now();
+    const catalog = new Map(Object.entries(premiumGiftCatalog).map(([id,gift]) =>
+      [id, {id,name:gift.name,data:{...gift,coin_price:gift.price},enabled:true}]));
+    for (const gift of this.ownerCatalog("gift")) catalog.set(gift.id,gift);
+    return [...catalog.values()].filter(gift => gift.enabled &&
+      (!gift.data.starts_at || gift.data.starts_at <= now) &&
+      (!gift.data.ends_at || gift.data.ends_at > now) &&
+      (!gift.data.countries?.length || gift.data.countries.includes(user?.country_code))
+    ).map(gift => ({...gift, data:{...gift.data,
+      category:String(gift.data.category || "normal").toLowerCase() === "enemy" ? "vs" : String(gift.data.category || "normal").toLowerCase()
+    }})).sort((a,b) => Number(a.data.order || 0)-Number(b.data.order || 0));
+  }
+
   cpRanking(limitValue = 100) {
     const limit = Math.max(1, Math.min(200, Number(limitValue || 100)));
     return this.ctx.storage.sql.exec(
@@ -7718,12 +7820,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   _cpLevelThresholds() {
-    const configured = this._ownerSetting("cp_level_thresholds", [200000]);
-    const values = Array.isArray(configured) ? configured : [200000];
-    return values
-      .map((value) => Math.max(1, Math.floor(Number(value || 0))))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
+    const configured = this._ownerSetting("cp_coin_thresholds", null);
+    const legacy = this._ownerSetting("cp_level_thresholds", [200000]);
+    const values = Array.isArray(configured) ? configured : (Array.isArray(legacy) ? legacy : [200000]).map(value => Number(value) * 100);
+    return [...new Set(values.map(Number).filter(value => Number.isSafeInteger(value) && value > 0))].sort((a,b) => a-b);
   }
 
   _cpLevelForIntimacy(intimacyValue) {
@@ -7736,40 +7836,14 @@ export class AppDirectoryStore extends DurableObject {
     return level;
   }
 
-  _cpGiftIntimacyPoints(senderIdValue, receiverIdValue, coinValue, isLucky, nowValue) {
+  _cpGiftIntimacyPoints(senderIdValue, receiverIdValue, coinValue) {
     const senderId = String(senderIdValue || "").trim();
     const receiverId = String(receiverIdValue || "").trim();
     const coins = Math.max(0, Math.floor(Number(coinValue || 0)));
-    if (!senderId || !receiverId || coins <= 0) return 0;
     const cp = this.cpState(senderId);
-    if (!cp || cp.state !== "accepted") return 0;
-    const pairMatches =
-      (String(cp.user_a) === senderId && String(cp.user_b) === receiverId) ||
-      (String(cp.user_b) === senderId && String(cp.user_a) === receiverId);
-    if (!pairMatches) return 0;
-
-    // Reference economy: 45,000 source coins = USD 1; Tinni = 2,000,000.
-    // So regular gift intimacy is normalized back to reference-coin value.
-    let points = Math.floor(coins * 45000 / 2000000);
-    if (isLucky) points = Math.floor(points * 10 / 100);
-    if (points <= 0) return 0;
-
-    const now = Number(nowValue || Date.now());
-    const dayStart = Date.UTC(
-      new Date(now).getUTCFullYear(),
-      new Date(now).getUTCMonth(),
-      new Date(now).getUTCDate(),
-    );
-    const opposite = this.ctx.storage.sql.exec(
-      `SELECT id FROM gift_transactions
-        WHERE sender_id=? AND receiver_id=? AND created_at>=? AND created_at<=?
-        LIMIT 1`,
-      receiverId, senderId, dayStart, now,
-    ).toArray()[0];
-    if (opposite) {
-      points = Math.floor(points * 12 / 10);
-    }
-    return points;
+    if (!cp || cp.state !== "accepted" || !Number.isSafeInteger(coins)) return 0;
+    return ((cp.user_a === senderId && cp.user_b === receiverId) ||
+      (cp.user_b === senderId && cp.user_a === receiverId)) ? coins : 0;
   }
 
   _recordCpGiftIntimacy(senderIdValue, receiverIdValue, coinValue, isLucky, nowValue) {
@@ -7785,6 +7859,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     if (points <= 0) return 0;
     const intimacy = Math.max(0, Number(cp.intimacy || 0)) + points;
+    if (!Number.isSafeInteger(intimacy)) throw new Error("CP progress limit reached");
     const level = this._cpLevelForIntimacy(intimacy);
     const now = Number(nowValue || Date.now());
     this.ctx.storage.sql.exec(
@@ -7801,7 +7876,7 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     if (!userId) return false;
     const row = this.ctx.storage.sql.exec(
-      "SELECT state FROM cp_relationships WHERE user_a=? OR user_b=? ORDER BY updated_at DESC LIMIT 1",
+      "SELECT state FROM cp_relationships WHERE (user_a=? OR user_b=?) AND state IN ('pending','accepted') LIMIT 1",
       userId,
       userId,
     ).toArray()[0];
@@ -7812,74 +7887,22 @@ export class AppDirectoryStore extends DurableObject {
   cpState(userIdValue) {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
-    let row = this.ctx.storage.sql.exec(
-      "SELECT * FROM cp_relationships WHERE user_a = ? OR user_b = ? ORDER BY updated_at DESC LIMIT 1",
+    const row = this.ctx.storage.sql.exec(
+      "SELECT * FROM cp_relationships WHERE user_a=? OR user_b=? ORDER BY CASE WHEN state='accepted' THEN 0 WHEN state='pending' THEN 1 ELSE 2 END,updated_at DESC LIMIT 1",
       userId, userId,
     ).toArray()[0];
-    if (!row) return null;
-
-    if (String(row.state) === "accepted") {
-      const now = Date.now();
-      const lastIntimacyAt = Number(
-        row.last_intimacy_at || row.cycle_started_at || row.created_at || now,
-      );
-      const idleDays = Math.max(
-        0,
-        Math.floor((now - lastIntimacyAt) / 86400000),
-      );
-      const eligibleDecayDays = Math.max(0, idleDays - 3);
-      const alreadyApplied = Math.max(
-        0,
-        Number(row.decay_applied_days || 0),
-      );
-      if (eligibleDecayDays > alreadyApplied) {
-        let intimacy = Math.max(0, Number(row.intimacy || 0));
-        for (let day = alreadyApplied; day < eligibleDecayDays; day += 1) {
-          intimacy = Math.floor(intimacy * 95 / 100);
-        }
-        const level = this._cpLevelForIntimacy(intimacy);
-        this.ctx.storage.sql.exec(
-          `UPDATE cp_relationships
-              SET intimacy=?, level=?, decay_applied_days=?, updated_at=?
-            WHERE user_a=? AND user_b=?`,
-          intimacy,
-          level,
-          eligibleDecayDays,
-          now,
-          row.user_a,
-          row.user_b,
-        );
-        row = this.ctx.storage.sql.exec(
-          "SELECT * FROM cp_relationships WHERE user_a=? AND user_b=? LIMIT 1",
-          row.user_a, row.user_b,
-        ).toArray()[0];
-      }
-    }
-
-    const intimacy = Number(row.intimacy || 0);
+    if (!row || row.state === "ended") return null;
+    const intimacy = Math.max(0, Number(row.intimacy || 0));
+    const level = this._cpLevelForIntimacy(intimacy);
     const thresholds = this._cpLevelThresholds();
-    const level = Number(row.level || this._cpLevelForIntimacy(intimacy));
-    const nextThreshold =
-      level - 1 < thresholds.length ? thresholds[level - 1] : null;
-    return {
-      ...row,
-      intimacy,
-      level,
-      created_at: Number(row.created_at),
-      updated_at: Number(row.updated_at),
-      cp_rules: {
-        reference_coins_per_usd: 45000,
-        tinni_coins_per_usd: 2000000,
-        invite_coins: 2222222,
-        heart_gift_coins: 44444,
-        regular_gift_intimacy_percent: 100,
-        lucky_gift_intimacy_percent: 10,
-        mutual_daily_multiplier: 1.2,
-        level_cycle_days: 7,
-        idle_grace_days: 3,
-        daily_decay_percent: 5,
-        next_level_threshold: nextThreshold,
-      },
+    return { ...row, intimacy, level,
+      created_at: Number(row.created_at), updated_at: Number(row.updated_at),
+      pair_key: row.user_a + ":" + row.user_b + ":" + row.created_at,
+      cp_rules: { tinni_coins_per_usd: 2000000, scale_factor: 100, gift_category: "cp",
+        invite_coins: 2222222, heart_gift_coins: 44444,
+        previous_level_threshold: level > 1 ? thresholds[level-2] : 0,
+        next_level_threshold: thresholds[level-1] ?? null,
+        daily_decay_percent: 0, mutual_daily_multiplier: 1 },
     };
   }
 
@@ -7924,6 +7947,8 @@ export class AppDirectoryStore extends DurableObject {
          last_intimacy_at=excluded.last_intimacy_at,
          decay_applied_days=0,
          cycle_started_at=excluded.cycle_started_at,
+         created_at=excluded.created_at,
+         created_at=excluded.created_at,
          updated_at=excluded.updated_at`,
       pair[0], pair[1], userId, now, now, now, now,
     );
@@ -7935,9 +7960,9 @@ export class AppDirectoryStore extends DurableObject {
     if (!row || row.state !== "pending" || row.requested_by === userId) throw new Error("No CP request is awaiting your response");
     const now = Date.now();
     this.ctx.storage.sql.exec(
-      "UPDATE cp_relationships SET state=?, last_intimacy_at=?, decay_applied_days=0, cycle_started_at=?, updated_at=? WHERE user_a=? AND user_b=?",
+      "UPDATE cp_relationships SET state=?,last_intimacy_at=?,decay_applied_days=0,cycle_started_at=?,created_at=?,updated_at=? WHERE user_a=? AND user_b=?",
       acceptValue === true ? "accepted" : "refused",
-      now, now, now, row.user_a, row.user_b,
+      now, now, now, now, row.user_a, row.user_b,
     );
     return this.cpState(userId);
   }
@@ -7956,7 +7981,7 @@ export class AppDirectoryStore extends DurableObject {
       this._notifyAccountChanged(userId);
       this.ctx.storage.sql.exec("INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?, 'cp_disconnect',?,0,?,?,?)", crypto.randomUUID(), userId, -price, "cp:" + row.user_a + ":" + row.user_b, "CP disconnect", now);
     }
-    this.ctx.storage.sql.exec("DELETE FROM cp_relationships WHERE user_a = ? AND user_b = ?", row.user_a, row.user_b);
+    this.ctx.storage.sql.exec("UPDATE cp_relationships SET state='ended',updated_at=? WHERE user_a=? AND user_b=?", now, row.user_a, row.user_b);
     return { ok: true, cp: null, charged_coins: price, wallet: this.getWallet(userId) };
   }
 
@@ -8007,12 +8032,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   _enemyLevelThresholds() {
-    const configured = this._ownerSetting("enemy_level_thresholds", [200000]);
-    const values = Array.isArray(configured) ? configured : [200000];
-    return values
-      .map((value) => Math.max(1, Math.floor(Number(value || 0))))
-      .filter(Number.isFinite)
-      .sort((a, b) => a - b);
+    const configured = this._ownerSetting("vs_coin_thresholds", null);
+    const legacy = this._ownerSetting("enemy_level_thresholds", [200000]);
+    const values = Array.isArray(configured) ? configured : (Array.isArray(legacy) ? legacy : [200000]).map(value => Number(value) * 100);
+    return [...new Set(values.map(Number).filter(value => Number.isSafeInteger(value) && value > 0))].sort((a,b) => a-b);
   }
 
   _enemyLevelForRivalry(rivalryValue) {
@@ -8029,7 +8052,7 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     if (!userId) return false;
     const row = this.ctx.storage.sql.exec(
-      "SELECT state FROM enemy_relationships WHERE user_a=? OR user_b=? ORDER BY updated_at DESC LIMIT 1",
+      "SELECT state FROM enemy_relationships WHERE (user_a=? OR user_b=?) AND state IN ('pending','accepted') LIMIT 1",
       userId, userId,
     ).toArray()[0];
     const state = String(row?.state || "").trim().toLowerCase();
@@ -8040,13 +8063,14 @@ export class AppDirectoryStore extends DurableObject {
     const userId = String(userIdValue || "").trim();
     if (!userId) throw new Error("user ID is required");
     const row = this.ctx.storage.sql.exec(
-      "SELECT * FROM enemy_relationships WHERE user_a=? OR user_b=? ORDER BY updated_at DESC LIMIT 1",
+      "SELECT * FROM enemy_relationships WHERE user_a=? OR user_b=? ORDER BY CASE WHEN state='accepted' THEN 0 WHEN state='pending' THEN 1 ELSE 2 END,updated_at DESC LIMIT 1",
       userId, userId,
     ).toArray()[0];
     if (!row) return null;
+    if (row.state === "ended") return null;
     const rivalry = Math.max(0, Number(row.rivalry || 0));
     const thresholds = this._enemyLevelThresholds();
-    const level = Number(row.level || this._enemyLevelForRivalry(rivalry));
+    const level = this._enemyLevelForRivalry(rivalry);
     const nextThreshold =
       level - 1 < thresholds.length ? thresholds[level - 1] : null;
     return {
@@ -8056,8 +8080,9 @@ export class AppDirectoryStore extends DurableObject {
       created_at: Number(row.created_at || 0),
       updated_at: Number(row.updated_at || 0),
       enemy_rules: {
-        gift_category: "enemy",
-        reference_coins_per_usd: 45000,
+        gift_category: "vs",
+        scale_factor: 100,
+        previous_level_threshold: level > 1 ? thresholds[level - 2] : 0,
         tinni_coins_per_usd: 2000000,
         next_level_threshold: nextThreshold,
       },
@@ -8086,6 +8111,7 @@ export class AppDirectoryStore extends DurableObject {
          level=1,
          requested_by=excluded.requested_by,
          last_rivalry_at=excluded.last_rivalry_at,
+         created_at=excluded.created_at,
          updated_at=excluded.updated_at`,
       pair[0], pair[1], userId, now, now, now,
     );
@@ -8100,9 +8126,9 @@ export class AppDirectoryStore extends DurableObject {
     }
     const now = Date.now();
     this.ctx.storage.sql.exec(
-      "UPDATE enemy_relationships SET state=?,last_rivalry_at=?,updated_at=? WHERE user_a=? AND user_b=?",
+      "UPDATE enemy_relationships SET state=?,last_rivalry_at=?,created_at=?,updated_at=? WHERE user_a=? AND user_b=?",
       acceptValue === true ? "accepted" : "refused",
-      now, now, row.user_a, row.user_b,
+      now, now, now, row.user_a, row.user_b,
     );
     return this.enemyState(userId);
   }
@@ -8112,8 +8138,8 @@ export class AppDirectoryStore extends DurableObject {
     const row = this.enemyState(userId);
     if (!row) return { ok: true, enemy: null };
     this.ctx.storage.sql.exec(
-      "DELETE FROM enemy_relationships WHERE user_a=? AND user_b=?",
-      row.user_a, row.user_b,
+      "UPDATE enemy_relationships SET state='ended',updated_at=? WHERE user_a=? AND user_b=?",
+      Date.now(), row.user_a, row.user_b,
     );
     return { ok: true, enemy: null };
   }
@@ -8129,7 +8155,7 @@ export class AppDirectoryStore extends DurableObject {
       (String(enemy.user_a) === senderId && String(enemy.user_b) === receiverId) ||
       (String(enemy.user_b) === senderId && String(enemy.user_a) === receiverId);
     if (!pairMatches) return 0;
-    return Math.max(1, Math.floor(coins * 45000 / 2000000));
+    return Number.isSafeInteger(coins) ? coins : 0;
   }
 
   _recordEnemyGiftPower(senderIdValue, receiverIdValue, coinValue, nowValue) {
@@ -8141,6 +8167,7 @@ export class AppDirectoryStore extends DurableObject {
     );
     if (points <= 0) return 0;
     const rivalry = Math.max(0, Number(enemy.rivalry || 0)) + points;
+    if (!Number.isSafeInteger(rivalry)) throw new Error("VS progress limit reached");
     const level = this._enemyLevelForRivalry(rivalry);
     const now = Number(nowValue || Date.now());
     this.ctx.storage.sql.exec(
