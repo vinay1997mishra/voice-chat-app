@@ -647,22 +647,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         return;
       }
 
-      // ListView.builder only knows an estimated max extent until enough
-      // variable-height rows have been laid out. Scroll, let that animation
-      // expose/build later rows, then re-check the real bottom. A newer
-      // message invalidates older passes so rapid chat does not fight itself.
-      for (var pass = 0; pass < 4; pass++) {
+      // Variable-height message rows can increase maxScrollExtent only after
+      // later rows are built. Jump first so those rows are laid out, then keep
+      // settling against the newly measured bottom for a few frames. This is
+      // deterministic in widget tests and avoids leaving the newest message
+      // just below the viewport on portrait phones.
+      for (var pass = 0; pass < 12; pass++) {
         if (!mounted || !controller.hasClients ||
             generation != _roomMessageScrollGeneration) {
           return;
         }
-        final target = controller.position.maxScrollExtent;
-        await controller.animateTo(
-          target,
-          duration: Duration(milliseconds: pass == 0 ? 220 : 120),
-          curve: Curves.easeOut,
-        );
-        if (!mounted || generation != _roomMessageScrollGeneration) return;
+        controller.jumpTo(controller.position.maxScrollExtent);
         await WidgetsBinding.instance.endOfFrame;
         if (!mounted || !controller.hasClients ||
             generation != _roomMessageScrollGeneration) {
@@ -670,7 +665,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         }
         final remaining =
             controller.position.maxScrollExtent - controller.offset;
-        if (remaining.abs() <= 0.5) return;
+        if (remaining.abs() <= 0.5) {
+          // One extra frame catches a final extent change caused by the row
+          // that became visible in this pass.
+          await WidgetsBinding.instance.endOfFrame;
+          if (!mounted || !controller.hasClients ||
+              generation != _roomMessageScrollGeneration) {
+            return;
+          }
+          final finalRemaining =
+              controller.position.maxScrollExtent - controller.offset;
+          if (finalRemaining.abs() <= 0.5) return;
+        }
       }
 
       if (mounted && controller.hasClients &&
