@@ -24,3 +24,11 @@ After a newly completed Rocket's nine-second sequence, the app requests `/gifts/
 Country presentation uses a centered viewport spanning 96% of screen width and 66% of its height, with a close frontal camera and real wind-deformed flag cloth. After the two-second hold, its recipient flight shrinks from a large flag to the selected receiver's DP; other gift flights retain their existing motion.
 
 Flag framing retains the complete national artwork, including corner emblems; the Nepal flag mesh respects its transparent, nonrectangular silhouette.
+
+## Physical surface pass
+
+Normal and CP movies use shared physically based surface finishes from `surface_detail.py`: metal anisotropy, ceramic/food subsurface scattering, botanical/fabric grain, reflective glass and gemstones, micro-bump detail and neutral shadowed light. Modeled additions include individual long rice grains and coriander, dumpling bamboo weave, cake frosting, reflective water and wakes, automotive spokes/seams, architectural windows/cornices and articulated dragons with scale relief, teeth, clawed limbs and scalloped membrane wings. The parent animation clock and delivery durations stay authoritative.
+
+All 70 Normal/CP movies are newly rendered. The immutable previous bundle contributes only the 249 national flags and ten Rocket stages, whose renderer paths are unaffected by this pass. Their ZIP, per-asset hashes, duration, codec and frame count are rechecked; the new manifest records `reused_from_commit` for this provenance. The 20 render shards process the 70 changed scenes. The scene audit checks the real Blender surface nodes and animated wing geometry before rendering. Lucky gift atmospheres are drawn by the app over their original artwork.
+
+These are detailed original 3D gift designs, not scanned objects or actors. Review actual output and Android playback before describing the entire catalog as photorealistic.

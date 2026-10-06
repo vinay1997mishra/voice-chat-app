@@ -60,5 +60,43 @@ class CatalogTests(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError, "digest mismatch"):
                     catalog.install(opt)
 
+
+    def test_reuse_retains_only_unchanged_flags_and_rocket_movies(self):
+        specs = [{"id":"flag-in","builder":"country","duration":2},
+                 {"id":"rose","builder":"rose","duration":5},
+                 {"id":"rocket-1","builder":"rocket","duration":9}]
+        with tempfile.TemporaryDirectory() as tmp:
+            base=Path(tmp)
+            archive, lock=base/"bundle.zip", base/"lock.json"
+            records=[]
+            with zipfile.ZipFile(archive,"w") as z:
+                for spec in specs:
+                    record={"id":spec["id"],"builder":spec["builder"],
+                            "duration_ms":spec["duration"]*1000}
+                    for key,ext in (("video",".mp4"),("poster",".png")):
+                        data=(spec["id"]+key).encode()
+                        name=spec["id"]+ext
+                        record[key]=name
+                        record[key+"_sha256"]=hashlib.sha256(data).hexdigest()
+                        z.writestr(name,data)
+                    records.append(record)
+                z.writestr("manifest.json",json.dumps({
+                    "source_commit":"a"*40,"source_fingerprint":"original","scenes":records}))
+            lock.write_text(json.dumps({"source_commit":"a"*40,
+                "source_fingerprint":"original","zip_sha256":catalog.digest(archive)}))
+            opt=types.SimpleNamespace(lock=str(lock),archive=str(archive),output=str(base/"out"))
+            with patch.object(catalog,"SPECS",specs), patch.object(catalog,"verify_scene",
+                    side_effect=lambda folder,spec:{"id":spec["id"]}) as verify:
+                catalog.reuse(opt)
+                self.assertEqual(verify.call_count,2)
+                self.assertTrue((base/"out/flag-in/flag-in.mp4").is_file())
+                self.assertTrue((base/"out/rocket-1/rocket-1.mp4").is_file())
+                self.assertFalse((base/"out/rose").exists())
+                self.assertEqual(json.loads((base/"out/flag-in/metadata.json").read_text())
+                                 ["reused_from_commit"],"a"*40)
+                archive.write_bytes(archive.read_bytes()+b"tampered")
+                with self.assertRaisesRegex(AssertionError,"digest mismatch"):
+                    catalog.reuse(opt)
+
 if __name__ == "__main__":
     unittest.main()

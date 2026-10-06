@@ -43,7 +43,7 @@ def digest(path):
 
 def fingerprint():
     h = hashlib.sha256()
-    for name in ["catalog.json", "render.py", "catalog.py"]:
+    for name in ["catalog.json", "render.py", "surface_detail.py", "catalog.py"]:
         h.update(name.encode())
         h.update((HERE / name).read_bytes())
     return h.hexdigest()
@@ -105,7 +105,7 @@ def verify_scene(folder, spec):
     return record
 
 def render_shard(opt):
-    specs = ordered()[opt.shard::opt.shards]
+    specs = [s for s in ordered() if not opt.premium_only or s["builder"] not in ("country", "rocket")][opt.shard::opt.shards]
     flags(specs)
     base = Path(opt.output)
     for index, spec in enumerate(specs):
@@ -145,13 +145,48 @@ def contact_sheets(base, output):
             draw.text((x+6, y+203), str(spec["duration"])+" seconds", fill="#b8c8df")
         sheet.save(output / ("catalog-%02d.jpg" % (batch//40)), quality=88)
 
+def reuse(opt):
+    """Retain the exact verified flags and Rocket films; re-render all premium gifts."""
+    lock = json.loads(Path(opt.lock).read_text())
+    archive = Path(opt.archive)
+    assert digest(archive) == lock["zip_sha256"], "Reusable bundle digest mismatch"
+    base = Path(opt.output)
+    with zipfile.ZipFile(archive) as z:
+        manifest = json.loads(z.read("manifest.json"))
+        assert manifest["source_commit"] == lock["source_commit"]
+        assert manifest["source_fingerprint"] == lock["source_fingerprint"]
+        records = {r["id"]: r for r in manifest["scenes"]}
+        assert set(records) == {s["id"] for s in SPECS}, "Reusable catalog coverage mismatch"
+        for spec in SPECS:
+            if spec["builder"] not in ("country", "rocket"):
+                continue
+            record = records[spec["id"]]
+            assert record["builder"] == spec["builder"]
+            assert record["duration_ms"] == spec["duration"]*1000
+            folder = base / spec["id"]
+            folder.mkdir(parents=True, exist_ok=True)
+            for key, suffix in (("video", ".mp4"), ("poster", ".png")):
+                name = spec["id"] + suffix
+                assert record[key] == name, "Reusable asset path mismatch"
+                payload = z.read(name)
+                assert hashlib.sha256(payload).hexdigest() == record[key+"_sha256"], "Reusable media hash mismatch"
+                (folder / (name if key == "video" else "poster.png")).write_bytes(payload)
+            result = verify_scene(folder, spec)
+            result["reused_from_commit"] = lock["source_commit"]
+            (folder / "metadata.json").write_text(json.dumps(result, indent=2)+"\n")
+    print("Retained 249 verified waving flags and ten verified Rocket stages")
+
 def pack(opt):
     validate()
     base, target = Path(opt.output), Path(opt.bundle)
     target.mkdir(parents=True, exist_ok=True)
     records = []
     for spec in SPECS:
+        previous = json.loads((base / spec["id"] / "metadata.json").read_text())
         record = verify_scene(base / spec["id"], spec)
+        if "reused_from_commit" in previous:
+            assert spec["builder"] in ("country", "rocket"), "Premium scenes must be newly rendered"
+            record["reused_from_commit"] = previous["reused_from_commit"]
         shutil.copyfile(base / spec["id"] / record["video"], target / record["video"])
         shutil.copyfile(base / spec["id"] / "poster.png", target / record["poster"])
         records.append(record)
@@ -202,10 +237,11 @@ def install(opt):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["validate", "plan", "flags", "render", "pack", "install"])
+    parser.add_argument("command", choices=["validate", "plan", "flags", "render", "reuse", "pack", "install"])
     parser.add_argument("--shard", type=int, default=0)
     parser.add_argument("--shards", type=int, default=20)
-    parser.add_argument("--samples", type=int, default=8)
+    parser.add_argument("--samples", type=int, default=16)
+    parser.add_argument("--premium-only", action="store_true")
     parser.add_argument("--blender", default="/tmp/blender-4.5.2-linux-x64/blender")
     parser.add_argument("--output", default="cinematic-preview")
     parser.add_argument("--bundle", default="cinematic-package/assets")
@@ -224,6 +260,8 @@ def main():
     elif opt.command == "render":
         assert 0 <= opt.shard < opt.shards
         render_shard(opt)
+    elif opt.command == "reuse":
+        reuse(opt)
     elif opt.command == "pack":
         assert re.fullmatch(r"[a-f0-9]{40}", opt.source), "Source must be an exact commit"
         pack(opt)

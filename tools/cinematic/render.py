@@ -851,6 +851,11 @@ if builder == "country":
     scene.display.shading.cavity_type = "BOTH"
     scene.display.shading.background_type = "WORLD"
 
+if builder not in ("rocket", "country"):
+    sys.path.insert(0, str(HERE))
+    from surface_detail import enhance
+    enhance(globals())
+
 if args.geometry_only:
     if len([o for o in bpy.data.objects if o.type == "MESH"]) < 3:
         raise RuntimeError("Scene has insufficient modeled geometry")

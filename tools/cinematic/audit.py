@@ -32,6 +32,14 @@ for index, spec in enumerate(catalog.SPECS):
     elif spec["builder"] == "country":
         flag = next(o for o in meshes if "national flag" in o.name)
         assert flag.data.uv_layers and flag.data.shape_keys, "Flag lacks real texture/wind geometry"
+    if spec["builder"] not in ("country", "rocket"):
+        assert any(m.use_nodes and any(n.type == "BUMP" for n in m.node_tree.nodes)
+                   for m in bpy.data.materials if m.users), "Gift lacks detailed physical surface"
+    if spec["builder"] == "dragon":
+        assert any(o.name.startswith("Muscular dragon chest") for o in meshes)
+        assert any(o.name.startswith("Dragon ivory fang") for o in meshes)
+        wings = [o for o in meshes if o.name.startswith("Scalloped leathery dragon wing")]
+        assert len(wings) == 2 and all(o.parent.animation_data for o in wings)
     bpy.ops.object.select_all(action="SELECT")
     bpy.ops.object.delete(use_global=False)
     bpy.data.orphans_purge(do_recursive=True)

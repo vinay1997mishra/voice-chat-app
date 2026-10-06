@@ -5,6 +5,7 @@ on:
     branches: [tinnistar]
     paths:
       - 'tools/cinematic/render.py'
+      - 'tools/cinematic/surface_detail.py'
       - 'tools/cinematic/catalog.py'
       - 'tools/cinematic/catalog.json'
       - 'tools/cinematic/test_catalog.py'
@@ -26,7 +27,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: |
-          python3 -m py_compile tools/cinematic/render.py tools/cinematic/catalog.py
+          python3 -m py_compile tools/cinematic/render.py tools/cinematic/surface_detail.py tools/cinematic/catalog.py
           python3 tools/cinematic/catalog.py validate
           python3 -m unittest discover -s tools/cinematic -p 'test_*.py'
 
@@ -59,7 +60,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
         run: |
-          for scene in rocket-1 rocket-5 rocket-10 rose-bouquet hot-biryani golden-dragon cp-first-kiss flag-in; do
+          for scene in hot-biryani ice-dragon rose-bouquet cp-first-kiss; do
             xvfb-run -a /tmp/blender-4.5.2-linux-x64/blender --background --python-exit-code 1 --threads 4 --python tools/cinematic/render.py -- --scene "$scene" --poster-only
           done
       - name: Publish early visual review frames
@@ -89,7 +90,7 @@ jobs:
     timeout-minutes: 180
     strategy:
       fail-fast: false
-      max-parallel: 10
+      max-parallel: 20
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19]
     steps:
@@ -111,7 +112,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: '1'
           SHARD: ${{ matrix.shard }}
-        run: python3 -u tools/cinematic/catalog.py render --shard "$SHARD" --shards 20
+        run: python3 -u tools/cinematic/catalog.py render --premium-only --shard "$SHARD" --shards 20
       - name: Upload completed scenes
         if: always()
         uses: actions/upload-artifact@v4
@@ -124,8 +125,34 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+  reuse:
+    needs: smoke
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install media verifier
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Retain verified national flags and Rocket movies
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(python3 -c "import json; print(json.load(open('tools/cinematic/bundle-lock.json'))['release_tag'])")"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern cinematic-assets.zip --dir /tmp/reused-cinematic-bundle
+          python3 tools/cinematic/catalog.py reuse --archive /tmp/reused-cinematic-bundle/cinematic-assets.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cinematic-shard-retained
+          path: |
+            cinematic-preview/*/*.mp4
+            cinematic-preview/*/poster.png
+            cinematic-preview/*/metadata.json
+          if-no-files-found: error
+          retention-days: 14
+
   publish:
-    needs: render
+    needs: [render, reuse]
     permissions:
       actions: read
       contents: write
