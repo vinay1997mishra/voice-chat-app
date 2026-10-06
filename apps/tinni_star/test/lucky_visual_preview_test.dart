@@ -1,7 +1,9 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/economy/economy.dart';
 import 'package:tinni_star/effects/lucky_gift_queue.dart';
@@ -9,6 +11,14 @@ import 'package:tinni_star/effects/lucky_gift_overlay.dart';
 import 'package:tinni_star/room/room_presence_service.dart';
 
 void main() {
+  setUpAll(() async {
+    // Use Flutter's cached Android font rather than the square test font.
+    final cache = File(Platform.resolvedExecutable).parent.parent.parent;
+    final font = File('${cache.path}/artifacts/material_fonts/Roboto-Regular.ttf');
+    final loader = FontLoader('LuckyPreview')
+      ..addFont(font.readAsBytes().then((bytes) => ByteData.sublistView(bytes)));
+    await loader.load();
+  });
   testWidgets('export all Lucky effect tiers with the center HUD and right Combo', (tester) async {
     tester.view.physicalSize = const Size(390, 844);
     tester.view.devicePixelRatio = 1;
@@ -27,13 +37,13 @@ void main() {
         multiplierCounts: [{'multiplier': multiplier, 'count': 1}],
       ), gift);
       final boundaryKey = GlobalKey();
-      await tester.pumpWidget(MaterialApp(home: RepaintBoundary(key: boundaryKey,
+      await tester.pumpWidget(MaterialApp(theme: ThemeData(fontFamily: 'LuckyPreview'), home: RepaintBoundary(key: boundaryKey,
         child: Scaffold(
           backgroundColor: const Color(0xFF10162D),
           body: Stack(children: [
             const Positioned(left: 18, top: 30, child: Text('Tinni Star', style: TextStyle(
               color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900))),
-            Positioned.fill(child: LuckyGiftOverlay(queue: queue)),
+            Positioned.fill(child: LuckyGiftOverlay(queue: queue, reserveCombo: true)),
             Positioned(right: 8, top: 70, child: LuckyComboPanel(
               gift: gift, quantity: 1, count: 1, wonCoins: 500 * multiplier,
               sentCoins: 500, highest: multiplier, secondsLeft: 9,
@@ -46,6 +56,13 @@ void main() {
       await tester.pump();
       expect(find.byKey(const Key('lucky-active-multiplier')), findsOneWidget);
       expect(find.byKey(const Key('lucky-center-banner')), findsOneWidget);
+      final combo = tester.getRect(find.byType(LuckyComboPanel));
+      final multiplierRect = tester.getRect(find.byKey(const Key('lucky-active-multiplier')));
+      expect(multiplierRect.right, lessThan(combo.left));
+      final winTitle = find.byKey(const Key('lucky-big-win-banner'));
+      if (winTitle.evaluate().isNotEmpty) {
+        expect(tester.getRect(winTitle).right, lessThan(combo.left));
+      }
       expect(tester.takeException(), isNull);
       await tester.runAsync(() async {
         final boundary = boundaryKey.currentContext!.findRenderObject()! as RenderRepaintBoundary;

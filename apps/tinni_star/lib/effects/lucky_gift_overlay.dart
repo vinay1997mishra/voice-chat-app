@@ -11,10 +11,11 @@ String luckyCoins(int amount) => amount.toString().replaceAllMapped(
 
 class LuckyGiftOverlay extends StatefulWidget {
   const LuckyGiftOverlay({super.key, required this.queue, this.lane,
-    this.enabled = true, this.onStarted});
+    this.enabled = true, this.reserveCombo = false, this.onStarted});
   final LuckyGiftQueue queue;
   final CinematicLane? lane;
   final bool enabled;
+  final bool reserveCombo;
   final void Function(LuckyGiftPresentation presentation)? onStarted;
   @override
   State<LuckyGiftOverlay> createState() => _LuckyGiftOverlayState();
@@ -121,7 +122,12 @@ class _LuckyGiftOverlayState extends State<LuckyGiftOverlay>
       child: LayoutBuilder(builder: (context, constraints) {
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
-        final extent = math.min(width * (primaryBusy ? .30 : .91),
+        // The sender's interactive Combo occupies the right edge. Keep the
+        // multiplier and win title in the remaining space on every phone size.
+        final reserve = widget.reserveCombo && !primaryBusy ? 140.0 : 0.0;
+        final bubbleWidth = math.max(80.0, width - reserve);
+        final extent = math.min(
+          bubbleWidth * (primaryBusy ? .30 : reserve > 0 ? .4 + tier.index * .1 : .91),
           <double>[78, 112, 152, 194, 238, 288, 350][tier.index]);
         final bubbleY = primaryBusy ? height * .24 : height * .34;
         final hudY = primaryBusy ? height * .72 : height * .49;
@@ -140,7 +146,7 @@ class _LuckyGiftOverlayState extends State<LuckyGiftOverlay>
             ),
           if (result != null)
             Positioned(
-              left: (width - extent) / 2 + (reduced ? 0 : math.sin(progress * math.pi) * 9),
+              left: (bubbleWidth - extent) / 2 + (reduced ? 0 : math.sin(progress * math.pi) * 9),
               top: bubbleY - extent / 2 - (reduced ? 0 : progress * (primaryBusy ? 28 : 86)),
               width: extent, height: extent,
               child: Opacity(
@@ -157,12 +163,13 @@ class _LuckyGiftOverlayState extends State<LuckyGiftOverlay>
               ),
             ),
           if (winTitle != null && !primaryBusy)
-            Positioned(left: 12, right: 12, top: height * .14,
-              child: Text(winTitle, key: const Key('lucky-big-win-banner'),
-                textAlign: TextAlign.center, style: TextStyle(
-                  fontSize: ultra ? 30 : 24, fontWeight: FontWeight.w900,
-                  color: const Color(0xFFFFE99B), letterSpacing: 2,
-                  shadows: [Shadow(color: palette[0], blurRadius: 24)]))),
+            Positioned(left: 12, right: reserve + 12, top: height * .14,
+              child: FittedBox(fit: BoxFit.scaleDown,
+                child: Text(winTitle, key: const Key('lucky-big-win-banner'),
+                  textAlign: TextAlign.center, style: TextStyle(
+                    fontSize: ultra ? 30 : 24, fontWeight: FontWeight.w900,
+                    color: const Color(0xFFFFE99B), letterSpacing: 2,
+                    shadows: [Shadow(color: palette[0], blurRadius: 24)])))),
           Positioned(left: width * .04, right: width * .04, top: hudY,
             child: Semantics(
               label: '${event.senderName} sent ${event.giftName}, quantity ${event.quantity}, '

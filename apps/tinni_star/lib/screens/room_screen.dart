@@ -9519,6 +9519,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
               ),
             Positioned.fill(child: LuckyGiftOverlay(
               queue: _luckyVisuals, lane: _cinematicLane,
+              reserveCombo: _luckyComboTimer.active && _luckyComboGift != null &&
+                  !_fruitJackpotOpen && !_fruitPartyOpen,
               onStarted: _playLuckySeatVisual,
               enabled: widget.state.roomControls.effectsEnabled &&
                   widget.state.roomControls.luckyGiftEffectEnabled,
