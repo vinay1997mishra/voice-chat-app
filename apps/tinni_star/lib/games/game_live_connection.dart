@@ -3,6 +3,10 @@ import 'dart:convert';
 import 'dart:io';
 import '../infra/request_budget.dart';
 
+typedef GameLiveFactory = GameLiveConnection Function(
+  void Function(Map<String, dynamic>) onState, void Function() onStatus,
+);
+
 /// One hibernating game socket; changes request state, idle time does not.
 class GameLiveConnection {
   GameLiveConnection({

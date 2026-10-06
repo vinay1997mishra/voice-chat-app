@@ -8,9 +8,10 @@ import '../games/game_live_connection.dart';
 import '../room/room_presence_service.dart';
 
 class LudoScreen extends StatefulWidget {
-  const LudoScreen({super.key, required this.state, required this.roomId});
+  const LudoScreen({super.key, required this.state, required this.roomId, this.liveConnectionFactory});
   final TinniState state;
   final String roomId;
+  final GameLiveFactory? liveConnectionFactory;
   @override
   State<LudoScreen> createState() => _LudoScreenState();
 }
@@ -21,11 +22,15 @@ class _LudoScreenState extends State<LudoScreen> with WidgetsBindingObserver {
   String? _myColor, _errorText;
   bool _ready = false, _busy = false, _foreground = true;
   int _version = 0;
-  late final _live = GameLiveConnection(
-    apiBase: widget.state.backend.apiBase, path: '/ludo/live', roomId: widget.roomId,
-    onState: (data) { if (mounted && _foreground) setState(() => _apply(data)); },
-    onStatus: () { if (mounted) setState(() {}); },
-  );
+  late final _live = widget.liveConnectionFactory?.call(_onLiveState, _onLiveStatus) ??
+      GameLiveConnection(
+        apiBase: widget.state.backend.apiBase, path: '/ludo/live', roomId: widget.roomId,
+        onState: _onLiveState, onStatus: _onLiveStatus,
+      );
+  void _onLiveState(Map<String, dynamic> data) {
+    if (mounted && _foreground) setState(() => _apply(data));
+  }
+  void _onLiveStatus() { if (mounted) setState(() {}); }
   Future<void>? _pending;
 
   @override

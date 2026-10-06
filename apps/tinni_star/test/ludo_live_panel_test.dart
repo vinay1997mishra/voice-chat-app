@@ -9,9 +9,24 @@ import 'package:tinni_star/auth/auth_service.dart';
 import 'package:tinni_star/core/function_pack.dart';
 import 'package:tinni_star/infra/app_backend_service.dart';
 import 'package:tinni_star/screens/ludo_screen.dart';
+import 'package:tinni_star/games/game_live_connection.dart';
+
+class _Live extends GameLiveConnection {
+  _Live(void Function(Map<String, dynamic>) onState, void Function() onStatus) : super(
+    apiBase: Uri.parse('http://unused.test'), path: '/ludo/live',
+    onState: onState, onStatus: onStatus,
+  );
+  bool active = false;
+  int disconnects = 0;
+  @override bool get connected => active;
+  @override Future<void> connect(String token) async { active = true; }
+  @override void disconnect() { active = false; disconnects++; }
+  void push(Map<String, dynamic> data) => onState(data);
+}
 
 class _Backend extends AppBackendService {
-  int rolls=0,moves=0,leaves=0;
+  int rolls=0,moves=0,leaves=0,reads=0;
+  _Live? live;
   int? lastToken;
   Completer<Map<String,dynamic>>? pendingRoll;
   Map<String,dynamic> state={
@@ -23,7 +38,7 @@ class _Backend extends AppBackendService {
         {'user_id':entry.$1,'color':entry.$1,'display_name':entry.$2},
     ],
   };
-  @override Future<Map<String,dynamic>> ludoState(String token,{required String roomId}) async=>state;
+  @override Future<Map<String,dynamic>> ludoState(String token,{required String roomId}) async { reads++; return state; }
   @override Future<Map<String,dynamic>> ludoRoll(String token,{required String roomId}) {
     rolls++;return pendingRoll!.future;
   }
@@ -45,9 +60,28 @@ TinniState _state(_Backend backend) {
 Widget _view(TinniState state,double height)=>RepaintBoundary(
   key:const Key('ludo-preview'),child:MaterialApp(home:Scaffold(body:Align(
     alignment:Alignment.bottomCenter,child:SizedBox(height:height,
-      child:LudoScreen(state:state,roomId:'real-room'))))));
+      child:LudoScreen(state:state,roomId:'real-room',
+        liveConnectionFactory: (onState, onStatus) {
+          final live = _Live(onState, onStatus);
+          (state.backend as _Backend).live = live;
+          return live;
+        }))))));
 
 void main() {
+  testWidgets('Ludo stays live without idle HTTP reads and closes its socket on exit', (tester) async {
+    final backend = _Backend();
+    final gameState = _state(backend);
+    await tester.pumpWidget(_view(gameState, 446));
+    await tester.pump();
+    expect(backend.reads, 1);
+    await tester.pump(const Duration(minutes: 2));
+    expect(backend.reads, 1);
+    await tester.pumpWidget(const SizedBox());
+    await tester.pump();
+    expect(backend.live!.disconnects, 1);
+    gameState.social.dispose();
+  });
+
   for(final size in [const Size(360,640),const Size(412,892),const Size(640,360)]) {
     testWidgets('Ludo four real names and coloured seats fit bottom half '+size.toString(),(tester) async {
       tester.view.physicalSize=size;tester.view.devicePixelRatio=1;
@@ -83,7 +117,7 @@ void main() {
       expect(backend.leaves,1);
     });
   }
-  testWidgets('single pending dice action, token move and live opponent turn refresh',(tester) async {
+  testWidgets('single pending dice action, token move and realtime opponent turn update',(tester) async {
     final backend=_Backend(),state=_state(backend);
     await tester.pumpWidget(_view(state,446));await tester.pump();
     backend.pendingRoll=Completer();
@@ -95,7 +129,9 @@ void main() {
     expect(backend.moves,1);
     expect(tester.widget<FilledButton>(find.byKey(const Key('ludo-roll-dice'))).onPressed,isNull);
     backend.state={...backend.state,'version':4,'current_player':'red','status':'RED turn.'};
+    backend.live!.push(backend.state);
     await tester.pump(const Duration(seconds:2));await tester.pump();
+    expect(backend.reads, 1);
     expect(tester.widget<FilledButton>(find.byKey(const Key('ludo-roll-dice'))).onPressed,isNotNull);
     await tester.pumpWidget(const SizedBox());await tester.pump();
   });
