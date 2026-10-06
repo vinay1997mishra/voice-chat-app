@@ -13,10 +13,15 @@
     {
       "binding": "EFFECT_MEDIA",
       "bucket_name": "tinni-star-effects"
+    },
+    {
+      "binding": "USER_ARCHIVE",
+      "bucket_name": "tinni-star-private-archives"
     }
   ],
   "vars": {
-    "PUBLIC_API_ORIGIN": "https://tinni-star-api.mishrajii7991.workers.dev"
+    "PUBLIC_API_ORIGIN": "https://tinni-star-api.mishrajii7991.workers.dev",
+    "R2_BYTE_LIMIT_BYTES": "7000000000"
   },
   "assets": {
     "directory": "../tinni_owner_panel",

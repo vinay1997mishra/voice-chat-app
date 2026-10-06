@@ -34,6 +34,8 @@ jobs:
 
       - name: Check JavaScript syntax
         run: |
+          node --check apps/tinni_worker/src/cold_storage.js
+          node --check apps/tinni_worker/tool/prepare_private_storage.mjs
           node --check apps/tinni_worker/src/index.js
           node --check apps/tinni_worker/src/app_directory.js
           node --check apps/tinni_worker/src/room_presence.js

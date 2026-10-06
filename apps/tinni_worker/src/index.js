@@ -1,3 +1,4 @@
+import * as coldStorage from "./cold_storage.js";
 import { DurableObject } from "cloudflare:workers";
 import { FruitGameStore } from "./fruit_game.js";
 import { FruitPartyStore } from "./fruit_party.js";
@@ -1628,7 +1629,7 @@ export default {
       const userId = String(appSession.user.user_id || "").trim();
       const key = "rooms/" + userId + "/dp";
       const updatedAt = Date.now();
-      await env.EFFECT_MEDIA.put(key, bytes, {
+      await coldStorage.managedMediaPut(env,key, bytes, {
         httpMetadata: { contentType: match[1] },
         customMetadata: {
           user_id: userId,
@@ -1684,7 +1685,7 @@ export default {
         "rooms/" + userId + "/themes/" +
         Date.now().toString(36) + "-" + crypto.randomUUID().slice(0, 10);
       const updatedAt = Date.now();
-      await env.EFFECT_MEDIA.put(key, bytes, {
+      await coldStorage.managedMediaPut(env,key, bytes, {
         httpMetadata: { contentType: match[1] },
         customMetadata: {
           user_id: userId,
@@ -1766,7 +1767,7 @@ export default {
       const userId = String(appSession.user.user_id || "").trim();
       const key = "profiles/" + userId + "/" + slot;
       const updatedAt = Date.now();
-      await env.EFFECT_MEDIA.put(key, bytes, {
+      await coldStorage.managedMediaPut(env,key, bytes, {
         httpMetadata: { contentType: match[1] },
         customMetadata: {
           user_id: userId,
@@ -1814,13 +1815,20 @@ export default {
       if (!key || key.includes("..")) {
         return new Response("Invalid media key", { status: 400 });
       }
+      if(coldStorage.isPrivateStorageKey(key)) return new Response("Not found",{status:404});
       const object = await env.EFFECT_MEDIA.get(key);
       if (!object) return new Response("Not found", { status: 404 });
       const headers = new Headers();
       object.writeHttpMetadata(headers);
       headers.set("etag", object.httpEtag);
-      headers.set("cache-control", "public, max-age=604800, immutable");
+      headers.set("cache-control", /^profiles\/[^/]+\/avatar$/.test(key)?"no-store, max-age=0":"public, max-age=604800, immutable");
       return new Response(object.body, { headers });
+    }
+
+    if(url.pathname==="/api/storage-status"&&request.method==="GET") {
+      const staff=await verifySession(request,env);
+      if(!staff||staff.role!=="owner") return json({ok:false,error:"Unauthorized"},401);
+      return json({ok:true,storage:await getAppDirectoryStore(env).storageStatus()});
     }
 
     if (url.pathname === "/telemetry/analytics" && request.method === "POST") {
@@ -3155,7 +3163,7 @@ export default {
     if (url.pathname === "/wallet/transactions" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json({ ok: true, transactions: await getAppDirectoryStore(env).walletTransactions(appSession.user.user_id) });
+      return json({ ok: true, transactions: await getAppDirectoryStore(env).walletTransactions(appSession.user.user_id,url.searchParams.get("limit")||200,url.searchParams.get("before")||Number.MAX_SAFE_INTEGER) });
     }
 
     if (url.pathname === "/wallet/settlement/recipients" && request.method === "GET") {
@@ -4284,7 +4292,7 @@ export default {
         (env.PUBLIC_API_ORIGIN || url.origin) +
         "/message-media/" +
         encodeURIComponent(messageId);
-      await env.EFFECT_MEDIA.put(mediaKey, bytes, {
+      await coldStorage.managedMediaPut(env,mediaKey, bytes, {
         httpMetadata: { contentType: match[1] },
         customMetadata: {
           from_user_id: senderId,
@@ -6680,6 +6688,7 @@ export default {
 
     return env.ASSETS.fetch(request);
     } catch (error) {
+      if(/Storage budget reached|inventory pending/.test(String(error?.message||error))) return json({ok:false,error:"Storage budget reached. New uploads are paused while existing files remain available."},503);
       console.error("Tinni Star unhandled request error", error);
       return json({
         ok: false,

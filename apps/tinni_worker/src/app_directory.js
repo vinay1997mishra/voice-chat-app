@@ -1,3 +1,5 @@
+import * as coldStorage from "./cold_storage.js";
+const APP_SCHEMA_VERSION = "2026-10-06-cold-storage-1";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
@@ -303,6 +305,11 @@ function validateRoomThemePolicy(nameValue, assetValue) {
 export class AppDirectoryStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS app_schema_versions(id INTEGER PRIMARY KEY,version TEXT NOT NULL)");
+    if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
+      this._armStorageSweep();
+      return;
+    }
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS app_users (
         user_id TEXT PRIMARY KEY,
@@ -1655,7 +1662,26 @@ export class AppDirectoryStore extends DurableObject {
           effect_style:id,animated:true,category,asset_url:"",preview_mode:"canvas"}),Date.now(),Date.now());
     }
 
+    coldStorage.initColdStorage(this);
+    coldStorage.initMainGameRetention(this);
+    this.ctx.storage.sql.exec("INSERT INTO app_schema_versions(id,version) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version",APP_SCHEMA_VERSION);
+    this._armStorageSweep();
   }
+
+  _armStorageSweep() {
+    // One durable alarm, shared with payouts. Do not replace an earlier money deadline.
+    this.ctx.blockConcurrencyWhile(async()=>{
+      const row=this.ctx.storage.sql.exec("SELECT next_sweep FROM storage_budget WHERE id=1").toArray()[0];
+      const current=await this.ctx.storage.getAlarm();
+      const next=Math.max(Date.now()+1000,Number(row?.next_sweep)||Date.now()+10000);
+      if(current===null||current>next) await this.ctx.storage.setAlarm(next);
+    });
+  }
+
+  reserveMediaBudget(key,size,leaseId) {return coldStorage.reserveMediaBudget(this,key,size,leaseId);}
+  completeMediaBudget(leaseId,replacedBytes) {return coldStorage.completeMediaBudget(this,leaseId,replacedBytes);}
+  abortMediaBudget(leaseId,writeAttempted) {return coldStorage.abortMediaBudget(this,leaseId,writeAttempted);}
+  storageStatus() {return coldStorage.storageBudget(this);}
 
   _ensureEconomyMigrations() {
     // The Durable Object constructor already creates the economy/family
@@ -3873,8 +3899,8 @@ export class AppDirectoryStore extends DurableObject {
       ["profile_trends","user_id"],
       ["app_user_identities","user_id"], ["app_wallets","user_id"],
       ["wallet_coin_guards","user_id"], ["privileged_wallet_coin_guards","user_id"],
-      ["wallet_transactions","user_id"], ["vip_entitlements","user_id"],
-      ["main_game_bets","user_id"], ["latest_game_results","user_id"],
+      ["wallet_transactions","user_id"], ["cold_wallet_references","user_id"], ["cold_batches","user_id"], ["vip_entitlements","user_id"],
+      ["main_game_bets","user_id"], ["latest_game_results","user_id"], ["settled_game_receipts","user_id"], ["main_game_lifetime","user_id"],
       ["call_verification_submissions","user_id"], ["random_call_stats","user_id"],
       ["email_password_credentials","user_id"], ["owner_user_controls","user_id"],
       ["owner_user_tags","user_id"], ["owner_wallets","user_id"],
@@ -4980,6 +5006,11 @@ export class AppDirectoryStore extends DurableObject {
       displayName, age, birthday, signature, countryCode, countryName,
       flagEmoji, gender, avatarDataUrl, Date.now(), userId,
     );
+    if(avatarDataUrl!==current.avatar_data_url) {
+      this.ctx.storage.sql.exec("UPDATE country_ribbons SET avatar_data_url=? WHERE user_id=?",avatarDataUrl,userId);
+      try {await coldStorage.deleteOldAvatar(this,current.avatar_data_url,avatarDataUrl,userId);}
+      catch(error) {console.error("Obsolete DP cleanup will retry",String(error?.message||error));}
+    }
     this._notifyAccountChanged(userId);
     const owned = this.findOwnedRoomByUserId(userId);
     if (owned) this._notifyRoomChanged(owned.id);
@@ -5768,7 +5799,7 @@ export class AppDirectoryStore extends DurableObject {
     if (guard.security_frozen || this.getWallet(userId).banned) return;
     for (const reward of pending) {
       const reference = "rocket:" + reward.room_id + ":" + reward.level + ":" + userId;
-      if (!this.ctx.storage.sql.exec("SELECT id FROM wallet_transactions WHERE user_id=? AND reference_id=?",userId,reference).toArray().length) {
+      if (!coldStorage.walletReferenceExists(this,userId,reference)) {
         this._creditNormalWalletAuthorized(userId,Number(reward.coins),"rocket_reward");
         this.ctx.storage.sql.exec(`INSERT INTO wallet_transactions
           (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at)
@@ -5838,7 +5869,9 @@ export class AppDirectoryStore extends DurableObject {
       `SELECT MIN(c.resets_at) AS deadline FROM room_gift_daily_clock c
         JOIN room_gift_owner_daily d ON d.room_id=c.room_id AND d.day_key=c.day_key
        WHERE d.settled_at IS NULL`).toArray()[0]?.deadline;
+    const storageDeadline=this.ctx.storage.sql.exec("SELECT next_sweep FROM storage_budget WHERE id=1").toArray()[0]?.next_sweep;
     this.ctx.storage.setAlarm(Math.min(this._nextIndiaMidnightUtc(now),
+      storageDeadline==null?Infinity:Math.max(now+1,Number(storageDeadline)),
       next == null ? Infinity : Math.max(now+1,Number(next)),
       daily == null ? Infinity : Math.max(now+1,Number(daily))));
   }
@@ -6212,10 +6245,7 @@ export class AppDirectoryStore extends DurableObject {
       const share = Math.floor(giftCoins * 0.10);
       const ownerId = String(row.owner_id || "");
       const reference = "room-gift-share:" + String(row.room_id) + ":" + String(row.day_key);
-      const existing = this.ctx.storage.sql.exec(
-        "SELECT id FROM wallet_transactions WHERE user_id = ? AND reference_id = ? LIMIT 1",
-        ownerId, reference,
-      ).toArray()[0];
+      const existing = coldStorage.walletReferenceExists(this,ownerId,reference);
       if (!existing && share > 0) {
         this.ctx.storage.sql.exec(
           "INSERT OR IGNORE INTO app_wallets (user_id,coins,diamonds,updated_at) VALUES (?,0,0,?)",
@@ -6274,6 +6304,9 @@ export class AppDirectoryStore extends DurableObject {
     const gifts = this.settleRoomGiftOwnerShares(now);
     const uniqueIdsReleased = this.settleExpiredUniqueIds(now);
     const eventNotifications = this.dispatchEventNotifications(now);
+    await coldStorage.sweepGameRetention(this,now);
+    await coldStorage.runColdMaintenance(this,now);
+    this._scheduleDirectoryAlarm(now);
     return {
       ...gifts,
       rocket_launches: rocketLaunches,
@@ -8063,16 +8096,12 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row)=>({provider:String(row.provider),subject:String(row.subject),created_at:Number(row.created_at)}));
   }
 
-  walletTransactions(userIdValue) {
-    const userId = this._resolveOwnerUserId(userIdValue);
-    return this.ctx.storage.sql.exec(
-      "SELECT id,kind,coins_delta,diamonds_delta,reference_id,note,created_at FROM wallet_transactions WHERE user_id = ? ORDER BY created_at DESC LIMIT 200",
-      userId,
-    ).toArray().map((row) => ({
-      id: String(row.id), kind: String(row.kind),
-      coins_delta: Number(row.coins_delta || 0), diamonds_delta: Number(row.diamonds_delta || 0),
-      reference_id: row.reference_id ? String(row.reference_id) : null,
-      note: String(row.note || ""), created_at: Number(row.created_at),
+  async walletTransactions(userIdValue,limitValue=200,beforeValue=Number.MAX_SAFE_INTEGER) {
+    const userId=this._resolveOwnerUserId(userIdValue);
+    return (await coldStorage.walletHistory(this,userId,limitValue,beforeValue)).map(row=>({
+      id:String(row.id),kind:String(row.kind),coins_delta:Number(row.coins_delta||0),
+      diamonds_delta:Number(row.diamonds_delta||0),reference_id:row.reference_id?String(row.reference_id):null,
+      note:String(row.note||""),created_at:Number(row.created_at)
     }));
   }
 
@@ -10037,6 +10066,7 @@ export class AppDirectoryStore extends DurableObject {
             Number(old.amount) !== input.amount || old.room_id !== input.room_id) throw new Error("Bet request ID was already used");
         return old;
       }
+      if(this.ctx.storage.sql.exec("SELECT id FROM settled_game_receipts WHERE id=?",input.id).toArray()[0]) throw new Error("This bet request is older than retained game history");
       const now = Date.now();
       if (Math.floor(now / 26000) !== input.round_id || now >= input.round_id * 26000 + 21000) {
         throw new Error("Betting is locked while the result is spinning");
@@ -10079,7 +10109,7 @@ export class AppDirectoryStore extends DurableObject {
       String(userId),String(gameKey),
     ).toArray()[0] : null;
     return {coins:wallet.coins,today_winnings:Number(today?.winnings || 0),last_bet_result:last ? JSON.parse(last.payload) : null,
-      game_net_coins:stats ? Number(stats.net || 0) : null};
+      game_net_coins:stats ? Number(stats.net || 0)+Number(this.ctx.storage.sql.exec("SELECT net_coins FROM main_game_lifetime WHERE user_id=? AND game_key=?",userId,gameKey).toArray()[0]?.net_coins||0) : null};
   }
 
   recordGameResults(results) {
@@ -10101,6 +10131,10 @@ export class AppDirectoryStore extends DurableObject {
           if (uniqueIds.has(item.id)) throw new Error("Duplicate payout bet");
           uniqueIds.add(item.id);
           const bet = this.ctx.storage.sql.exec("SELECT * FROM main_game_bets WHERE id=?",String(item.id)).toArray()[0];
+          if(!bet) {
+            const old=this.ctx.storage.sql.exec("SELECT * FROM settled_game_receipts WHERE id=?",String(item.id)).toArray()[0];
+            if(old&&old.user_id===userId&&old.game_key===gameKey&&Number(old.round_id)===result.round_id&&Number(old.winning_coins)===item.winning_coins) continue;
+          }
           if (!bet || bet.user_id !== userId || bet.game_key !== gameKey || Number(bet.round_id) !== result.round_id) {
             throw new Error("Game payout identity mismatch");
           }
@@ -10134,6 +10168,7 @@ export class AppDirectoryStore extends DurableObject {
           }
           receipt = {...result,user_id:userId,main_bets:undefined,wallet_balance:guard.coins + newlyPaid,wallet_type:"main"};
         }
+        if(Number(result.settled_at)<Date.now()-coldStorage.GAME_HISTORY_MS) continue;
         const old = this.ctx.storage.sql.exec(
           "SELECT round_id FROM latest_game_results WHERE user_id=? AND game_key=?", userId, gameKey,
         ).toArray()[0];
@@ -10292,7 +10327,7 @@ export class AppDirectoryStore extends DurableObject {
     return now;
   }
 
-  listDirectMessages(userIdValue, peerUserIdValue, limitValue = 200) {
+  async listDirectMessages(userIdValue, peerUserIdValue, limitValue = 200) {
     const userId = String(userIdValue || "").trim();
     const peerUserId = String(peerUserIdValue || "").trim();
     const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
@@ -10303,8 +10338,8 @@ export class AppDirectoryStore extends DurableObject {
 
     this.markConversationSeen(userId, peerUserId);
 
-    return this.ctx.storage.sql.exec(
-      `SELECT id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at
+    const stored = this.ctx.storage.sql.exec(
+      `SELECT id, from_user_id, to_user_id, text, message_kind, media_url, created_at, seen_at,cold_batch_id
          FROM direct_messages
         WHERE (from_user_id = ? AND to_user_id = ?)
            OR (from_user_id = ? AND to_user_id = ?)
@@ -10315,7 +10350,8 @@ export class AppDirectoryStore extends DurableObject {
       peerUserId,
       userId,
       limit,
-    ).toArray().map((row) => ({
+    ).toArray();
+    return (await coldStorage.hydrateMessages(this,stored)).map((row) => ({
       id: String(row.id),
       from: String(row.from_user_id),
       to: String(row.to_user_id),
@@ -10413,16 +10449,16 @@ export class AppDirectoryStore extends DurableObject {
     return threads.slice(0, 500);
   }
 
-  ownerInboxConversation(userIdValue, peerUserIdValue, limitValue = 500) {
+  async ownerInboxConversation(userIdValue, peerUserIdValue, limitValue = 500) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const peerUserId = String(peerUserIdValue || "").trim();
     const limit = Math.max(1, Math.min(1000, Number(limitValue || 500)));
     if (!userId || !peerUserId) throw new Error("user IDs are required");
 
     const cutoff = Date.now() - (48 * 60 * 60 * 1000);
-    return this.ctx.storage.sql.exec(
+    const stored = this.ctx.storage.sql.exec(
       `SELECT d.id,d.from_user_id,d.to_user_id,d.text,d.message_kind,
-              d.media_url,d.created_at,d.seen_at
+              d.media_url,d.created_at,d.seen_at,d.cold_batch_id
          FROM direct_messages d
          LEFT JOIN owner_panel_message_log opm ON opm.message_id=d.id
         WHERE ((d.from_user_id=? AND d.to_user_id=?)
@@ -10431,7 +10467,8 @@ export class AppDirectoryStore extends DurableObject {
         ORDER BY d.created_at ASC
         LIMIT ?`,
       userId, peerUserId, peerUserId, userId, cutoff, limit,
-    ).toArray().map((row) => ({
+    ).toArray();
+    return (await coldStorage.hydrateMessages(this,stored)).map((row) => ({
       id: String(row.id),
       from_user_id: String(row.from_user_id),
       to_user_id: String(row.to_user_id),
@@ -10491,7 +10528,7 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-  ownerConversation(userIdValue, peerUserIdValue, limitValue = 500) {
+  async ownerConversation(userIdValue, peerUserIdValue, limitValue = 500) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const rawPeerId = String(peerUserIdValue || "").trim();
     const peerId = rawPeerId === "tinni-official"
@@ -10511,11 +10548,11 @@ export class AppDirectoryStore extends DurableObject {
           peerId,
         ).toArray()[0];
 
-    const messages = this.ownerInboxConversation(
+    const messages = (await this.ownerInboxConversation(
       userId,
       peerId,
       limitValue,
-    ).map((row) => ({
+    )).map((row) => ({
       id: String(row.id),
       from: String(row.from_user_id),
       to: String(row.to_user_id),
