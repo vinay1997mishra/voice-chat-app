@@ -13,7 +13,11 @@ import 'package:tinni_star/room/room_presence_service.dart';
 void main() {
   setUpAll(() async {
     // Use Flutter's cached Android font rather than the square test font.
-    final cache = File(Platform.resolvedExecutable).parent.parent.parent;
+    var cache = File(Platform.resolvedExecutable).parent;
+    while (!Directory('${cache.path}/artifacts/material_fonts').existsSync() &&
+        cache.parent.path != cache.path) {
+      cache = cache.parent;
+    }
     final font = File('${cache.path}/artifacts/material_fonts/Roboto-Regular.ttf');
     final loader = FontLoader('LuckyPreview')
       ..addFont(font.readAsBytes().then((bytes) => ByteData.sublistView(bytes)));
