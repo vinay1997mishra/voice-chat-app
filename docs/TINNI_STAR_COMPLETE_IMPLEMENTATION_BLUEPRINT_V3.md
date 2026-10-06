@@ -1362,3 +1362,18 @@ Latest explicit user instruction: Fruit Jackpot and Fruit Party debit the user's
 - Private wallet snapshots also include seller/merchant dollar balances, and open dollar/role balance views apply them directly without polling. Snapshot timestamps include role and settlement updates.
 
 - Storage follow-up: keep the recent 20 empty-round results; trim an older backlog by at most two empty rows per new settlement. Indexed cleanup never runs per viewer read. Every stake-bearing result, bet and financial ledger stays permanent.
+
+
+## 2026-10-06 — Private cold storage, 15-day game details and current DP only
+
+Latest explicit instructions: save as much of the free SQL storage and daily request budget as practical; use R2 for suitable old user data; keep detailed game data for a maximum of 15 days; retain only the current DP.
+
+- Old wallet transactions move to compressed, hash-verified objects in a separate private R2 bucket. A private SQL manifest and compact reference keys preserve readable history and prevent repeat credits. Balances and guards never depend on an R2 file. A failed copy never removes its source SQL rows.
+- Private chat uses phone history in APK 0.5.50+69. Received messages and downloaded photos persist in account-scoped app files, merge with server deltas and remain available offline. Photos expire on the server after 10 days. Long chats retain their newest 500 messages on the server; excess messages older than 10 days are deleted with their message notifications. Short chats remain. A photo never downloaded to a phone cannot be recovered there after expiry.
+- A daily archive job moves at most sixteen 256-row wallet batches and 64 current inline DPs, bounded by a 12-second copy budget. New inline signup DPs migrate immediately when storage is available. It never runs once per page visit or heartbeat.
+- Completed detailed game rounds, stakes and personal results expire after 15 days. Hourly bounded cleanup preserves pending outbox payments, compact paid-bet replay protection and lifetime accounting totals. Game details are deleted rather than accumulated in R2. Heavy legacy backlogs are drained in bounded batches; reads exclude expired game history immediately.
+- R2 inventory accounts for both application media and private archives. The application uses a conservative combined 7 GB upload budget, leaving headroom under the account-level 10 GB-month allowance. Uploads reserve bytes before writing, serialize replacement keys and reconcile failures. At the budget, new writes pause. This cannot guarantee that unrelated buckets or monthly operation usage incur no charge.
+- Inventory deletes obsolete DP keys (including leftovers after public ID changes) and unreferenced failed archive staging objects. It preserves every current DP and every committed archive. Same-key DP uploads replace the previous bytes; current DPs use no-store responses. Verified inline current DPs become small URLs in SQL; historical DP copies are not archived.
+- Expired login OTP/reset/session rows, grants, rate windows and ribbons receive bounded cleanup. Password credentials, financial balances stay intact; private chat follows the explicit retention policy.
+- App Directory schema/catalog/backfill setup is versioned and runs once per schema version, preventing repeated full-user scans on hibernation wake. Future schema/catalog changes must bump APP_SCHEMA_VERSION.
+- Release signed APK 0.5.50+69 for durable local private chat. Older APKs do not retain server-deleted history in persistent app files. No unrelated game visual, gift-provider or voice-flow redesign.

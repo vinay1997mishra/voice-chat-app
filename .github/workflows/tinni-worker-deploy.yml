@@ -41,6 +41,10 @@ jobs:
         working-directory: apps/tinni_worker
         run: npm test
 
+      - name: Prepare and verify private R2 archive storage
+        working-directory: apps/tinni_worker
+        run: node tool/prepare_private_storage.mjs
+
       - name: Deploy Worker and Owner Panel
         working-directory: apps/tinni_worker
         run: npx wrangler deploy

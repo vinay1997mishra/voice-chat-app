@@ -1,3 +1,4 @@
+import 'dart:typed_data';
 import 'dart:convert';
 
 import 'dart:async';
@@ -143,6 +144,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
 
     try {
+      await widget.state.social.bindLocalAccount(account.email, account.userId);
       if (_isInbox) {
         await widget.state.social.syncInbox(account.authToken);
         await _loadActivity();
@@ -593,75 +595,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
   Widget _messagePhoto(ChatMessage message) {
     final account = widget.state.auth.current;
-    final mediaUrl = message.mediaUrl;
-    if (account == null || mediaUrl == null || mediaUrl.isEmpty) {
-      return const Text(
-        'Photo unavailable',
-        style: TextStyle(color: RoyalPalette.muted),
-      );
-    }
-    final headers = <String, String>{
-      'Authorization': 'Bearer ' + account.authToken,
-    };
-    final image = Image.network(
-      mediaUrl,
-      headers: headers,
-      width: 230,
-      height: 250,
-      fit: BoxFit.cover,
-      gaplessPlayback: true,
-      loadingBuilder: (context, child, progress) {
-        if (progress == null) return child;
-        return const SizedBox(
-          width: 230,
-          height: 160,
-          child: Center(
-            child: CircularProgressIndicator(strokeWidth: 2),
-          ),
-        );
-      },
-      errorBuilder: (_, _, _) => const SizedBox(
-        width: 230,
-        height: 120,
-        child: Center(
-          child: Text(
-            'Photo unavailable',
-            style: TextStyle(color: RoyalPalette.muted),
-          ),
-        ),
-      ),
-    );
-    return GestureDetector(
-      key: Key('message-photo-' + (message.id ?? mediaUrl)),
-      onTap: () {
-        showDialog<void>(
-          context: context,
-          barrierColor: Colors.black87,
-          builder: (dialogContext) => Dialog(
-            backgroundColor: Colors.transparent,
-            insetPadding: const EdgeInsets.all(12),
-            child: InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4,
-              child: Image.network(
-                mediaUrl,
-                headers: headers,
-                fit: BoxFit.contain,
-                errorBuilder: (_, _, _) => const Center(
-                  child: Text(
-                    'Photo unavailable',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                ),
-              ),
-            ),
-          ),
-        );
-      },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(12),
-        child: image,
-      ),
+    if (account == null) return const Text('Photo unavailable');
+    return _CachedMessagePhoto(
+      key: ValueKey('cached-photo-${message.id ?? message.mediaUrl}'),
+      social: widget.state.social, authToken: account.authToken, message: message,
     );
   }
 
@@ -1690,4 +1627,71 @@ class _MessageIdentityTag extends StatelessWidget {
       ),
     );
   }
+}
+
+class _CachedMessagePhoto extends StatefulWidget {
+  const _CachedMessagePhoto({
+    super.key, required this.social, required this.authToken, required this.message,
+  });
+  final SocialService social;
+  final String authToken;
+  final ChatMessage message;
+
+  @override
+  State<_CachedMessagePhoto> createState() => _CachedMessagePhotoState();
+}
+
+class _CachedMessagePhotoState extends State<_CachedMessagePhoto> {
+  late Future<Uint8List?> _photo;
+
+  @override
+  void initState() {
+    super.initState();
+    _read();
+  }
+
+  void _read() {
+    _photo = widget.social.loadMessagePhoto(
+      authToken: widget.authToken, message: widget.message,
+    );
+  }
+
+  @override
+  void didUpdateWidget(covariant _CachedMessagePhoto oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.authToken != widget.authToken ||
+        oldWidget.message.mediaUrl != widget.message.mediaUrl) { _read(); }
+  }
+
+  @override
+  Widget build(BuildContext context) => FutureBuilder<Uint8List?>(
+    future: _photo,
+    builder: (context, snapshot) {
+      if (snapshot.connectionState != ConnectionState.done) {
+        return const SizedBox(width: 230, height: 160,
+          child: Center(child: CircularProgressIndicator(strokeWidth: 2)));
+      }
+      final bytes = snapshot.data;
+      if (bytes == null) {
+        return const SizedBox(width: 230, height: 120,
+          child: Center(child: Text('Photo unavailable',
+            style: TextStyle(color: RoyalPalette.muted))));
+      }
+      return GestureDetector(
+        key: Key('message-photo-${widget.message.id ?? widget.message.mediaUrl}'),
+        onTap: () => showDialog<void>(
+          context: context, barrierColor: Colors.black87,
+          builder: (context) => Dialog(
+            backgroundColor: Colors.transparent, insetPadding: const EdgeInsets.all(12),
+            child: InteractiveViewer(minScale: 0.8, maxScale: 4,
+              child: Image.memory(bytes, fit: BoxFit.contain)),
+          ),
+        ),
+        child: ClipRRect(borderRadius: BorderRadius.circular(12),
+          child: Image.memory(bytes, width: 230, height: 250, fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (_, _, _) => const Text('Photo unavailable'))),
+      );
+    },
+  );
 }

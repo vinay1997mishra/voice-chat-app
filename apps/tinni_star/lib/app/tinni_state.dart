@@ -47,6 +47,7 @@ import '../room/active_room_session.dart';
 import '../room/room_presence_service.dart';
 import '../sharing/share_service.dart';
 import '../social/social.dart';
+import '../social/local_chat_store.dart';
 
 class TinniState {
   TinniState({
@@ -57,7 +58,7 @@ class TinniState {
         wallet = WalletService(),
         auth = AuthService(),
         discovery = DiscoveryService(),
-        social = SocialService(),
+        social = SocialService(localHistory: LocalChatStore()),
         dynamics = DynamicFeedService(),
         identity = IdentityService(),
         cp = CpService(),
@@ -101,6 +102,10 @@ class TinniState {
       profile.clear();
       unawaited(_clearExpiredSession());
     };
+    auth.addListener(() {
+      final account = auth.current;
+      unawaited(social.bindLocalAccount(account?.email, account?.userId));
+    });
     social.accountEvents.addListener(_onLiveAccount);
     roomPresence.diagnosticSink = analytics.event;
     roomPresence.onSessionExpired = (token) => backend.onSessionExpired?.call(token);
