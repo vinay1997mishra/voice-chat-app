@@ -1,0 +1,185 @@
+name: Tinni secure offline-signing bootstrap
+
+on:
+  push:
+    branches:
+      - security/tinni-public-apk-hardening-20261007
+    paths:
+      - 'apps/tinni_star/**'
+      - '.github/workflows/tinni-offline-signing-bootstrap.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build-unsigned-final:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install verified cinematic catalog
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f tools/cinematic/bundle-lock.json
+          tag="$(python3 -c "import json; print(json.load(open('tools/cinematic/bundle-lock.json'))['release_tag'])")"
+          mkdir -p /tmp/tinni-cinematic-bundle
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern cinematic-assets.zip --dir /tmp/tinni-cinematic-bundle
+          python3 tools/cinematic/catalog.py install             --archive /tmp/tinni-cinematic-bundle/cinematic-assets.zip             --lock tools/cinematic/bundle-lock.json             --destination apps/tinni_star/assets/cinematic
+          python3 tools/cinematic/catalog.py validate
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Generate Android shell
+        working-directory: apps/tinni_star
+        run: flutter create . --platforms=android --org com.tinnistar
+
+      - name: Configure unsigned Tinni Star Final
+        working-directory: apps/tinni_star
+        shell: bash
+        run: |
+          set -euo pipefail
+          cp tool/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          sed -i 's/minSdk = flutter.minSdkVersion/minSdk = 24/' android/app/build.gradle.kts
+          mkdir -p android/app/src/main/res/drawable-nodpi
+          base64 --decode tool/tinni_star_icon.webp.b64 > android/app/src/main/res/drawable-nodpi/tinni_star_icon.webp
+          mkdir -p android/app/src/main/kotlin/com/tinnistar/tinni_star
+          cp tool/MainActivity.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/MainActivity.kt
+          cp tool/TinniRoomForegroundService.kt android/app/src/main/kotlin/com/tinnistar/tinni_star/TinniRoomForegroundService.kt
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path("android/app/build.gradle.kts")
+          s = p.read_text()
+          s = s.replace(
+              'signingConfig = signingConfigs.getByName("debug")',
+              '// intentionally unsigned; private release key is applied offline',
+          )
+          s = s.replace(
+              'applicationId = "com.tinnistar.tinni_star"',
+              'applicationId = "com.tinnistar.tinni_star.finalapp"',
+          )
+          s += '\ndependencies {\n    implementation("com.google.android.gms:play-services-auth:21.3.0")\n}\n'
+          p.write_text(s)
+
+          manifest = Path("android/app/src/main/AndroidManifest.xml")
+          text = manifest.read_text().replace(
+              'android:label="Tinni Star"',
+              'android:label="Tinni Star Final"',
+          )
+          text = text.replace(
+              'android:name=".MainActivity"',
+              'android:name="com.tinnistar.tinni_star.MainActivity"',
+          )
+          text = text.replace(
+              'android:name=".TinniRoomForegroundService"',
+              'android:name="com.tinnistar.tinni_star.TinniRoomForegroundService"',
+          )
+          manifest.write_text(text)
+          PY
+
+      - name: Get packages
+        working-directory: apps/tinni_star
+        run: flutter pub get
+
+      - name: Patch PAG 1.0.7 for Flutter v2 Android embedding
+        working-directory: apps/tinni_star
+        shell: bash
+        run: |
+          set -euo pipefail
+          PAG_GRADLE="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/build.gradle' -print -quit)"
+          PAG_JAVA="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/src/main/java/com/example/flutter_pag_plugin/FlutterPagPlugin.java' -print -quit)"
+          PAG_MANIFEST="$(find "$HOME/.pub-cache/hosted/pub.dev" -path '*/pag-1.0.7/android/src/main/AndroidManifest.xml' -print -quit)"
+          test -n "$PAG_GRADLE" && test -n "$PAG_JAVA" && test -n "$PAG_MANIFEST"
+          sed -i -E 's/[[:space:]]+package="[^"]+"//' "$PAG_MANIFEST"
+          sed -i 's/jcenter()/mavenCentral()/g' "$PAG_GRADLE"
+          sed -i -E 's/compileSdkVersion[[:space:]]+[0-9]+/compileSdkVersion 36/g; s/compileSdk[[:space:]]+[0-9]+/compileSdk 36/g' "$PAG_GRADLE"
+          grep -q "namespace 'org.libpag.pag'" "$PAG_GRADLE" || sed -i "0,/android {/s//android {\\n    namespace 'org.libpag.pag'/" "$PAG_GRADLE"
+          sed -i 's/JavaVersion.VERSION_1_8/JavaVersion.VERSION_17/g' "$PAG_GRADLE"
+          sed -i "s/jvmTarget = ['\"]1.8['\"]/jvmTarget = '17'/g" "$PAG_GRADLE"
+          grep -q 'sourceCompatibility JavaVersion.VERSION_17' "$PAG_GRADLE" || sed -i "/android {/a\\    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }" "$PAG_GRADLE"
+          grep -q "jvmTarget = '17'" "$PAG_GRADLE" || sed -i "/android {/a\\    kotlinOptions { jvmTarget = '17' }" "$PAG_GRADLE"
+          python3 - "$PAG_JAVA" <<'PY'
+          from pathlib import Path
+          import sys
+          p = Path(sys.argv[1])
+          lines = p.read_text().splitlines()
+          out = []
+          skipping = False
+          depth = 0
+          for line in lines:
+              stripped = line.strip()
+              if 'import io.flutter.view.FlutterNativeView;' in line:
+                  continue
+              if 'PluginRegistry.Registrar registrar;' in line and not stripped.startswith('public'):
+                  continue
+              legacy_method = (
+                  (stripped.startswith('public FlutterPagPlugin(') and 'PluginRegistry.Registrar' in line) or
+                  (stripped.startswith('public static void registerWith(') and 'PluginRegistry.Registrar' in line)
+              )
+              if legacy_method:
+                  skipping = True
+                  depth = line.count('{') - line.count('}')
+                  continue
+              if skipping:
+                  depth += line.count('{') - line.count('}')
+                  if depth <= 0:
+                      skipping = False
+                  continue
+              out.append(line)
+          s = '\n'.join(out) + '\n'
+          start = s.find('            if (registrar != null) {')
+          end_marker = '            } else if (flutterAssets != null) {'
+          end = s.find(end_marker, start)
+          if start >= 0 and end >= 0:
+              s = s[:start] + '            if (flutterAssets != null) {' + s[end + len(end_marker):]
+          forbidden = ('FlutterNativeView', 'PluginRegistry.Registrar', 'ViewDestroyListener', 'registrar.')
+          leftovers = [x for x in forbidden if x in s]
+          if leftovers:
+              raise SystemExit('PAG legacy API remains: ' + ', '.join(leftovers))
+          p.write_text(s)
+          PY
+
+      - name: Build unsigned ARM64 Final APK
+        working-directory: apps/tinni_star
+        run: flutter build apk --release --split-per-abi --dart-define=TINNI_APP_NAME="Tinni Star Final"
+
+      - name: Verify identity and prepare offline signing bundle
+        working-directory: apps/tinni_star
+        shell: bash
+        run: |
+          set -euo pipefail
+          APK="$(find build/app/outputs/flutter-apk -maxdepth 1 -type f -name '*arm64*v8a*release*.apk' -print -quit)"
+          APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
+          APKSIGNER_JAR="$(find "$ANDROID_HOME/build-tools" -type f -path '*/lib/apksigner.jar' | sort -V | tail -1)"
+          AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
+          test -f "$APK" && test -f "$APKSIGNER_JAR"
+          "$AAPT" dump badging "$APK" | grep -F "package: name='com.tinnistar.tinni_star.finalapp'"
+          if "$APKSIGNER" verify "$APK" >/dev/null 2>&1; then
+            echo "::error::Expected an unsigned APK but the APK is already signed."
+            exit 1
+          fi
+          mkdir -p /tmp/tinni-offline-signing
+          cp "$APK" /tmp/tinni-offline-signing/Tinni-Star-Final-v0.5.53-72-ARM64-unsigned.apk
+          cp "$APKSIGNER_JAR" /tmp/tinni-offline-signing/apksigner.jar
+          printf '%s\n'             'Unsigned release APK. Sign offline with the private Tinni Star release key.'             'The private key must never be uploaded to GitHub.'             > /tmp/tinni-offline-signing/README.txt
+
+      - name: Upload offline signing bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Tinni-Star-Final-v0.5.53-72-Offline-Signing
+          path: /tmp/tinni-offline-signing/*
+          if-no-files-found: error
