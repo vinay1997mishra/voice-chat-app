@@ -177,20 +177,47 @@ def enhance(h):
 
     if builder in ("rice", "feast", "dumplings"):
         remove_named(("Rising steam wisp",))
-        mist = material("Transparent rising steam", (.9, .94, 1), 0, 1)
-        mist.surface_render_method = "DITHERED"
-        shader = mist.node_tree.nodes["Principled BSDF"]
-        shader.inputs["Alpha"].default_value = .065
-        shader.inputs["Emission Color"].default_value = (.65, .75, .9, 1)
-        shader.inputs["Emission Strength"].default_value = .1
-        for i in range(12):
+        mist = bpy.data.materials.new("Soft volumetric food vapor")
+        mist.use_nodes = True
+        nodes, links = mist.node_tree.nodes, mist.node_tree.links
+        output = nodes["Material Output"]
+        for link in list(output.inputs["Surface"].links):
+            links.remove(link)
+        volume = nodes.new("ShaderNodeVolumePrincipled")
+        volume.inputs["Color"].default_value = (.92,.96,1,1)
+        volume.inputs["Anisotropy"].default_value = .15
+        coords = nodes.new("ShaderNodeTexCoord")
+        distance = nodes.new("ShaderNodeVectorMath")
+        distance.operation = "DISTANCE"
+        distance.inputs[1].default_value = (.5,.5,.5)
+        links.new(coords.outputs["Generated"],distance.inputs[0])
+        falloff = nodes.new("ShaderNodeMath")
+        falloff.operation = "SUBTRACT"
+        falloff.inputs[0].default_value = .54
+        falloff.use_clamp = True
+        links.new(distance.outputs["Value"],falloff.inputs[1])
+        noise = nodes.new("ShaderNodeTexNoise")
+        noise.inputs["Scale"].default_value = 4
+        noise.inputs["Detail"].default_value = 2
+        links.new(coords.outputs["Generated"],noise.inputs["Vector"])
+        density = nodes.new("ShaderNodeMath")
+        density.operation = "MULTIPLY"
+        links.new(falloff.outputs[0],density.inputs[0])
+        links.new(noise.outputs["Fac"],density.inputs[1])
+        gain = nodes.new("ShaderNodeMath")
+        gain.operation = "MULTIPLY"
+        gain.inputs[1].default_value = 4
+        links.new(density.outputs[0],gain.inputs[0])
+        links.new(gain.outputs[0],volume.inputs["Density"])
+        links.new(volume.outputs["Volume"],output.inputs["Volume"])
+        for i in range(6):
             a = i*2.4
-            x, y = .55*math.cos(a), .35*math.sin(a)
-            obj = sphere("Soft hot food vapor", (x, y, 1+i*.04), (.075, .075, .22), mist, root, 12)
-            for f in (1, scene.frame_end//2, scene.frame_end):
-                p = f/scene.frame_end
-                key(obj, f, "location", (x+.09*math.sin(i+p*TAU), y, 1+i*.04+.38*p))
-                key(obj, f, "scale", (.065+.06*p, .065+.06*p, .18+.15*p))
+            x,y = .42*math.cos(a),.27*math.sin(a)
+            obj = sphere("Soft hot food vapor",(x,y,1+i*.045),(.10,.10,.23),mist,root,12)
+            for f in (1,scene.frame_end//2,scene.frame_end):
+                p=f/scene.frame_end
+                key(obj,f,"location",(x+.10*math.sin(i+p*TAU),y,1+i*.045+.36*p))
+                key(obj,f,"scale",(.08+.075*p,.08+.075*p,.20+.16*p))
 
     if builder == "dragon":
         remove_named(("Flight creature body", "Creature head", "Sculpted flight wing",
@@ -220,8 +247,8 @@ def enhance(h):
             socket = sphere("Dragon eye socket", (x, -.4, 2.23), (.09, .07, .065), black, root)
             eye_mat = h["cyan"] if "ice" in spec["id"] else h["fire"]
             sphere("Luminous dragon iris", (x, -.455, 2.23), (.042, .032, .034), eye_mat, root)
-            sphere("Dragon vertical pupil", (x, -.48, 2.23), (.009, .01, .03), black, root, 12)
-            tube("Dragon swept brow", [(side*.11, -.46, 2.29), (side*.24, -.40, 2.33),
+            sphere("Dragon vertical pupil", (x, -.48, 2.23), (.006, .01, .03), black, root, 12)
+            tube("Dragon swept brow", [(side*.10, -.465, 2.255), (side*.24, -.42, 2.31),
                                       (side*.29, -.3, 2.28)], .033, scales, root)
             tube("Dragon curved horn", [(side*.17, -.04, 2.35), (side*.23, .03, 2.54),
                                        (side*.31, .16, 2.68)], .055, horn, root)
