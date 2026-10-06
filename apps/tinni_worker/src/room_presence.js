@@ -1359,6 +1359,13 @@ export class RoomPresenceStore extends DurableObject {
             sender_id: senderId,
             gift_id: giftId,
             gift_name: String(rawEvent.gift_name || "Gift").slice(0, 80),
+            category: String(rawEvent.category || "").slice(0, 20),
+            animation_url: String(rawEvent.animation_url || "").slice(0, 2048),
+            poster_url: String(rawEvent.poster_url || "").slice(0, 2048),
+            effect_tier: String(rawEvent.effect_tier || "").slice(0, 20),
+            animation_duration_ms: Math.max(1000,Math.min(15000,Number(rawEvent.animation_duration_ms || 5000))),
+            level_before: Math.max(1,Number(rawEvent.level_before || 1)),
+            level_after: Math.max(1,Number(rawEvent.level_after || 1)),
             room_summary: rawEvent.room_summary && typeof rawEvent.room_summary === "object"
               ? rawEvent.room_summary : null,
             receiver_ids: receiverIds,

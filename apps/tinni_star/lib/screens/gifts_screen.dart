@@ -6,6 +6,7 @@ import '../economy/enemy_gift_catalog.dart';
 import '../economy/premium_gift_catalog.dart';
 import '../effects/cinematic_video.dart';
 import '../effects/effect_queue.dart';
+import '../effects/gift_scene_overlay.dart';
 import '../infra/app_backend_service.dart';
 import 'store_screen.dart';
 import '../ui/royal_theme.dart';
@@ -24,7 +25,7 @@ class GiftsScreen extends StatefulWidget {
     'Normal' => PremiumGiftCatalog.normal,
     'Lucky' => GiftService.luckyCatalog,
     'CP' => PremiumGiftCatalog.cp,
-    "Enemy's" => EnemyGiftCatalog.gifts,
+    'VS' => EnemyGiftCatalog.gifts,
     'Country' => PremiumGiftCatalog.countries,
     'Luxury' => PremiumGiftCatalog.normal.where((gift) => gift.price >= 1000000).toList(growable: false),
     _ => [
@@ -42,16 +43,24 @@ class GiftsScreen extends StatefulWidget {
 class _GiftsScreenState extends State<GiftsScreen> {
   late String category;
   bool sending = false;
+  final _scenes=GiftSceneQueue();
+  @override
+  void dispose(){_scenes.dispose();super.dispose();}
 
   @override
   void initState() {
     super.initState();
     category = widget.initialCategory;
+    _refreshCatalog();
+  }
+
+  Future<void> _refreshCatalog() async {
+    try { await widget.state.refreshGiftCatalog(); if (mounted) setState(() {}); } catch (_) {}
   }
 
   Color _giftColor(GiftDefinition gift, int index) {
     final id = (gift.id + ' ' + gift.name).toLowerCase();
-    if (category == "Enemy's" || id.startsWith('enemy-')) {
+    if (category == 'VS' || id.startsWith('enemy-')) {
       return const Color(0xFFFF202D);
     }
     if (id.contains('heart') || id.contains('ring') || category == 'CP') {
@@ -78,7 +87,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
         return FeaturePalette.vip;
       case 'CP':
         return FeaturePalette.cp;
-      case "Enemy's":
+      case 'VS':
         return const Color(0xFFFF202D);
       case 'Backpack':
         return FeaturePalette.backpack;
@@ -89,7 +98,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
     }
   }
 
-  List<GiftDefinition> get gifts => GiftsScreen.catalogFor(category);
+  List<GiftDefinition> get gifts => widget.state.gifts.catalogFor(category, GiftsScreen.catalogFor(category));
 
   Future<void> send(GiftDefinition gift) async {
     if (sending) return;
@@ -127,6 +136,10 @@ class _GiftsScreenState extends State<GiftsScreen> {
         giftId: gift.id, giftName: gift.name, quantity: 1,
         unitPrice: gift.price, receiverIds: [recipient],
       );
+      widget.state.applyConfirmedGiftRelationships(response);
+      final transactions=response['transactions'] as List? ?? const [];
+      final confirmedGift=transactions.isEmpty?gift:gift.withServerMetadata(Map<String,dynamic>.from(transactions.first as Map));
+      _scenes.add(GiftSceneEvent(gift:confirmedGift,recipients:[recipient]));
       final wallet = response['wallet'];
       if (wallet is Map) {
         widget.state.wallet.applyRemote(RemoteWallet.fromServer(
@@ -165,7 +178,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
       'Normal',
       'Lucky',
       'CP',
-      "Enemy's",
+      'VS',
       'Country',
       'Luxury',
       'Backpack',
@@ -189,7 +202,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
           ),
         ],
       ),
-      body: Column(
+      body: Stack(children:[Column(
         children: [
           SizedBox(
             height: 52,
@@ -269,7 +282,10 @@ class _GiftsScreenState extends State<GiftsScreen> {
                             ],
                           ),
                           child: ClipOval(
-                            child: Image.asset(
+                            child: gift.posterUrl?.startsWith('https://')==true ? Image.network(
+                              gift.posterUrl!,fit:BoxFit.contain,cacheWidth:240,
+                              errorBuilder:(_,error,stackTrace)=>Center(child:Text(gift.emoji,style:const TextStyle(fontSize:36))),
+                            ) : Image.asset(
                               gift.artworkAsset ?? CinematicAssets.posterFor(gift.id),
                               key: ValueKey('gift-art-${gift.id}'),
                               fit: BoxFit.contain,
@@ -348,7 +364,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
             ),
           ),
         ],
-      ),
+      ),Positioned.fill(child:GiftSceneOverlay(queue:_scenes,onDelivered:(_){ }))]),
     );
   }
 }

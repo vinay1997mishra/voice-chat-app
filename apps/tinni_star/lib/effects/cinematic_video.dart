@@ -25,6 +25,8 @@ class CinematicVideo extends StatefulWidget {
     required this.timeline,
     required this.fallback,
     this.fit = BoxFit.contain,
+    this.networkUrl,
+    this.posterUrl,
   });
 
   final String sceneId;
@@ -32,6 +34,8 @@ class CinematicVideo extends StatefulWidget {
   final Animation<double> timeline;
   final Widget fallback;
   final BoxFit fit;
+  final String? networkUrl;
+  final String? posterUrl;
 
   @override
   State<CinematicVideo> createState() => _CinematicVideoState();
@@ -73,7 +77,7 @@ class _CinematicVideoState extends State<CinematicVideo>
   void didUpdateWidget(covariant CinematicVideo oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.sceneId != widget.sceneId ||
-        oldWidget.timeline != widget.timeline) {
+        oldWidget.timeline != widget.timeline || oldWidget.networkUrl != widget.networkUrl) {
       _release();
       _prepared = false;
       _failed = false;
@@ -85,17 +89,20 @@ class _CinematicVideoState extends State<CinematicVideo>
   }
 
   Future<void> _prepare() async {
+    final remote = Uri.tryParse(widget.networkUrl ?? '');
+    final validRemote = remote?.scheme == 'https';
     final path = CinematicAssets.movieFor(widget.sceneId);
-    if (path == null) return;
+    if (!validRemote && path == null) return;
     final token = ++_generation;
     final bundle = DefaultAssetBundle.of(context);
     VideoPlayerController? controller;
     try {
-      await bundle.load(path);
+      if (!validRemote) await bundle.load(path!);
       if (!mounted || token != _generation) return;
-      controller = VideoPlayerController.asset(
-        path,
-        videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      controller = validRemote ? VideoPlayerController.networkUrl(
+        remote!, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
+      ) : VideoPlayerController.asset(
+        path!, videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
       );
       _video = controller;
       controller.addListener(_playerChanged);
@@ -155,6 +162,10 @@ class _CinematicVideoState extends State<CinematicVideo>
   @override
   Widget build(BuildContext context) {
     if (_reducedMotion) {
+      final poster = widget.posterUrl;
+      if (poster != null && poster.startsWith('https://')) { return Image.network(
+        poster, fit:widget.fit, errorBuilder:(_,error,stackTrace)=>widget.fallback,
+      ); }
       return Image.asset(
         CinematicAssets.posterFor(widget.sceneId),
         key: ValueKey('cinematic-poster-' + widget.sceneId),

@@ -25,11 +25,14 @@ class _CpDisconnectScreenState extends State<CpDisconnectScreen> {
     setState(() {});
   }
 
+  bool busy=false;
   Future<void> _confirm() async {
     final account = widget.state.auth.current;
-    if (account == null) return;
+    final cp=widget.state.cp.relationship;
+    if (account == null || cp == null || busy) return;
+    setState(()=>busy=true);
     try {
-      await widget.state.backend.cpDisconnect(account.authToken);
+      await widget.state.backend.cpDisconnect(account.authToken,expectedPair:'${cp.userA}:${cp.userB}:${cp.startedAt.millisecondsSinceEpoch}');
       widget.state.cpFeatures.respondDisconnect(accept: true);
       widget.state.cp.disconnect();
       if (!mounted) return;
@@ -39,7 +42,7 @@ class _CpDisconnectScreenState extends State<CpDisconnectScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(error.toString().replaceFirst('Bad state: ', ''))),
       );
-    }
+    } finally { if(mounted)setState(()=>busy=false); }
   }
 
   @override
@@ -115,7 +118,7 @@ class _CpDisconnectScreenState extends State<CpDisconnectScreen> {
                     const SizedBox(height: 8),
                     FilledButton(
                       key: const Key('cp-disconnect-confirm'),
-                      onPressed: _confirm,
+                      onPressed: busy ? null : _confirm,
                       child: const Text('Confirm Disconnect'),
                     ),
                   ],
