@@ -5,6 +5,12 @@ on:
     branches: [tinnistar]
     paths: ['.github/workflows/tinni-gift-visual-review.yml']
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: Full app source SHA whose gift previews have already been published
+        required: true
+        default: '95cd3eccd87d3e7a232cd9df09cbe2de0351d139'
+        type: string
 
 permissions:
   contents: write
@@ -14,24 +20,55 @@ jobs:
     runs-on: ubuntu-24.04
     timeout-minutes: 8
     steps:
+      - name: Resolve the completed gift preview source
+        id: source
+        env:
+          SOURCE_SHA: ${{ inputs.source_sha || '95cd3eccd87d3e7a232cd9df09cbe2de0351d139' }}
+        run: |
+          python3 - <<'PY'
+          import os, re
+          assert re.fullmatch(r"[a-f0-9]{40}", os.environ["SOURCE_SHA"])
+          PY
+          echo "sha=$SOURCE_SHA" >> "$GITHUB_OUTPUT"
+          echo "ref=gift-preview-${SOURCE_SHA:0:12}" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@v4
         with:
-          ref: gift-preview-b874076d4e0b
-      - name: Compress visual review sheets for direct viewing
+          ref: ${{ steps.source.outputs.ref }}
+      - name: Export compact review sheets with readable gift names
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y python3-pil
           python3 - <<'PY'
+          import re, textwrap
           from pathlib import Path
-          from PIL import Image
+          from PIL import Image, ImageDraw, ImageFont
+          pattern = r"""GiftDefinition\(\s*id:\s*['"]([^'"]+)['"],\s*name:\s*['"]([^'"]+)['"]"""
+          premium = re.findall(pattern, Path("apps/tinni_star/lib/economy/premium_gift_catalog.dart").read_text())
+          lucky = re.findall(pattern, Path("apps/tinni_star/lib/economy/economy.dart").read_text())
+          names = [name for identifier, name in premium if not identifier.startswith("flag-")]
+          names += [name for identifier, name in lucky if identifier.startswith("lucky-")]
+          assert len(names) == 80
+          font = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 11)
           folder = Path("tools/gifts/previews")
-          for source in sorted(folder.glob("all-gifts-*.png")):
-              Image.open(source).convert("RGB").save(source.with_suffix(".jpg"), quality=90)
+          for batch, source in enumerate(sorted(folder.glob("all-gifts-*.png"))):
+              image = Image.open(source).convert("RGB")
+              assert image.size == (900, 2560)
+              draw = ImageDraw.Draw(image)
+              for slot, name in enumerate(names[batch*40:(batch+1)*40]):
+                  x, y = (slot%5)*180, (slot//5)*320
+                  # Widget tests may use the Ahem square font. Replace only the
+                  # caption strip; the actual subject and effect pixels stay intact.
+                  draw.rectangle((x, y+248, x+179, y+282), fill="#09111D")
+                  label = "\n".join(textwrap.wrap(name, width=25))
+                  box = draw.multiline_textbbox((0, 0), label, font=font, spacing=2)
+                  draw.multiline_text((x+90-(box[2]-box[0])/2, y+251), label,
+                      font=font, fill="#ffe4ad", spacing=2, align="center")
+              image.save(source.with_suffix(".jpg"), quality=90)
           assert len(list(folder.glob("all-gifts-*.jpg"))) == 2
           PY
       - name: Publish the review images
         env:
-          SOURCE_SHA: b874076d4e0bc3276e2e871c98e98f9706719cd8
+          SOURCE_SHA: ${{ steps.source.outputs.sha }}
         run: |
           set -euo pipefail
           git config user.name "github-actions[bot]"
