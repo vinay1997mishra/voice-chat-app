@@ -8077,7 +8077,7 @@ export class AppDirectoryStore extends DurableObject {
     const pair = [userId, targetId].sort();
     const now = Date.now();
     this.ctx.storage.sql.exec(
-      \`INSERT INTO enemy_relationships
+      `INSERT INTO enemy_relationships
         (user_a,user_b,state,rivalry,level,requested_by,last_rivalry_at,created_at,updated_at)
        VALUES (?,?, 'pending',0,1,?,?,?,?)
        ON CONFLICT(user_a,user_b) DO UPDATE SET
@@ -8086,7 +8086,7 @@ export class AppDirectoryStore extends DurableObject {
          level=1,
          requested_by=excluded.requested_by,
          last_rivalry_at=excluded.last_rivalry_at,
-         updated_at=excluded.updated_at\`,
+         updated_at=excluded.updated_at`,
       pair[0], pair[1], userId, now, now, now,
     );
     return this.enemyState(userId);
