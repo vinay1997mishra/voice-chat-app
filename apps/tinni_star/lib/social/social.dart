@@ -237,9 +237,11 @@ class SocialService {
           final local = account == null ? null : await localHistory?.readPhoto(account, id);
           if (local != null) return local;
           if (account != _localAccount) return null;
+          if (message.createdAt != null && DateTime.now().difference(message.createdAt!) >=
+              const Duration(days: 10)) { return null; }
           final url = Uri.tryParse(message.mediaUrl ?? '');
           if (url == null || url.origin != apiBase.origin ||
-              !url.path.startsWith('/message-media/')) return null;
+              !url.path.startsWith('/message-media/')) { return null; }
           final request = await openBackendRequest(_httpClient, 'GET', url);
           request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
           final response = await closeBackendRequest(request);

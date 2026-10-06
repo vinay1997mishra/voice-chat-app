@@ -326,8 +326,8 @@ export async function deleteOldAvatar(store,previous,next,userId) {
   await store.env.EFFECT_MEDIA?.delete(oldKey);
   return true;
 }
-export async function moveInlineAvatar(store,now=Date.now()) {
-  const row=one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE avatar_data_url LIKE 'data:image/%' LIMIT 1");
+export async function moveInlineAvatar(store,now=Date.now(),userId=null) {
+  const row=userId?one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE user_id=? AND avatar_data_url LIKE 'data:image/%'",userId):one(store,"SELECT user_id,avatar_data_url FROM app_users WHERE avatar_data_url LIKE 'data:image/%' LIMIT 1");
   if(!row) return 0;
   const match=/^data:(image\/(?:jpeg|png|webp));base64,([A-Za-z0-9+/=]+)$/.exec(row.avatar_data_url);
   if(!match) return 0;
@@ -383,10 +383,17 @@ export async function runColdMaintenance(store,now=Date.now()) {
         exec(store,"UPDATE storage_budget SET next_run=? WHERE id=1",now+3600000);
         return inventory;
       }
-      for(let batch=0;batch<2;batch++) {
-        archivedWallet+=await archiveWalletBatch(store,now);
+      const deadline=Date.now()+12000;
+      for(let batch=0;batch<16&&Date.now()<deadline;batch++) {
+        const moved=await archiveWalletBatch(store,now);
+        archivedWallet+=moved;
+        if(!moved) break;
       }
-      for(let image=0;image<4;image++) avatars+=await moveInlineAvatar(store,now);
+      for(let image=0;image<64&&Date.now()<deadline;image++) {
+        const moved=await moveInlineAvatar(store,now);
+        avatars+=moved;
+        if(!moved) break;
+      }
     } catch(error) {
       console.error("Storage maintenance paused; source rows remain safe",String(error?.message||error));
     }

@@ -4622,6 +4622,11 @@ export class AppDirectoryStore extends DurableObject {
       language,
       now,
     );
+    if(avatarDataUrl?.startsWith("data:image/")&&this.env.EFFECT_MEDIA&&this.env.USER_ARCHIVE) {
+      try { await coldStorage.moveInlineAvatar(this,now,userId); }
+      catch(error) { console.error("Current DP migration will retry",String(error?.message||error)); }
+    }
+
     return this.getUserById(userId);
   }
 
