@@ -32,6 +32,8 @@ jobs:
           python3 -m unittest discover -s tools/cinematic -p 'test_*.py'
 
   smoke:
+    # Superseded primitive geometry is held while the anime art catalog is prepared.
+    if: ${{ false }}
     needs: validate
     runs-on: ubuntu-24.04
     timeout-minutes: 45
