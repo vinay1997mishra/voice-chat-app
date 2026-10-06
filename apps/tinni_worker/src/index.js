@@ -1815,7 +1815,10 @@ export default {
       if (!key || key.includes("..")) {
         return new Response("Invalid media key", { status: 400 });
       }
-      if(coldStorage.isPrivateStorageKey(key)) return new Response("Not found",{status:404});
+      // Private chat photos are served only by the authenticated participant route.
+      if (key.startsWith("messages/") || coldStorage.isPrivateStorageKey(key)) {
+        return new Response("Not found", { status: 404 });
+      }
       const object = await env.EFFECT_MEDIA.get(key);
       if (!object) return new Response("Not found", { status: 404 });
       const headers = new Headers();
