@@ -132,6 +132,7 @@ export class FruitPartyStore extends DurableObject {
         settled_at INTEGER NOT NULL
       );
 
+      CREATE INDEX IF NOT EXISTS idx_party_empty_history ON party_results(total_bet,round_id);
       CREATE TABLE IF NOT EXISTS party_result_outbox (
         user_id TEXT NOT NULL, round_id INTEGER NOT NULL, payload TEXT NOT NULL,
         PRIMARY KEY(user_id, round_id)
@@ -402,6 +403,11 @@ export class FruitPartyStore extends DurableObject {
       totalPayout,
       players.size,
       settledAt,
+    );
+    // Bounded cleanup runs once per new settlement, never once per viewer read.
+    this.ctx.storage.sql.exec(
+      "DELETE FROM party_results WHERE round_id IN (SELECT round_id FROM party_results WHERE total_bet=0 AND round_id<? ORDER BY round_id LIMIT 2)",
+      roundId - 19,
     );
     saveGameResults(this, "party", "fruit_party", roundId, bets, payouts, winner, bonusFruits);
     });

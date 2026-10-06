@@ -1360,3 +1360,5 @@ Latest explicit user instruction: Fruit Jackpot and Fruit Party debit the user's
 - Keep intentional game visuals, bet amounts, multipliers, Lucky selection and unrelated financial rules. Idle refresh remains disabled.
 
 - Private wallet snapshots also include seller/merchant dollar balances, and open dollar/role balance views apply them directly without polling. Snapshot timestamps include role and settlement updates.
+
+- Storage follow-up: keep the recent 20 empty-round results; trim an older backlog by at most two empty rows per new settlement. Indexed cleanup never runs per viewer read. Every stake-bearing result, bet and financial ledger stays permanent.
