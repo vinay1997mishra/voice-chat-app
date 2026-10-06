@@ -141,7 +141,18 @@ class GiftAtmosphere extends StatelessWidget {
               offset: travel,
               child: Transform.rotate(
                 angle: dragon && !reducedMotion ? math.sin(orbit) * .07 : 0,
-                child: child,
+                // Feather the studio background so a flying dragon does not
+                // drag a hard rectangular movie frame through the room.
+                child: dragon ? ShaderMask(
+                  blendMode: BlendMode.dstIn,
+                  shaderCallback: (bounds) => const RadialGradient(
+                    center: Alignment(0, -.12),
+                    radius: .66,
+                    colors: [Colors.white, Colors.white, Colors.transparent],
+                    stops: [0, .48, 1],
+                  ).createShader(bounds),
+                  child: child,
+                ) : child,
               ),
             ),
             CustomPaint(
