@@ -39,7 +39,6 @@ abstract final class FeaturePalette {
   static const diamond = Color(0xFF61A3B7);
   static const ludo = Color(0xFF5D946B);
   static const uno = Color(0xFFB8574F);
-  static const fruitJackpot = Color(0xFFD2A13F);
   static const fruitParty = Color(0xFFB85E8A);
 
   static LinearGradient glow(Color color) => LinearGradient(
