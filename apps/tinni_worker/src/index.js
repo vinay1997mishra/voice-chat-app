@@ -1,10 +1,9 @@
 import * as coldStorage from "./cold_storage.js";
 import { DurableObject } from "cloudflare:workers";
-import { FruitGameStore } from "./fruit_game.js";
 import { FruitPartyStore } from "./fruit_party.js";
 import { RoomPresenceStore } from "./room_presence.js";
 import { AppDirectoryStore } from "./app_directory.js";
-export { FruitGameStore, FruitPartyStore, RoomPresenceStore, AppDirectoryStore };
+export { FruitPartyStore, RoomPresenceStore, AppDirectoryStore };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -731,11 +730,6 @@ async function verifySession(request, env) {
 function getStaffStore(env) {
   const id = env.STAFF_AUTH.idFromName("tinni-owner-staff-auth");
   return env.STAFF_AUTH.get(id);
-}
-
-function getFruitGameStore(env) {
-  const id = env.FRUIT_GAME.idFromName("tinni-fruit-game-global");
-  return env.FRUIT_GAME.get(id);
 }
 
 function getFruitPartyStore(env) {
@@ -4668,7 +4662,7 @@ export default {
       }
     }
 
-    if (["/fruit-game/live", "/fruit-party/live", "/ludo/live"].includes(url.pathname) && request.method === "GET") {
+    if (["/fruit-party/live", "/ludo/live"].includes(url.pathname) && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       if ((request.headers.get("upgrade") || "").toLowerCase() !== "websocket") {
@@ -4677,53 +4671,13 @@ export default {
       const headers = new Headers(request.headers);
       headers.set("x-tinni-user-id", String(appSession.user.user_id));
       headers.set("x-tinni-room-id", String(url.searchParams.get("room_id") || "").trim());
-      headers.set("x-tinni-game-key", "ludo");
+      headers.set("x-tinni-game-key", url.pathname === "/fruit-party/live" ? "fruit-party" : "ludo");
       headers.set("x-tinni-session-expires", String(appSession.exp));
-      const store = url.pathname === "/fruit-game/live" ? getFruitGameStore(env)
-        : url.pathname === "/fruit-party/live" ? getFruitPartyStore(env) : getAppDirectoryStore(env);
+      const store = url.pathname === "/fruit-party/live"
+        ? getFruitPartyStore(env)
+        : getAppDirectoryStore(env);
       try { return await store.fetch(new Request(request.url, { method: "GET", headers })); }
       catch (error) { return json({ ok: false, error: String(error?.message || "Game is unavailable") }, 403); }
-    }
-
-    if (url.pathname === "/fruit-game/state" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const state = await getFruitGameStore(env).state(appSession.user.user_id);
-      const gameConfig = (await getAppDirectoryStore(env).ownerState()).game_config || {};
-      return json({ ...state, owner_limits: {
-        min_bet: Number(gameConfig.min_bet || 0),
-        max_bet: Number(gameConfig.max_bet || 0),
-      } });
-    }
-
-    if (url.pathname === "/fruit-game/bet" && request.method === "POST") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      const ownerState = await getAppDirectoryStore(env).ownerState();
-      const gameConfig = ownerState.game_config || {};
-      if (ownerState.features?.games === false || gameConfig.enabled === false) {
-        return json({ ok: false, error: "Games are disabled by Owner" }, 403);
-      }
-      const amount = Number(body.amount || 0);
-      if (Number.isFinite(Number(gameConfig.min_bet)) && amount < Number(gameConfig.min_bet)) {
-        return json({ ok: false, error: "Bet is below Owner minimum" }, 400);
-      }
-      if (Number.isFinite(Number(gameConfig.max_bet)) && amount > Number(gameConfig.max_bet)) {
-        return json({ ok: false, error: "Bet is above Owner maximum" }, 400);
-      }
-      try {
-        const state = await getFruitGameStore(env).placeBet({
-          ...body,
-          user_id: appSession.user.user_id,
-        });
-        return json({ ...state, owner_limits: {
-          min_bet: Number(gameConfig.min_bet || 0),
-          max_bet: Number(gameConfig.max_bet || 0),
-        } }, 201);
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to place bet") }, 400);
-      }
     }
 
     if (url.pathname === "/fruit-party/state" && request.method === "GET") {
@@ -6560,22 +6514,17 @@ export default {
         return json({ ok: false, error: "Game investigation permission required" }, 403);
       }
       const userId = String(url.searchParams.get("user_id") || "").trim();
-      const jackpot = await getFruitGameStore(env).ownerStats(userId);
       const party = await getFruitPartyStore(env).ownerStats(userId);
       return json({
         ok: true,
         user_id: userId || null,
-        jackpot,
         party,
         totals: {
-          bet_count: Number(jackpot.bet_count || 0) + Number(party.bet_count || 0),
-          total_bet: Number(jackpot.total_bet || 0) + Number(party.total_bet || 0),
-          total_payout: Number(jackpot.total_payout || 0) + Number(party.total_payout || 0),
-          unique_players: Math.max(
-            Number(jackpot.unique_players || 0),
-            Number(party.unique_players || 0),
-          ),
-          house_net: Number(jackpot.house_net || 0) + Number(party.house_net || 0),
+          bet_count: Number(party.bet_count || 0),
+          total_bet: Number(party.total_bet || 0),
+          total_payout: Number(party.total_payout || 0),
+          unique_players: Number(party.unique_players || 0),
+          house_net: Number(party.house_net || 0),
         },
       });
     }
