@@ -1,5 +1,5 @@
 import * as coldStorage from "./cold_storage.js";
-const APP_SCHEMA_VERSION = "2026-10-06-cp-vs-transactions-2";
+const APP_SCHEMA_VERSION = "2026-10-08-room-directory-schema-repair-1";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
