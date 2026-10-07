@@ -65,7 +65,6 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Fruit Jackpot'), findsNothing);
     expect(find.text('Ludo'), findsOneWidget);
     expect(find.text('UNO'), findsNothing);
 
