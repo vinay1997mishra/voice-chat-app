@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/casino_fruit_art.dart';
+import '../ui/stable_image_provider.dart';
 
 const casinoBetAmounts = <int>[5000, 25000, 100000, 500000, 2000000, 10000000];
 const _board = <String?>['lemon', 'cherry', 'kiwi', 'strawberry', null,
@@ -36,13 +37,15 @@ class CasinoFruit {
 
 class CasinoResult {
   const CasinoResult({required this.round, required this.fruit, this.lucky = false,
-    this.bonus = const [], this.jackpot = false, required this.settledAt});
+    this.bonus = const [], this.jackpot = false, required this.settledAt,
+    this.topWinners = const <Map<String, dynamic>>[]});
   final int round;
   final String fruit;
   final bool lucky;
   final List<String> bonus;
   final bool jackpot;
   final DateTime settledAt;
+  final List<Map<String, dynamic>> topWinners;
 }
 
 /// Newest distinct settled rounds. Repeated snapshots never duplicate a slot.
@@ -226,9 +229,11 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
 
   int _seconds(Duration value) => math.max(0, (value.inMilliseconds + 999) ~/ 1000);
   CasinoResult? _revealed(CasinoSnapshot view) {
-    if (view.spinning || view.history.isEmpty) { return null; }
+    if (view.history.isEmpty) { return null; }
     final latest = view.history.first;
     final age = DateTime.now().difference(latest.settledAt).inMilliseconds;
+    // The server settles at the start of RESULT SPIN, so the winning result
+    // must remain visible during that phase and briefly into the next round.
     return age >= 0 && age < 8000 ? latest : null;
   }
 
@@ -269,15 +274,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
             Text(widget.title + ' • Recent results', style: const TextStyle(color: _gold,
               fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 12),
-            if (view.lastBetResult != null) ListTile(
+            if (view.lastBetResult != null) _PersonalResultHistory(
               key: const Key('game-last-personal-bet'),
-              title: Text('Your last bet • Round ' + view.lastBetResult!['round_id'].toString(),
-                style: const TextStyle(color: _gold)),
-              subtitle: Text(
-                'Bet ' + (view.lastBetResult!['bet_coins'] ?? 0).toString() + ' coins • ' +
-                ((view.lastBetResult!['winning_coins'] as num?)?.toInt() ?? 0).toString() + ' winning coins • ' +
-                (view.lastBetResult!['outcome'] == 'win' ? 'Won' : 'Lost'),
-                style: const TextStyle(color: _cream)),
+              result: view.lastBetResult!,
             ),
             if (view.history.isEmpty) const Text('No settled rounds yet.',
               style: TextStyle(color: _cream)),
@@ -436,12 +435,213 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
               ])),
             ],
           );
-            return viewport.maxHeight < 230
+            final body = viewport.maxHeight < 230
               ? SingleChildScrollView(child: SizedBox(height: 320, child: content))
               : content;
+            return Stack(clipBehavior: Clip.none, children: [
+              body,
+              if (result != null)
+                Positioned(
+                  top: 48, left: 24, right: 24,
+                  child: IgnorePointer(
+                    child: _FloatingRoundResult(
+                      key: Key(widget.gameId + '-floating-result'),
+                      result: result,
+                      personalResult: view.lastBetResult,
+                    ),
+                  ),
+                ),
+            ]);
           }),
         ),
       ),
+    );
+  }
+}
+
+class _FloatingRoundResult extends StatelessWidget {
+  const _FloatingRoundResult({super.key, required this.result, this.personalResult});
+  final CasinoResult result;
+  final Map<String, dynamic>? personalResult;
+
+  List<Map<String, dynamic>> get _bets {
+    final row = personalResult;
+    if (row == null || (row['round_id'] as num?)?.toInt() != result.round) {
+      return const <Map<String, dynamic>>[];
+    }
+    final raw = row['bets'];
+    if (raw is! List) return const <Map<String, dynamic>>[];
+    return [
+      for (final item in raw)
+        if (item is Map)
+          item.map((key, value) => MapEntry(key.toString(), value)),
+    ];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final bets = _bets;
+    final sameRound = personalResult != null &&
+        (personalResult!['round_id'] as num?)?.toInt() == result.round;
+    final personalWin = sameRound
+        ? ((personalResult!['winning_coins'] as num?)?.toInt() ?? 0)
+        : 0;
+    final personalBet = sameRound
+        ? ((personalResult!['bet_coins'] as num?)?.toInt() ?? 0)
+        : 0;
+    return Material(
+      elevation: 12,
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        constraints: const BoxConstraints(maxHeight: 142),
+        padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: const Color(0xF21A1028),
+          border: Border.all(color: _gold, width: 1.4),
+          boxShadow: const [
+            BoxShadow(color: Color(0xAA000000), blurRadius: 14, offset: Offset(0, 5)),
+          ],
+        ),
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          Row(children: [
+            CasinoFruitArt(fruitKey: result.fruit, size: 28),
+            const SizedBox(width: 7),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('LAST RESULT • ROUND ${result.round}',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _gold, fontSize: 10, fontWeight: FontWeight.w900)),
+              Text(result.lucky
+                  ? 'Lucky 11 • ${result.bonus.join(', ')}'
+                  : 'Winner: ${result.fruit}',
+                maxLines: 1, overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: _cream, fontSize: 9, fontWeight: FontWeight.w700)),
+            ])),
+            Text('BET ${casinoAmount(personalBet)}  •  WIN ${casinoAmount(personalWin)}',
+              style: TextStyle(color: personalWin > 0 ? const Color(0xFF7CF2B5) : _cream,
+                fontSize: 8, fontWeight: FontWeight.w900)),
+          ]),
+          if (result.topWinners.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            SizedBox(height: 38, child: Row(children: [
+              for (var i = 0; i < math.min(3, result.topWinners.length); i++)
+                Expanded(child: _TopWinnerMini(rank: i + 1, data: result.topWinners[i])),
+            ])),
+          ],
+          if (bets.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            SizedBox(height: 28, child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              itemCount: bets.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 5),
+              itemBuilder: (_, index) {
+                final bet = bets[index];
+                final fruit = bet['fruit_key']?.toString() ?? '';
+                final amount = (bet['bet_coins'] as num?)?.toInt() ?? 0;
+                final win = (bet['winning_coins'] as num?)?.toInt() ?? 0;
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(10),
+                    color: win > 0 ? const Color(0x332DD98B) : const Color(0x332D2338),
+                    border: Border.all(color: win > 0 ? const Color(0xFF71E5B0) : const Color(0xFF705F78)),
+                  ),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    CasinoFruitArt(fruitKey: fruit, size: 16),
+                    const SizedBox(width: 4),
+                    Text('${casinoAmount(amount)} → ${win > 0 ? '+' + casinoAmount(win) : 'LOSE'}',
+                      style: TextStyle(color: win > 0 ? const Color(0xFF8CF4C0) : _cream,
+                        fontSize: 8, fontWeight: FontWeight.w800)),
+                  ]),
+                );
+              },
+            )),
+          ],
+        ]),
+      ),
+    );
+  }
+}
+
+class _TopWinnerMini extends StatelessWidget {
+  const _TopWinnerMini({required this.rank, required this.data});
+  final int rank;
+  final Map<String, dynamic> data;
+
+  @override
+  Widget build(BuildContext context) {
+    final name = data['display_name']?.toString() ?? data['user_id']?.toString() ?? 'Winner';
+    final avatar = stableImageProvider(data['avatar_data_url']?.toString());
+    final win = (data['winning_coins'] as num?)?.toInt() ?? 0;
+    return Row(children: [
+      Stack(clipBehavior: Clip.none, children: [
+        CircleAvatar(
+          radius: 13,
+          backgroundColor: const Color(0xFF4B3854),
+          backgroundImage: avatar,
+          child: avatar == null ? const Icon(Icons.person, size: 14, color: _cream) : null,
+        ),
+        Positioned(right: -3, bottom: -3, child: Container(
+          width: 13, height: 13, alignment: Alignment.center,
+          decoration: const BoxDecoration(shape: BoxShape.circle, color: _gold),
+          child: Text('$rank', style: const TextStyle(color: Color(0xFF3A2432), fontSize: 7, fontWeight: FontWeight.w900)),
+        )),
+      ]),
+      const SizedBox(width: 5),
+      Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [
+        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis,
+          style: const TextStyle(color: _cream, fontSize: 8, fontWeight: FontWeight.w800)),
+        Text('+${casinoAmount(win)}', maxLines: 1,
+          style: const TextStyle(color: Color(0xFF83F0B8), fontSize: 8, fontWeight: FontWeight.w900)),
+      ])),
+    ]);
+  }
+}
+
+class _PersonalResultHistory extends StatelessWidget {
+  const _PersonalResultHistory({super.key, required this.result});
+  final Map<String, dynamic> result;
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = result['bets'];
+    final bets = raw is List
+        ? [for (final item in raw) if (item is Map)
+            item.map((key, value) => MapEntry(key.toString(), value))]
+        : const <Map<String, dynamic>>[];
+    final totalBet = (result['bet_coins'] as num?)?.toInt() ?? 0;
+    final totalWin = (result['winning_coins'] as num?)?.toInt() ?? 0;
+    return ExpansionTile(
+      initiallyExpanded: true,
+      tilePadding: EdgeInsets.zero,
+      childrenPadding: const EdgeInsets.only(bottom: 8),
+      iconColor: _gold,
+      collapsedIconColor: _gold,
+      title: Text('Your last result • Round ${result['round_id']}',
+        style: const TextStyle(color: _gold, fontWeight: FontWeight.w800)),
+      subtitle: Text(
+        'Bet ${casinoAmount(totalBet)} • Win ${casinoAmount(totalWin)} • ${result['outcome'] == 'win' ? 'Won' : 'Lost'}',
+        style: const TextStyle(color: _cream)),
+      children: [
+        for (final bet in bets)
+          ListTile(
+            dense: true,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 8),
+            leading: CasinoFruitArt(fruitKey: bet['fruit_key']?.toString() ?? '', size: 28),
+            title: Text(
+              '${bet['fruit_key'] ?? ''} • Bet ${casinoAmount((bet['bet_coins'] as num?)?.toInt() ?? 0)}',
+              style: const TextStyle(color: _cream, fontSize: 12)),
+            trailing: Text(
+              ((bet['winning_coins'] as num?)?.toInt() ?? 0) > 0
+                ? '+${casinoAmount((bet['winning_coins'] as num?)!.toInt())}'
+                : 'LOSE',
+              style: TextStyle(
+                color: ((bet['winning_coins'] as num?)?.toInt() ?? 0) > 0
+                    ? const Color(0xFF83F0B8) : Colors.white60,
+                fontWeight: FontWeight.w900)),
+          ),
+      ],
     );
   }
 }
