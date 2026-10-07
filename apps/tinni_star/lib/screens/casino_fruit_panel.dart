@@ -168,7 +168,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
         setState(() {});
       }
       // Refresh the authoritative phase as soon as a round expires.
-      if (widget.connectLive == null && view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
+      if (!_liveReady && view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
         _refreshedBoundary = view.round;
         unawaited(_refresh());
       }
@@ -176,8 +176,25 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   }
 
   bool get _waiting => _refreshFuture != null;
+  bool get _liveReady => widget.liveConnected?.call() == true;
+
+  void _ensureFallbackPoll([Duration? delay]) {
+    if (!mounted || !_active || _liveReady || _poll != null) { return; }
+    _poll = Timer(delay ?? const Duration(seconds: 2), () {
+      _poll = null;
+      if (mounted && _active && !_liveReady) { unawaited(_refresh()); }
+    });
+  }
+
   void _onServerChanged() {
-    if (mounted && _active) setState(() {});
+    if (!mounted || !_active) { return; }
+    if (_liveReady) {
+      _poll?.cancel();
+      _poll = null;
+    } else {
+      _ensureFallbackPoll();
+    }
+    setState(() {});
   }
 
   Future<void> _refresh() {
@@ -187,9 +204,8 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     // Do not race a wallet/state read against an in-flight transaction.
     if (_pendingFruit != null) {
       _poll?.cancel();
-      if (widget.connectLive == null) {
-        _poll = Timer(const Duration(seconds: 2), () => unawaited(_refresh()));
-      }
+      _poll = null;
+      _ensureFallbackPoll();
       return Future<void>.value();
     }
     final operation = _runRefresh();
@@ -209,10 +225,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
       if (mounted && _active) {
         _failures = widget.snapshot().connected ? 0 : (_failures + 1).clamp(1, 3).toInt();
         setState(() {});
-        if (widget.connectLive == null) {
-          _poll = Timer(Duration(seconds: _failures == 0 ? 2 : 2 + _failures * 2),
-            () => unawaited(_refresh()));
-        }
+        _ensureFallbackPoll(
+          Duration(seconds: _failures == 0 ? 2 : 2 + _failures * 2),
+        );
       }
     }
   }
@@ -229,11 +244,14 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
 
   int _seconds(Duration value) => math.max(0, (value.inMilliseconds + 999) ~/ 1000);
   CasinoResult? _revealed(CasinoSnapshot view) {
-    if (view.history.isEmpty) { return null; }
-    final latest = view.history.first;
+    final recent = recentCasinoResults(view.history);
+    if (recent.isEmpty) { return null; }
+    final latest = recent.first;
+    // RESULT SPIN is authoritative. Keep the panel visible for the whole spin
+    // even if the device clock is skewed from the server clock.
+    if (view.spinning) { return latest; }
     final age = DateTime.now().difference(latest.settledAt).inMilliseconds;
-    // The server settles at the start of RESULT SPIN, so the winning result
-    // must remain visible during that phase and briefly into the next round.
+    // Keep the settled result briefly into the next betting round.
     return age >= 0 && age < 8000 ? latest : null;
   }
 
