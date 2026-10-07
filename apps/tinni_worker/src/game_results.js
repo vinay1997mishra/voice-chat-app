@@ -92,9 +92,8 @@ export async function flushGameResults(store, prefix) {
 }
 
 export function fruitMultiplier(gameKey, key) {
-  const values = gameKey === 'fruit_jackpot'
-    ? {lemon:5,raspberry:5,kiwi:5,plum:5,banana:10,strawberry:10,watermelon:20,cherry:40}
-    : {lemon:5,raspberry:5,kiwi:5,plum:5,banana:10,strawberry:15,watermelon:25,cherry:45};
+  if (gameKey !== 'fruit_party') return 0;
+  const values = {lemon:5,raspberry:5,kiwi:5,plum:5,banana:10,strawberry:15,watermelon:25,cherry:45};
   return values[key] || 0;
 }
 export function mainDirectory(store) {
