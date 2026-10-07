@@ -87,7 +87,8 @@ for(const binding of ['FRUIT_GAME','FRUIT_PARTY']) {
     assert.equal(game.ctx.storage.sql.exec('SELECT * FROM '+prefix+'_result_outbox').toArray().length,0);
     const wins=r.directory.ctx.storage.sql.exec("SELECT id FROM wallet_transactions WHERE user_id=? AND kind='game_win'",user.user_id).toArray();
     assert.equal(wins.length,1);
-    assert.equal(await game.ctx.storage.getAlarm(),null);
+    if (binding === 'FRUIT_GAME') assert.ok(await game.ctx.storage.getAlarm());
+    else assert.equal(await game.ctx.storage.getAlarm(),null);
   });
 
   test(binding+' reports a loss without another debit when nobody watches',async t=>{

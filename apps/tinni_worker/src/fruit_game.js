@@ -385,7 +385,7 @@ export class FruitGameStore extends DurableObject {
         const leaders = this.ctx.storage.sql.exec(
           `SELECT user_id, SUM(amount) AS total_bet, MIN(created_at) AS first_bet
              FROM fruit_bets
-            WHERE created_at >= ? AND created_at < ?
+            WHERE created_at >= ? AND created_at < ? AND main_wallet=1
             GROUP BY user_id
             ORDER BY total_bet DESC, first_bet ASC, user_id ASC
             LIMIT 3`,
@@ -514,7 +514,7 @@ export class FruitGameStore extends DurableObject {
     ).toArray().length > 0;
     const jackpotSlotStart = Math.floor(now / JACKPOT_WINDOW_MS) * JACKPOT_WINDOW_MS;
     const jackpotHasBets = this.ctx.storage.sql.exec(
-      "SELECT id FROM fruit_bets WHERE created_at>=? AND created_at<? LIMIT 1",
+      "SELECT id FROM fruit_bets WHERE created_at>=? AND created_at<? AND main_wallet=1 LIMIT 1",
       jackpotSlotStart, jackpotSlotStart + JACKPOT_WINDOW_MS,
     ).toArray().length > 0;
     const watching = (this.ctx.getWebSockets?.("game:fruit-jackpot") || []).length > 0;
@@ -523,10 +523,13 @@ export class FruitGameStore extends DurableObject {
       return;
     }
 
-    const normalNextAlarm = (deliveryPending || jackpotDeliveryPending) && !watching && !pending ? now + 15000 :
-      now < bettingEndAt(currentRound)
-        ? bettingEndAt(currentRound)
-        : roundEndAt(currentRound);
+    let normalNextAlarm = Number.POSITIVE_INFINITY;
+    if (watching || pending || deliveryPending || jackpotDeliveryPending) {
+      normalNextAlarm = (deliveryPending || jackpotDeliveryPending) && !watching && !pending ? now + 15000 :
+        now < bettingEndAt(currentRound)
+          ? bettingEndAt(currentRound)
+          : roundEndAt(currentRound);
+    }
     const jackpotNextAlarm = jackpotHasBets ? jackpotSlotStart + JACKPOT_WINDOW_MS : Number.POSITIVE_INFINITY;
     const nextAlarm = Math.min(normalNextAlarm, jackpotNextAlarm);
     const existingAlarm = await this.ctx.storage.getAlarm();

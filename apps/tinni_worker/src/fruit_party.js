@@ -575,7 +575,7 @@ export class FruitPartyStore extends DurableObject {
         round_id: Number(row.round_id),
         fruit: FRUIT_BY_KEY.get(String(row.fruit_key)),
         mode: String(row.mode),
-        special_kind: String(row.mode) === "lucky_11_random_3" ? "lucky11" : null,
+        special_kind: String(row.mode).startsWith("lucky_11_random_") ? "lucky11" : null,
         bonus_fruits: Array.isArray(bonusKeys)
           ? bonusKeys
               .map((key) => FRUIT_BY_KEY.get(String(key)))
