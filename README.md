@@ -14,9 +14,9 @@ This branch starts from the verified consolidated release at `d979d6ec5c0edbfe0e
 
 ## Included user features
 
-Authentication/profile/ID/privacy, rooms/discovery/presence/seats/moderation/voice, music/media, messages/friends/social/family, CP/rings/memories/rankings, gifts/Lucky/Combo/rocket/effects, inventory/VIP/store, normal/diamond/role wallets and hierarchy portals, Fruit Jackpot/Fruit Party/Ludo, and the existing connector/function-pack interfaces.
+Authentication/profile/ID/privacy, rooms/discovery/presence/seats/moderation/voice, music/media, messages/friends/social/family, CP/rings/memories/rankings, gifts/Lucky/Combo/rocket/effects, inventory/VIP/store, normal/diamond/role wallets and hierarchy portals, Fruit Party/Ludo, and the existing connector/function-pack interfaces.
 
-Both fruit games show the seven newest distinct confirmed settled results. A new result replaces the oldest visible result. Ludo preserves four corner-coloured player positions with names, avatars and room microphone controls.
+Fruit Party shows the seven newest distinct confirmed settled results. A new result replaces the oldest visible result. Ludo preserves four corner-coloured player positions with names, avatars and room microphone controls.
 
 ## Checks and builds
 
