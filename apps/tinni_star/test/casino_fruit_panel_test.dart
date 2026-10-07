@@ -255,7 +255,12 @@ void main() {
         settledAt: DateTime.now().toUtc(),
       ),
     ];
-    game.lastBetResult = null;
+    game.lastBetResult = {
+      'round_id': 1,
+      'bet_coins': 0,
+      'winning_coins': 0,
+      'bets': const <Map<String, dynamic>>[],
+    };
     await tester.pumpWidget(_harness(game, id: 'fruit-jackpot'));
     await tester.pump();
     expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
