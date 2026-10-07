@@ -63,6 +63,7 @@ class ActiveRoomSession extends ChangeNotifier {
   int _voiceEpoch = 0;
   int _voiceRetrySeconds = 2;
   DateTime? _nextVoiceAttempt;
+  DateTime? _voiceReconnectingSince;
   Timer? _presenceRecoveryTimer;
   bool _presenceRecoveryRunning = false;
   bool _fallbackRefreshRunning = false;
@@ -232,6 +233,7 @@ class ActiveRoomSession extends ChangeNotifier {
       connectionError = null;
       _voiceRetrySeconds = 2;
       _nextVoiceAttempt = null;
+      _voiceReconnectingSince = null;
       await realtime.setRemoteAudioEnabled(_roomSoundEnabled);
       await setMicFromController();
     } catch (error) {
@@ -240,7 +242,8 @@ class ActiveRoomSession extends ChangeNotifier {
       connectionError = (connected ? 'Microphone update failed: ' : 'Voice connection failed: ') +
           error.toString().replaceFirst('Bad state: ', '');
       _nextVoiceAttempt = nowProvider().add(Duration(seconds: _voiceRetrySeconds));
-      _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 120).toInt();
+      _voiceRetrySeconds = (_voiceRetrySeconds * 2).clamp(2, 30).toInt();
+      _voiceReconnectingSince = null;
     } finally {
       _voiceAttemptRunning = false;
       if (epoch == _voiceEpoch) {
@@ -258,6 +261,7 @@ class ActiveRoomSession extends ChangeNotifier {
       if (_disposed || room == null || connecting) return;
       final voiceState = realtime.rtc.state;
       if (voiceState == RtcConnectionState.joined) {
+        _voiceReconnectingSince = null;
         if (!connected) {
           connected = true;
           connectionError = null;
@@ -275,8 +279,21 @@ class ActiveRoomSession extends ChangeNotifier {
         _syncLiveState(force: true);
         notifyListeners();
       }
-      if (voiceState == RtcConnectionState.reconnecting ||
-          !_voicePermissionGranted ||
+      if (voiceState == RtcConnectionState.reconnecting) {
+        final started = _voiceReconnectingSince ??= nowProvider();
+        // LiveKit normally heals short transport changes itself. If it stays
+        // stuck reconnecting, force a fresh token + join while preserving the
+        // independent room presence/seat session.
+        if (nowProvider().difference(started) < const Duration(seconds: 15)) {
+          return;
+        }
+        _voiceReconnectingSince = null;
+        _nextVoiceAttempt = null;
+        await retryVoice(requestPermission: false);
+        return;
+      }
+      _voiceReconnectingSince = null;
+      if (!_voicePermissionGranted ||
           (_nextVoiceAttempt?.isAfter(nowProvider()) ?? false)) { return; }
       await retryVoice(requestPermission: false);
     });
@@ -721,6 +738,7 @@ class ActiveRoomSession extends ChangeNotifier {
     _voiceEpoch++;
     _voiceTimer?.cancel();
     _fallbackStateTimer?.cancel();
+    _voiceReconnectingSince = null;
     final oldRoomId = room?.id;
     final oldAuthToken = _activeAuthToken;
     final oldController = controller;
@@ -770,7 +788,7 @@ class ActiveRoomSession extends ChangeNotifier {
     final delaySeconds = immediate ? 0 : _presenceRecoveryDelaySeconds;
     if (!immediate) {
       _presenceRecoveryDelaySeconds =
-          (_presenceRecoveryDelaySeconds * 2).clamp(2, 120).toInt();
+          (_presenceRecoveryDelaySeconds * 2).clamp(2, 30).toInt();
     }
 
     _presenceRecoveryTimer = Timer(Duration(seconds: delaySeconds), () {
