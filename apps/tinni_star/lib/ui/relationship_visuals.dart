@@ -203,8 +203,16 @@ class _RelationshipSeatAuraState extends State<RelationshipSeatAura> with Single
   @override
   void initState(){super.initState();motion=AnimationController(vsync:this,duration:const Duration(seconds:4));}
   @override
-  void didChangeDependencies(){super.didChangeDependencies();
-    if(widget.level>=5&&!MediaQuery.disableAnimationsOf(context)) { motion.repeat(); } else { motion.stop(); }}
+  void didChangeDependencies(){super.didChangeDependencies();_syncMotion();}
+  @override
+  void didUpdateWidget(covariant RelationshipSeatAura oldWidget){
+    super.didUpdateWidget(oldWidget);_syncMotion();
+  }
+  void _syncMotion(){
+    final animate=widget.level>=5&&!MediaQuery.disableAnimationsOf(context);
+    if(animate&&!motion.isAnimating) { motion.repeat(); }
+    if(!animate) { motion.stop(); }
+  }
   @override
   void dispose(){motion.dispose();super.dispose();}
   @override

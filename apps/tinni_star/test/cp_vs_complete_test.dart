@@ -18,6 +18,29 @@ class RelationshipBackend extends AppBackendService {
 }
 
 void main(){
+  testWidgets('room aura animates immediately when a pair crosses the unlock level',(tester)async{
+    Widget aura(int level,{bool reduced=false})=>MaterialApp(home:MediaQuery(
+      data:MediaQueryData(disableAnimations:reduced),
+      child:Scaffold(body:SizedBox(width:120,height:120,
+        child:RelationshipSeatAura(level:level,rivalry:true))),
+    ));
+    await tester.pumpWidget(aura(1));
+    await tester.pumpAndSettle();
+    expect(tester.hasRunningAnimations,isFalse);
+    await tester.pumpWidget(aura(5));
+    await tester.pump(const Duration(milliseconds:100));
+    expect(find.text('VS 5'),findsOneWidget);
+    expect(tester.hasRunningAnimations,isTrue);
+    await tester.pumpWidget(aura(5,reduced:true));
+    await tester.pump();
+    expect(tester.hasRunningAnimations,isFalse);
+    await tester.pumpWidget(aura(7));
+    await tester.pump(const Duration(milliseconds:100));
+    expect(tester.hasRunningAnimations,isTrue);
+    await tester.pumpWidget(const SizedBox());
+    expect(tester.takeException(),isNull);
+  });
+
   testWidgets('VS hero shows authoritative next level, identities and date without romantic elements',(tester)async{
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:RelationshipHero(
       rivalry:true,level:3,progress:4000000,previousThreshold:3000000,nextThreshold:6000000,
