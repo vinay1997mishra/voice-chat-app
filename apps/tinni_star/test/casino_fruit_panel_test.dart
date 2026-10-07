@@ -239,6 +239,32 @@ void main() {
     game.dispose();
   });
 
+  testWidgets('same-round server bets keep floating BET and WIN nonzero while receipt catches up', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = _Game();
+    game.spinning = true;
+    game.remaining = Duration.zero;
+    game.mine = 25000;
+    game.history = [
+      CasinoResult(
+        round: 1,
+        fruit: 'lemon',
+        settledAt: DateTime.now().toUtc(),
+      ),
+    ];
+    game.lastBetResult = null;
+    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot'));
+    await tester.pump();
+    expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
+    expect(find.text('BET 25K • WIN 1.3L'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    game.dispose();
+  });
+
   testWidgets('rapid intentional taps each submit and appear immediately', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
