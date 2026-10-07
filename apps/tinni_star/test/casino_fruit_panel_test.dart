@@ -8,8 +8,6 @@ import 'package:tinni_star/screens/casino_fruit_panel.dart';
 import 'package:tinni_star/ui/casino_fruit_art.dart';
 
 class _Game extends ChangeNotifier {
-  _Game({this.party = false});
-  final bool party;
   List<CasinoResult> history = [];
   int balance = 50000;
   int mine = 0;
@@ -22,7 +20,7 @@ class _Game extends ChangeNotifier {
     spinning: spinning, remaining: remaining,
     spinRemaining: spinning ? const Duration(seconds: 5) : Duration.zero,
     roundDuration: 21000, round: round, balance: balance, mine: mine, winnings: 0,
-    jackpot: party ? null : 85763, history: history, lastBetResult: lastBetResult,
+    history: history, lastBetResult: lastBetResult,
     fruits: [
       for (final key in ['lemon', 'cherry', 'kiwi', 'strawberry',
         'watermelon', 'banana', 'raspberry', 'plum'])
@@ -33,7 +31,7 @@ class _Game extends ChangeNotifier {
   void change() => notifyListeners();
 }
 
-Widget _harness(_Game game, {required String id, bool party = false,
+Widget _harness(_Game game, {required String id,
   Future<void> Function()? refresh, Future<String?> Function(String, int)? bet,
   VoidCallback? close, Future<void> Function()? connectLive, VoidCallback? disconnectLive,
   bool Function()? liveConnected}) => RepaintBoundary(
@@ -42,8 +40,8 @@ Widget _harness(_Game game, {required String id, bool party = false,
       body: MediaQuery(
         data: const MediaQueryData(disableAnimations: true),
         child: CasinoGameDock(child: CasinoFruitPanel(
-          title: party ? 'Fruit Party' : 'Fruit Jackpot', gameId: id,
-          party: party, source: game, snapshot: game.snapshot,
+          title: 'Fruit Party', gameId: id,
+          source: game, snapshot: game.snapshot,
           connectLive: connectLive, disconnectLive: disconnectLive, liveConnected: liveConnected,
           refresh: refresh ?? () async {}, bet: bet ?? (_, _) async => null, onClose: close,
         )),
@@ -55,7 +53,7 @@ void main() {
   testWidgets('live game reads once on entry, accepts push, and refreshes only on user request', (tester) async {
     final game = _Game();
     var reads = 0, connects = 0, disconnects = 0;
-    await tester.pumpWidget(_harness(game, id: 'fruit-party', party: true,
+    await tester.pumpWidget(_harness(game, id: 'fruit-party',
       refresh: () async { reads++; },
       connectLive: () async { connects++; },
       disconnectLive: () { disconnects++; },
@@ -84,7 +82,7 @@ void main() {
     var live = false;
     await tester.pumpWidget(_harness(
       game,
-      id: 'fruit-jackpot',
+      id: 'fruit-party',
       connectLive: () async {},
       liveConnected: () => live,
       refresh: () async {
@@ -107,7 +105,7 @@ void main() {
     expect(reads, 1);
     await tester.pump(const Duration(seconds: 3));
     expect(reads, greaterThanOrEqualTo(2));
-    expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
+    expect(find.byKey(const Key('fruit-party-floating-result')), findsOneWidget);
     expect(find.byTooltip('Round 1 • cherry'), findsOneWidget);
 
     live = true;
@@ -129,11 +127,11 @@ void main() {
 
   for (final party in [false, true]) {
     testWidgets('latest result replaces oldest while seven slots remain party=$party', (tester) async {
-      final game = _Game(party: party);
-      final id = party ? 'fruit-party' : 'fruit-jackpot';
+      final game = _Game();
+      const id = 'fruit-party';
       game.history = [for (var round = 1; round <= 7; round++)
         CasinoResult(round: round, fruit: 'lemon', settledAt: DateTime(2026))];
-      await tester.pumpWidget(_harness(game, id: id, party: party));
+      await tester.pumpWidget(_harness(game, id: id));
       await tester.pump();
       for (var slot = 0; slot < 7; slot++) {
         expect(find.byKey(Key(id + '-recent-slot-$slot')), findsOneWidget);
@@ -159,9 +157,9 @@ void main() {
         tester.view.devicePixelRatio = 1;
         addTearDown(tester.view.resetPhysicalSize);
         addTearDown(tester.view.resetDevicePixelRatio);
-        final game = _Game(party: party);
-        final id = party ? 'fruit-party' : 'fruit-jackpot';
-        await tester.pumpWidget(_harness(game, id: id, party: party));
+        final game = _Game();
+        const id = 'fruit-party';
+        await tester.pumpWidget(_harness(game, id: id));
         await tester.pump(const Duration(milliseconds: 180));
         final surface = find.byKey(Key(id + '-casino-surface'));
         expect(tester.getSize(surface).height, closeTo(size.height / 2, .01));
@@ -222,15 +220,15 @@ void main() {
         {'fruit_key': 'cherry', 'bet_coins': 25000, 'winning_coins': 100000, 'outcome': 'win'},
       ],
     };
-    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot'));
+    await tester.pumpWidget(_harness(game, id: 'fruit-party'));
     await tester.pump();
-    expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
+    expect(find.byKey(const Key('fruit-party-floating-result')), findsOneWidget);
     expect(find.textContaining('LAST RESULT'), findsOneWidget);
     expect(find.text('Alice'), findsOneWidget);
     expect(find.textContaining('5K → LOSE'), findsOneWidget);
     expect(find.textContaining('25K → +1L'), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('fruit-jackpot-history')));
+    await tester.tap(find.byKey(const Key('fruit-party-history')));
     await tester.pumpAndSettle();
     expect(find.textContaining('lemon • Bet 5K'), findsOneWidget);
     expect(find.textContaining('cherry • Bet 25K'), findsOneWidget);
@@ -261,9 +259,9 @@ void main() {
       'winning_coins': 0,
       'bets': const <Map<String, dynamic>>[],
     };
-    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot'));
+    await tester.pumpWidget(_harness(game, id: 'fruit-party'));
     await tester.pump();
-    expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
+    expect(find.byKey(const Key('fruit-party-floating-result')), findsOneWidget);
     expect(find.text('BET 25K • WIN 1.3L'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -278,19 +276,19 @@ void main() {
     final game = _Game();
     final pending = Completer<String?>();
     var calls = 0;
-    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot', bet: (fruit, value) {
+    await tester.pumpWidget(_harness(game, id: 'fruit-party', bet: (fruit, value) {
       calls++;
       return pending.future;
     }));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('fruit-jackpot-chip-25000')));
+    await tester.tap(find.byKey(const Key('fruit-party-chip-25000')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('casino-fruit-lemon')));
     await tester.tap(find.byKey(const Key('casino-fruit-lemon')));
     await tester.pump();
     expect(calls, 2);
     expect(find.textContaining('50K coins'), findsOneWidget);
-    await tester.tap(find.byKey(const Key('fruit-jackpot-chip-100000')));
+    await tester.tap(find.byKey(const Key('fruit-party-chip-100000')));
     await tester.pump();
     pending.complete(null);
     game.balance = 0; game.mine = 50000; game.change();
@@ -308,7 +306,7 @@ void main() {
     final game = _Game();
     final refresh = Completer<void>();
     var bets = 0;
-    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot',
+    await tester.pumpWidget(_harness(game, id: 'fruit-party',
       refresh: () => refresh.future,
       bet: (_, _) async { bets++; return null; }));
     await tester.pump();
