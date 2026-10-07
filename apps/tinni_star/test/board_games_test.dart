@@ -17,6 +17,7 @@ void main() {
       kind: GameKind.fruitParty,
     );
     expect(GameService.catalog, hasLength(6));
+    expect(GameService.catalog.first.title, 'Fruit Party');
     expect(
       GameService.catalog.firstWhere((g) => g.kind == GameKind.ludo).requiresServerAuthority,
       isTrue,
