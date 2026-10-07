@@ -367,6 +367,7 @@ jobs:
         env:
           TINNI_RELEASE_CERT_SHA256: ${{ secrets.TINNI_RELEASE_CERT_SHA256 }}
         run: |
+          set -euo pipefail
           APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/tinni-apk-certs.txt
@@ -417,6 +418,7 @@ jobs:
         env:
           TINNI_RELEASE_CERT_SHA256: ${{ secrets.TINNI_RELEASE_CERT_SHA256 }}
         run: |
+          set -euo pipefail
           APK="build/final-apks/app-arm64-v8a-release.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
