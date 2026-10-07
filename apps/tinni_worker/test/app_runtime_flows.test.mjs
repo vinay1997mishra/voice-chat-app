@@ -54,6 +54,7 @@ test('a committed gift stays successful when room visual delivery fails', async 
     return presence;
   };
   const sent = await r.request('/gifts/send', a.token, {
+    request_id:'visual_failure_0001',
     room_id: room.id, gift_id: 'rose', gift_name: 'Rose', quantity: 1,
     unit_price: 100, receiver_ids: [b.user_id],
   });

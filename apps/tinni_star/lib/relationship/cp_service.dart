@@ -10,6 +10,8 @@ class CpRelationship {
     this.intimacy = 0,
     this.level = 1,
     this.ringId,
+    this.nextLevelThreshold,
+    this.previousLevelThreshold = 0,
   });
 
   final String userA;
@@ -18,17 +20,11 @@ class CpRelationship {
   final int intimacy;
   final int level;
   final String? ringId;
+  final int? nextLevelThreshold;
+  final int previousLevelThreshold;
 
   CpRelationship addIntimacy(int value) {
-    final next = intimacy + value;
-    return CpRelationship(
-      userA: userA,
-      userB: userB,
-      startedAt: startedAt,
-      intimacy: next,
-      level: 1 + (next ~/ 1000),
-      ringId: ringId,
-    );
+    throw StateError('CP progress requires a confirmed server gift transaction');
   }
 
   CpRelationship withRing(String ringId) => CpRelationship(
@@ -38,6 +34,8 @@ class CpRelationship {
         intimacy: intimacy,
         level: level,
         ringId: ringId,
+        nextLevelThreshold: nextLevelThreshold,
+        previousLevelThreshold: previousLevelThreshold,
       );
 }
 
@@ -71,6 +69,8 @@ class CpService {
             intimacy: remote.intimacy,
             level: remote.level,
             ringId: remote.ringId,
+            nextLevelThreshold: remote.nextLevelThreshold,
+            previousLevelThreshold: remote.previousLevelThreshold,
           )
         : null;
   }

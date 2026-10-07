@@ -276,6 +276,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: Tinni-Casino-Game-Previews
           path: apps/tinni_star/build/game_previews/*.png
           if-no-files-found: ignore
@@ -366,22 +367,17 @@ jobs:
         env:
           TINNI_RELEASE_CERT_SHA256: ${{ secrets.TINNI_RELEASE_CERT_SHA256 }}
         run: |
+          set -euo pipefail
           APK="build/app/outputs/flutter-apk/app-arm64-v8a-release.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/tinni-apk-certs.txt
-          actual="$(
-            sed -n 's/^Signer #1 certificate SHA-256 digest: //p' /tmp/tinni-apk-certs.txt |
-            head -1 |
-            tr -d ':' |
-            tr '[:upper:]' '[:lower:]'
-          )"
-          expected="$(printf '%s' "$TINNI_RELEASE_CERT_SHA256" | tr -d ':' | tr '[:upper:]' '[:lower:]')"
-          test -n "$actual" && test "$actual" = "$expected"
+          python3 ../../tools/signing/verify_apk_certificate.py /tmp/tinni-apk-certs.txt
 
       - name: Upload Tinni Star ARM64 APK
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: Tinni-Star-ARM64
           path: apps/tinni_star/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
@@ -390,6 +386,7 @@ jobs:
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: Tinni-Star-Split-APKs
           path: apps/tinni_star/build/app/outputs/flutter-apk/app-*-release.apk
           if-no-files-found: error
@@ -418,11 +415,15 @@ jobs:
       - name: Verify separate APK identity and signing
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
+        env:
+          TINNI_RELEASE_CERT_SHA256: ${{ secrets.TINNI_RELEASE_CERT_SHA256 }}
         run: |
+          set -euo pipefail
           APK="build/final-apks/app-arm64-v8a-release.apk"
           APKSIGNER="$(find "$ANDROID_HOME/build-tools" -type f -name apksigner | sort -V | tail -1)"
           AAPT="$(find "$ANDROID_HOME/build-tools" -type f -name aapt | sort -V | tail -1)"
-          "$APKSIGNER" verify --print-certs "$APK"
+          "$APKSIGNER" verify --print-certs "$APK" | tee /tmp/tinni-final-apk-certs.txt
+          python3 ../../tools/signing/verify_apk_certificate.py /tmp/tinni-final-apk-certs.txt
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.tinnistar.tinni_star.finalapp'"
           "$AAPT" dump badging "$APK" | grep -F "application-label:'Tinni Star Final'"
 
@@ -430,6 +431,7 @@ jobs:
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: Tinni-Star-Final-ARM64
           path: apps/tinni_star/build/final-apks/app-arm64-v8a-release.apk
           if-no-files-found: error
@@ -438,6 +440,7 @@ jobs:
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: Tinni-Star-Final-Separate-APKs
           path: apps/tinni_star/build/final-apks/*.apk
           if-no-files-found: error
@@ -446,11 +449,12 @@ jobs:
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         uses: actions/upload-artifact@v4
         with:
+          overwrite: true
           name: Tinni-Star-Final-Provider-Readiness
           path: /tmp/tinni-app-readiness.json
           if-no-files-found: error
 
-      - name: Publish direct signed update APK
+      - name: Publish direct signed APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/tinnistar' && steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -462,7 +466,7 @@ jobs:
           tag="tinnistar-final-${version//+/-}"
           file="Tinni-Star-Final-${version//+/-}-arm64.apk"
           cp apps/tinni_star/build/final-apks/app-arm64-v8a-release.apk "/tmp/$file"
-          printf '%s\n' 'Signed ARM64 update for the existing Tinni Star Final Android package.' 'Built from the tinnistar branch after backend tests, Flutter analysis/tests, live health and package/signature verification.' > /tmp/tinni-release-notes.md
+          printf '%s\n' 'Fresh signed ARM64 installation of Tinni Star Final with CP and VS.' 'This release uses a new signing certificate. If Android reports a signature conflict with an older Tinni Star Final installation, uninstall that old package before installing this APK.' 'Built from the tinnistar branch after backend tests, Flutter analysis/tests, live health and package/signature verification.' > /tmp/tinni-release-notes.md
           if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             gh release upload "$tag" "/tmp/$file" --repo "$GITHUB_REPOSITORY" --clobber
           else

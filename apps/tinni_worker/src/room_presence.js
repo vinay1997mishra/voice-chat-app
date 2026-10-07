@@ -960,7 +960,7 @@ export class RoomPresenceStore extends DurableObject {
       targetUserId,
     );
     this.ctx.storage.sql.exec(
-      "UPDATE room_members SET seat_index = NULL, mic_enabled = 0, last_seen = ? WHERE user_id = ?",
+      "UPDATE room_members SET seat_index = NULL, mic_enabled = 0, seat_emote = NULL, seat_emote_until = NULL, last_seen = ? WHERE user_id = ?",
       now,
       targetUserId,
     );
@@ -984,6 +984,11 @@ export class RoomPresenceStore extends DurableObject {
     if (!emote || emote.length > 16) {
       throw new Error("emote is invalid");
     }
+    const customPack = /^(panda|enemy)-/.test(emote);
+    const customMatch = /^(panda|enemy)-(\d{2})$/.exec(emote);
+    if (customPack && (!customMatch || Number(customMatch[2]) < 1 || Number(customMatch[2]) > 25)) {
+      throw new Error("emote is invalid");
+    }
     if (!Number.isInteger(seatIndex) || seatIndex < 0) {
       throw new Error("seat_index is required");
     }
@@ -1002,7 +1007,7 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       "UPDATE room_members SET seat_emote = ?, seat_emote_until = ?, last_seen = ? WHERE user_id = ?",
       emote,
-      now + 3000,
+      now + (customPack ? 5000 : 3000),
       now,
       userId,
     );
@@ -1359,6 +1364,13 @@ export class RoomPresenceStore extends DurableObject {
             sender_id: senderId,
             gift_id: giftId,
             gift_name: String(rawEvent.gift_name || "Gift").slice(0, 80),
+            category: String(rawEvent.category || "").slice(0, 20),
+            animation_url: String(rawEvent.animation_url || "").slice(0, 2048),
+            poster_url: String(rawEvent.poster_url || "").slice(0, 2048),
+            effect_tier: String(rawEvent.effect_tier || "").slice(0, 20),
+            animation_duration_ms: Math.max(1000,Math.min(15000,Number(rawEvent.animation_duration_ms || 5000))),
+            level_before: Math.max(1,Number(rawEvent.level_before || 1)),
+            level_after: Math.max(1,Number(rawEvent.level_after || 1)),
             room_summary: rawEvent.room_summary && typeof rawEvent.room_summary === "object"
               ? rawEvent.room_summary : null,
             receiver_ids: receiverIds,

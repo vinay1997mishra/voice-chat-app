@@ -125,7 +125,11 @@ export function runtime({ legacyRoomSettings = false } = {}) {
   }
   const exports = new Function('coldStorage','DurableObject', ...Object.keys(classes),
     source('index.js').replace('export default', 'const worker =') +
-    '\nreturn { worker, createSession };')(coldStorage,DurableObject, ...Object.values(classes));
+    '\nreturn { worker, createSession, StaffAuthStore };')(coldStorage,DurableObject, ...Object.values(classes));
+  const staff = new exports.StaffAuthStore(context('STAFF_AUTH'), env);
+  env.STAFF_AUTH = {idFromName: value => value, get: () => new Proxy(staff,{
+    get(object,property){const value=object[property];return typeof value==='function'?async (...args)=>value.apply(object,args):undefined;}
+  })};
   env.APP_DIRECTORY.get('tinni-app-directory');
   const directory = objects.get('APP_DIRECTORY:tinni-app-directory');
   async function user(index) {
@@ -153,6 +157,11 @@ export function runtime({ legacyRoomSettings = false } = {}) {
     return { status: response.status, data };
   }
   return { env, directory, user, request, objects,mediaObjects,archiveObjects,
+    fetch: request => exports.worker.fetch(request, env),
+    ownerCookie: async () => {
+      env.OWNER_EMAIL = 'owner@example.test';
+      return 'tinni_owner_session=' + await exports.createSession({role:'owner',email:env.OWNER_EMAIL},env.SESSION_SECRET);
+    },
     direct: (binding, id) => { env[binding].get(id); return objects.get(binding + ':' + id); },
     close: () => databases.forEach(db => db.close()) };
 }

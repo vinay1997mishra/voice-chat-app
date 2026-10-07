@@ -118,6 +118,13 @@ class GiftDefinition {
     this.emoji = '🎁',
     this.maxMultiplier = 0,
     this.artworkAsset,
+    this.category = '',
+    this.animationUrl,
+    this.posterUrl,
+    this.effectTier = '',
+    this.animationDurationMs = 5000,
+    this.levelBefore = 1,
+    this.levelAfter = 1,
   });
 
   final String id;
@@ -128,6 +135,52 @@ class GiftDefinition {
   final String emoji;
   final int maxMultiplier;
   final String? artworkAsset;
+  final String category;
+  final String? animationUrl;
+  final String? posterUrl;
+  final String effectTier;
+  final int animationDurationMs;
+  final int levelBefore;
+  final int levelAfter;
+
+  String get resolvedCategory {
+    if (category.isNotEmpty) return category.toLowerCase() == 'enemy' ? 'vs' : category.toLowerCase();
+    if (id.startsWith('cp-')) return 'cp';
+    if (id.startsWith('enemy-') || id.startsWith('vs-')) return 'vs';
+    if (id.startsWith('flag-')) return 'country';
+    return lucky ? 'lucky' : 'normal';
+  }
+
+  GiftDefinition withServerMetadata(Map<String,dynamic> tx) => GiftDefinition(
+    id:id,name:tx['gift_name']?.toString() ?? name,
+    price:int.tryParse(tx['unit_price']?.toString() ?? '') ?? price,
+    effectKind:effectKind,lucky:lucky,emoji:emoji,maxMultiplier:maxMultiplier,
+    artworkAsset:artworkAsset,category:tx['category']?.toString() ?? category,
+    animationUrl:tx['animation_url']?.toString() ?? animationUrl,
+    posterUrl:tx['poster_url']?.toString() ?? posterUrl,
+    effectTier:tx['effect_tier']?.toString() ?? effectTier,
+    animationDurationMs:int.tryParse(tx['animation_duration_ms']?.toString() ?? '') ?? animationDurationMs,
+    levelBefore:int.tryParse(tx['level_before']?.toString() ?? '') ?? 1,
+    levelAfter:int.tryParse(tx['level_after']?.toString() ?? '') ?? 1,
+  );
+
+  factory GiftDefinition.fromCatalog(Map<String, dynamic> item) {
+    final data = Map<String, dynamic>.from(item['data'] as Map? ?? const {});
+    int number(String key, [int fallback = 0]) => int.tryParse(data[key]?.toString() ?? '') ?? fallback;
+    final category = data['category']?.toString().toLowerCase() ?? 'normal';
+    return GiftDefinition(
+      id: item['id'].toString(), name: item['name']?.toString() ?? 'Gift',
+      price: number('coin_price', number('price')),
+      effectKind: data['effect_kind']?.toString() ?? 'scene',
+      category: category, lucky: category != 'cp' && category != 'vs' && (data['lucky'] == true || category == 'lucky'),
+      emoji: data['emoji']?.toString() ?? (category == 'vs' ? '⚡' : category == 'cp' ? '💖' : '🎁'),
+      animationUrl: data['animation_url']?.toString() ?? data['asset_url']?.toString(),
+      posterUrl: data['poster_url']?.toString(),
+      effectTier: data['effect_tier']?.toString() ?? '',
+      animationDurationMs: number('animation_duration_ms',5000).clamp(1000,15000).toInt(),
+      maxMultiplier: number('max_multiplier'), artworkAsset: data['artwork_asset']?.toString(),
+    );
+  }
 }
 
 class GiftTransaction {
@@ -151,6 +204,18 @@ class GiftService {
 
   final WalletService wallet;
   final List<GiftTransaction> sent = <GiftTransaction>[];
+  List<GiftDefinition>? approvedCatalog;
+  void applyCatalog(List<Map<String, dynamic>> items) {
+    approvedCatalog = List.unmodifiable(items.map(GiftDefinition.fromCatalog));
+  }
+  List<GiftDefinition> catalogFor(String category, List<GiftDefinition> fallback) {
+    final catalog = approvedCatalog;
+    if (catalog == null) return fallback;
+    final filter = category.toLowerCase();
+    if (filter == 'popular') return catalog.where((gift) => gift.resolvedCategory != 'country').toList();
+    if (filter == 'luxury') return catalog.where((gift) => gift.resolvedCategory == 'normal' && gift.price >= 1000000).toList();
+    return catalog.where((gift) => gift.resolvedCategory == filter).toList();
+  }
 
   static const catalog = [
     GiftDefinition(id: 'rose', name: 'Rose', price: 100, effectKind: 'svga'),
