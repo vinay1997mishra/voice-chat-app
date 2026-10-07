@@ -367,6 +367,8 @@ void main() {
     expect(find.text('Backpack'), findsNothing);
     expect(find.byKey(const Key('room-gift-wallet-coins')), findsOneWidget);
 
+    await tester.ensureVisible(find.byKey(const Key('gift-category-lucky')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('gift-category-lucky')));
     await tester.pump(const Duration(milliseconds: 300));
     expect(
@@ -375,6 +377,8 @@ void main() {
     );
     expect(find.byKey(const Key('lucky-quantity-plus')), findsOneWidget);
     expect(find.byKey(const Key('lucky-quantity-presets')), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('lucky-quantity-presets')));
+    await tester.pump();
     await tester.tap(find.byKey(const Key('lucky-quantity-presets')));
     await tester.pump(const Duration(milliseconds: 300));
     for (final quantity in const <int>[
