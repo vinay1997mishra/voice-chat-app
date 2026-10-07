@@ -285,6 +285,10 @@ class FruitJackpotRemoteService extends ChangeNotifier {
       bonusFruits: bonusFruits,
       jackpotHit: row['jackpot_hit'] == true,
       jackpotPayout: _asInt(row['jackpot_payout']),
+      topWinners: [
+        for (final item in _asList(row['top_winners']))
+          Map<String, dynamic>.from(_asMap(item)),
+      ],
     );
   }
 
