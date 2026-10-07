@@ -237,8 +237,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final amount = _selected;
     setState(() => _pendingFruit = fruit.key);
     try {
-      final reading = _refreshFuture;
-      if (reading != null) { await reading; }
+      // Submit immediately from the current server-backed board. A background
+      // refresh must never sit in front of a user's bet tap; the remote game
+      // service/server still validate the live round and reject locked bets.
       if (!mounted || !_active) { return; }
       final error = await widget.bet(fruit.key, amount);
       if (!mounted) { return; }
