@@ -24,7 +24,7 @@ test('real Workers RPC: '+(legacy ? 'legacy settings migration, ' : '')+'room en
     r2Buckets: ['EFFECT_MEDIA'],
     durableObjects: Object.fromEntries([
       ['APP_DIRECTORY','AppDirectoryStore'], ['ROOM_PRESENCE',legacy ? 'LegacyRoomPresenceStore' : 'RoomPresenceStore'],
-      ['FRUIT_GAME','FruitGameStore'], ['FRUIT_PARTY','FruitPartyStore'],
+      ['FRUIT_PARTY','FruitPartyStore'],
       ['STAFF_AUTH','StaffAuthStore'],
     ].map(([binding,className]) => [binding,{className,useSQLite:true}])),
   });
