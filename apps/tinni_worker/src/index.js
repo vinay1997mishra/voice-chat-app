@@ -1611,6 +1611,7 @@ export default {
           app_directory: failedCheck === "room_presence" ? "ok" : "unavailable",
           room_presence: failedCheck === "room_presence" ? "unavailable" : "unknown",
           failed_check: failedCheck,
+          detail: String(error?.message || error || "unknown").slice(0, 240),
           error: "Backend storage is temporarily unavailable",
         }, 503);
       }
