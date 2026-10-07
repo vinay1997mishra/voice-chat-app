@@ -31,6 +31,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
   final Duration requestTimeout;
   Future<void>? _syncFuture;
   bool _disposed = false;
+  String? _sessionToken;
   int _latestServerTime = 0;
   late final _live = GameLiveConnection(apiBase: apiBase, path: '/fruit-game/live',
     onState: (data) {
@@ -40,8 +41,21 @@ class FruitJackpotRemoteService extends ChangeNotifier {
       lastError = null;
     }, onStatus: () { if (!_disposed) notifyListeners(); });
   bool get liveConnected => _live.connected;
-  Future<void> connectLive(String token) => _disposed ? Future<void>.value() : _live.connect(token);
+  Future<void> connectLive(String token) {
+    if (_disposed) return Future<void>.value();
+    _prepareSession(token);
+    return _live.connect(token);
+  }
   void disconnectLive() => _live.disconnect();
+
+  void _prepareSession(String token) {
+    if (_sessionToken == token) return;
+    _sessionToken = token;
+    lastBetResult = null;
+    for (final fruit in FruitKind.values) {
+      myBets[fruit] = 0;
+    }
+  }
 
   bool connected = false;
   bool loading = false;
@@ -102,6 +116,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
 
   Future<void> sync(String authToken) {
     if (_disposed) return Future<void>.value();
+    _prepareSession(authToken);
     final pending = _syncFuture;
     if (pending != null) return pending;
     final operation = _sync(authToken);
@@ -144,6 +159,7 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     required FruitKind fruit,
     required int amount,
   }) async {
+    _prepareSession(authToken);
     if (!connected) {
       await sync(authToken);
       if (!connected) {
@@ -246,7 +262,14 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     jackpot = _asInt(data['jackpot']);
     jackpotEvent = data['jackpot_event'] is Map ? _asMap(data['jackpot_event']) : jackpotEvent;
     walletBalance = _asInt(data['wallet_balance']);
-    lastBetResult = data['last_bet_result'] is Map ? _asMap(data['last_bet_result']) : null;
+    if (data['last_bet_result'] is Map) {
+      final incomingResult = _asMap(data['last_bet_result']);
+      final incomingRound = _asInt(incomingResult['round_id']);
+      final currentRound = _asInt(lastBetResult?['round_id']);
+      if (incomingRound >= currentRound) {
+        lastBetResult = incomingResult;
+      }
+    }
     todayWinnings = _asInt(data['today_winnings']);
 
     final rawMyBets = _asMap(data['my_bets']);
@@ -254,11 +277,16 @@ class FruitJackpotRemoteService extends ChangeNotifier {
       myBets[fruit] = _asInt(rawMyBets[fruit.name]);
     }
 
+    final incomingHistory = _asList(data['history']).map(_parseHistory).whereType<FruitRoundResult>().toList();
+    final byRound = <int, FruitRoundResult>{
+      for (final item in history) item.roundId: item,
+      for (final item in incomingHistory) item.roundId: item,
+    };
+    final mergedHistory = byRound.values.toList()
+      ..sort((a, b) => b.roundId.compareTo(a.roundId));
     history
       ..clear()
-      ..addAll(
-        _asList(data['history']).map(_parseHistory).whereType<FruitRoundResult>(),
-      );
+      ..addAll(mergedHistory.take(20));
   }
 
   FruitRoundResult? _parseHistory(dynamic value) {
