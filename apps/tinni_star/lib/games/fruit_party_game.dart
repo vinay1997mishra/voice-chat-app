@@ -25,6 +25,7 @@ class FruitPartyRoundResult {
     required this.settledAt,
     this.lucky11 = false,
     this.bonusFruits = const <FruitPartyKind>[],
+    this.topWinners = const <Map<String, dynamic>>[],
   });
 
   final int roundId;
@@ -35,4 +36,5 @@ class FruitPartyRoundResult {
   final DateTime settledAt;
   final bool lucky11;
   final List<FruitPartyKind> bonusFruits;
+  final List<Map<String, dynamic>> topWinners;
 }
