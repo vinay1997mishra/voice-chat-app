@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 
 import '../app/tinni_state.dart';
 import '../ui/royal_theme.dart';
-import 'fruit_jackpot_screen.dart';
 import 'fruit_party_screen.dart';
 import 'ludo_screen.dart';
 
@@ -11,13 +10,11 @@ class GamesScreen extends StatelessWidget {
     super.key,
     required this.state,
     this.roomId = 'active-room',
-    this.onFruitJackpot,
     this.onFruitParty,
   });
 
   final TinniState state;
   final String roomId;
-  final VoidCallback? onFruitJackpot;
   final VoidCallback? onFruitParty;
 
   void _showQuickGame(BuildContext context, String title, String gameKey, List<String> actions) {
@@ -69,26 +66,6 @@ class GamesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final games = <(String, IconData, Color, VoidCallback)>[
-      (
-        'Fruit Jackpot',
-        Icons.local_florist_rounded,
-        FeaturePalette.fruitJackpot,
-        () {
-          if (onFruitJackpot != null) {
-            Navigator.pop(context);
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              onFruitJackpot!();
-            });
-            return;
-          }
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => FruitJackpotScreen(state: state),
-            ),
-          );
-        },
-      ),
       (
         'Fruit Party',
         Icons.celebration_rounded,
