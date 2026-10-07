@@ -14,7 +14,6 @@ class FruitPartyPanel extends StatelessWidget {
     return CasinoFruitPanel(
       title: 'Fruit Party',
       gameId: 'fruit-party',
-      party: true,
       source: game,
       onClose: onClose,
       liveConnected: () => game.liveConnected,
