@@ -7,12 +7,14 @@ on:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
       - '.github/workflows/tinni-worker-check.yml'
+      - 'tools/signing/**'
   pull_request:
     branches: [tinnistar]
     paths:
       - 'apps/tinni_worker/**'
       - 'apps/tinni_owner_panel/**'
       - '.github/workflows/tinni-worker-check.yml'
+      - 'tools/signing/**'
   workflow_dispatch:
 
 jobs:
@@ -22,6 +24,15 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Setup Java for release signing tests
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Verify fresh release signing setup
+        run: python3 -m unittest discover -s tools/signing -p 'test_*.py' -v
 
       - name: Setup Node
         uses: actions/setup-node@v4

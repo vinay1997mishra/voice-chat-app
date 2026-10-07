@@ -12,7 +12,7 @@ test('country-local owner bonus credits one closed sending day exactly once; no 
   r.directory.ctx.storage.sql.exec("UPDATE app_rooms SET country_code=? WHERE id=?",code,room.id);
   r.directory.getWallet(owner.user_id);
   r.directory._creditNormalWalletAuthorized(owner.user_id,100000,'test_fixture');
-  const sent=await r.request('/gifts/send',owner.token,{room_id:room.id,gift_id:'rose',quantity:10,receiver_ids:[receiver.user_id]});
+  const sent=await r.request('/gifts/send',owner.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:'rose',quantity:10,receiver_ids:[receiver.user_id]});
   assert.equal(sent.status,201,JSON.stringify(sent.data));
   const clock=countryDay(code,now);
   const stored=r.directory.ctx.storage.sql.exec('SELECT resets_at FROM room_gift_daily_clock WHERE room_id=?',room.id).toArray()[0];
@@ -29,7 +29,7 @@ test('country-local owner bonus credits one closed sending day exactly once; no 
  }
  assert.equal(r.directory.settleRoomGiftOwnerShares(now+4*86400000).credited_coins,0);
  const item=owners[0];
- const sent=await r.request('/gifts/send',item.owner.token,{room_id:item.room.id,gift_id:'rose',quantity:20,receiver_ids:[receiver.user_id]});
+ const sent=await r.request('/gifts/send',item.owner.token,{request_id:crypto.randomUUID(),room_id:item.room.id,gift_id:'rose',quantity:20,receiver_ids:[receiver.user_id]});
  assert.equal(sent.status,201);
  now=countryDay(item.code,now).resets_at;
  assert.equal(r.directory.settleRoomGiftOwnerShares(now).credited_coins,200);
@@ -46,7 +46,7 @@ test('daily room EXP uses 2000 per present user, sending uses normal 100% and Lu
  r.directory.getWallet(owner.user_id);
  r.directory._creditNormalWalletAuthorized(owner.user_id,100000,'test_fixture');
  for(const gift of ['rose','lucky-colorful-rose']){
-  const sent=await r.request('/gifts/send',owner.token,{room_id:room.id,gift_id:gift,quantity:1,receiver_ids:[visitor.user_id]});
+  const sent=await r.request('/gifts/send',owner.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:gift,quantity:1,receiver_ids:[visitor.user_id]});
   assert.equal(sent.status,201,JSON.stringify(sent.data));
  }
  let summary=(await r.directory.listRooms()).find(x=>x.id===room.id);

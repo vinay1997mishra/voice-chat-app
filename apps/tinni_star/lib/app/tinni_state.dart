@@ -303,6 +303,21 @@ class TinniState {
 
   Map<String, Object?> remoteConfigValues = <String, Object?>{};
 
+  RemoteEnemy? vsRelationship;
+  void applyConfirmedGiftRelationships(Map<String,dynamic> result) {
+    final account=auth.current;
+    if(account==null) return;
+    if(result['cp_state']!=null) cp.applyRemote(backend.cpFromServer(result['cp_state']),currentUserId:account.userId);
+    if(result['vs_state']!=null) vsRelationship=backend.vsFromServer(result['vs_state']);
+  }
+
+  Future<void> refreshGiftCatalog() async {
+    final account = auth.current;
+    if (account == null) return;
+    final items = await backend.giftCatalog(account.authToken);
+    if (auth.current?.userId == account.userId) gifts.applyCatalog(items);
+  }
+
   Future<void> refreshRemoteConfig() async {
     try {
       remoteConfigValues = Map<String, Object?>.from(

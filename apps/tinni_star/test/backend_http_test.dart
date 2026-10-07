@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:async';
 import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
@@ -83,4 +84,27 @@ void main() {
       await server.close(force: true);
     }
   });
+  test('manual retry after an ambiguous gift failure reuses its request ID',()async{
+    final server=await HttpServer.bind(InternetAddress.loopbackIPv4,0);
+    final ids=<String>[];
+    server.listen((request)async{
+      final body=jsonDecode(await utf8.decoder.bind(request).join()) as Map;
+      ids.add(body['request_id'] as String);
+      request.response.statusCode=ids.length==1?503:201;
+      request.response.write(ids.length==1?'{"error":"Server is temporarily unavailable"}':'{"ok":true}');
+      await request.response.close();
+    });
+    final presence=RoomPresenceService(apiBase:Uri.parse('http://127.0.0.1:${server.port}'));
+    Future<Map<String,dynamic>> send()=>presence.sendGift(roomId:'room',authToken:'token',
+      giftId:'rose',giftName:'Rose',quantity:1,unitPrice:100,receiverIds:['receiver']);
+    try{
+      await expectLater(send(),throwsA(isA<StateError>()));
+      expect(ids.length,1);
+      await send();
+      expect(ids[1],ids[0]);
+      await send();
+      expect(ids[2],isNot(ids[1]));
+    }finally{presence.dispose();await server.close(force:true);}
+  });
+
 }

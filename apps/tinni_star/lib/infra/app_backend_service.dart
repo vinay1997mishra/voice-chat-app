@@ -117,7 +117,7 @@ class SettlementRecipient {
 }
 
 class RemoteCp {
-  const RemoteCp({required this.userA, required this.userB, required this.state, required this.intimacy, required this.level, required this.requestedBy, required this.createdAt, this.ringId});
+  const RemoteCp({required this.userA, required this.userB, required this.state, required this.intimacy, required this.level, required this.requestedBy, required this.createdAt, this.ringId, this.nextLevelThreshold, this.previousLevelThreshold = 0});
   final String userA;
   final String userB;
   final String state;
@@ -126,6 +126,8 @@ class RemoteCp {
   final String requestedBy;
   final int createdAt;
   final String? ringId;
+  final int? nextLevelThreshold;
+  final int previousLevelThreshold;
 }
 
 class RemoteEnemy {
@@ -138,6 +140,7 @@ class RemoteEnemy {
     required this.requestedBy,
     required this.createdAt,
     this.nextLevelThreshold,
+    this.previousLevelThreshold = 0,
   });
 
   final String userA;
@@ -148,6 +151,7 @@ class RemoteEnemy {
   final String requestedBy;
   final int createdAt;
   final int? nextLevelThreshold;
+  final int previousLevelThreshold;
 }
 
 class VipCatalogItem {
@@ -849,6 +853,16 @@ class AppBackendService {
     return RemoteWallet.fromServer(row);
   }
 
+  Future<List<Map<String, dynamic>>> giftCatalog(String token) async {
+    final data = await _request('GET', '/gifts/catalog', token);
+    return (data['gifts'] as List? ?? const []).map(_map).toList(growable:false);
+  }
+
+  Future<List<Map<String, dynamic>>> vsRanking(String token) async {
+    final data = await _request('GET', '/vs/ranking', token);
+    return (data['ranking'] as List? ?? const []).map(_map).toList(growable:false);
+  }
+
   Future<RemoteCp?> cpState(String token) async {
     final data = await _request('GET', '/cp', token);
     return _cp(data['cp']);
@@ -883,8 +897,12 @@ class AppBackendService {
     return cp;
   }
 
-  Future<void> cpDisconnect(String token) async {
-    await _request('POST', '/cp/disconnect', token, body: const {});
+  Future<void> cpDisconnect(String token, {String? expectedPair}) async {
+    final cp = expectedPair == null ? await cpState(token) : null;
+    await _request('POST', '/cp/disconnect', token, body: {
+      'confirmed': true,
+      'expected_pair': expectedPair ?? (cp == null ? '' : '${cp.userA}:${cp.userB}:${cp.createdAt}'),
+    });
   }
 
   Future<RemoteCp> cpUpdate(String token, String action, Map<String, dynamic> values) async {
@@ -906,14 +924,14 @@ class AppBackendService {
   }
 
   Future<RemoteEnemy?> enemyState(String token) async {
-    final data = await _request('GET', '/enemy', token);
+    final data = await _request('GET', '/vs', token);
     return _enemy(data['enemy']);
   }
 
   Future<RemoteEnemy> enemyRequest(String token, String targetUserId) async {
     final data = await _request(
       'POST',
-      '/enemy/request',
+      '/vs/request',
       token,
       body: <String, dynamic>{'target_user_id': targetUserId},
     );
@@ -925,7 +943,7 @@ class AppBackendService {
   Future<RemoteEnemy> enemyRespond(String token, bool accept) async {
     final data = await _request(
       'POST',
-      '/enemy/respond',
+      '/vs/respond',
       token,
       body: <String, dynamic>{'accept': accept},
     );
@@ -934,8 +952,12 @@ class AppBackendService {
     return enemy;
   }
 
-  Future<void> enemyDisconnect(String token) async {
-    await _request('POST', '/enemy/disconnect', token, body: const {});
+  Future<void> enemyDisconnect(String token, {String? expectedPair}) async {
+    final vs = expectedPair == null ? await enemyState(token) : null;
+    await _request('POST', '/vs/disconnect', token, body: {
+      'confirmed': true,
+      'expected_pair': expectedPair ?? (vs == null ? '' : '${vs.userA}:${vs.userB}:${vs.createdAt}'),
+    });
   }
 
   Future<Map<String, dynamic>> coinsHistory(
@@ -1468,6 +1490,9 @@ class AppBackendService {
     throw StateError('Service connection interrupted. Please retry.');
   }
 
+  RemoteCp? cpFromServer(dynamic value) => _cp(value);
+  RemoteEnemy? vsFromServer(dynamic value) => _enemy(value);
+
   RemoteCp? _cp(dynamic value) {
     final row = _map(value);
     if (row.isEmpty) return null;
@@ -1481,6 +1506,8 @@ class AppBackendService {
       intimacy: _asInt(row['intimacy']),
       level: _asInt(row['level'], fallback: 1),
       ringId: row['ring_id']?.toString(),
+      nextLevelThreshold: _map(row['cp_rules'])['next_level_threshold'] == null ? null : _asInt(_map(row['cp_rules'])['next_level_threshold']),
+      previousLevelThreshold: _asInt(_map(row['cp_rules'])['previous_level_threshold']),
       requestedBy: row['requested_by']?.toString() ?? '',
       createdAt: _asInt(row['created_at']),
     );
@@ -1501,6 +1528,7 @@ class AppBackendService {
       level: _asInt(row['level'], fallback: 1),
       requestedBy: row['requested_by']?.toString() ?? '',
       createdAt: _asInt(row['created_at']),
+      previousLevelThreshold: _asInt(rules['previous_level_threshold']),
       nextLevelThreshold: rules['next_level_threshold'] == null
           ? null
           : _asInt(rules['next_level_threshold']),
