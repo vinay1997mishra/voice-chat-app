@@ -43,6 +43,8 @@ import 'ludo_screen.dart';
 import 'messages_screen.dart';
 import 'recharge_screen.dart';
 import 'chat_user_profile_screen.dart';
+import 'gifts_screen.dart';
+import '../ui/relationship_visuals.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -1229,23 +1231,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  GiftDefinition _giftDefinitionForVisualEvent(
-    RoomGiftVisualEvent event,
-  ) {
-    for (final gift in <GiftDefinition>[
-      ...PremiumGiftCatalog.normal,...PremiumGiftCatalog.cp,...PremiumGiftCatalog.countries,
-      ...GiftService.catalog,
-      ...GiftService.luckyCatalog,
-    ]) {
-      if (gift.id == event.giftId) return gift;
+  GiftDefinition _giftDefinitionForVisualEvent(RoomGiftVisualEvent event) {
+    GiftDefinition? base;
+    for (final gift in widget.state.gifts.approvedCatalog ?? GiftsScreen.catalogFor('Popular')) {
+      if(gift.id == event.giftId) {base=gift;break;}
     }
-    return GiftDefinition(
-      id: event.giftId,
-      name: event.giftName,
-      price: 0,
-      effectKind: event.lucky ? 'lucky' : 'svga',
-      lucky: event.lucky,
-    );
+    base ??= PremiumGiftCatalog.find(event.giftId);
+    return (base ?? GiftDefinition(id:event.giftId,name:event.giftName,price:event.unitPrice,
+      effectKind:event.lucky?'lucky':'scene',lucky:event.lucky)).withServerMetadata({
+        'gift_name':event.giftName,'unit_price':event.unitPrice,'category':event.category,
+        'animation_url':event.animationUrl,'poster_url':event.posterUrl,'effect_tier':event.effectTier,
+        'animation_duration_ms':event.animationDurationMs,'level_before':event.levelBefore,'level_after':event.levelAfter,
+      });
   }
 
   void _syncGiftVisualEvent() {
@@ -3170,12 +3167,24 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  bool _pairedInRoom(String? userId,{bool rivalry=false}) {
+    if(userId==null) return false;
+    final cp=widget.state.cp.relationship,vs=widget.state.vsRelationship;
+    final a=rivalry?vs?.userA:cp?.userA,b=rivalry?vs?.userB:cp?.userB;
+    if(a==null||b==null || (rivalry && vs?.state!='accepted') || (userId!=a&&userId!=b)) return false;
+    final ids=widget.state.roomSession.liveMembers.map((member)=>member.userId).toSet();
+    return ids.contains(a)&&ids.contains(b);
+  }
+
   Widget _luckyArtwork(
     GiftDefinition gift, {
     required double size,
     BoxFit fit = BoxFit.contain,
   }) {
     final asset = gift.artworkAsset;
+    if(gift.posterUrl?.startsWith('https://') == true) { return SizedBox(
+      width:size,height:size,child:Image.network(gift.posterUrl!,fit:fit,
+        errorBuilder:(_,error,stackTrace)=>Center(child:Text(gift.emoji,style:TextStyle(fontSize:size*.62))))); }
     if (asset == null || asset.isEmpty) {
       return SizedBox(
         width: size,
@@ -3675,19 +3684,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       'Normal',
       'Lucky',
       'CP',
+      'VS',
       'Country',
       'Luxury',
     ];
 
-    List<GiftDefinition> visibleGifts() {
-      switch(giftCategory) {
-        case 'Lucky': return GiftService.luckyCatalog;
-        case 'CP': return PremiumGiftCatalog.cp;
-        case 'Country': return PremiumGiftCatalog.countries;
-        case 'Luxury': return PremiumGiftCatalog.normal.where((gift)=>gift.price>=1000000).toList();
-        default: return PremiumGiftCatalog.normal;
-      }
-    }
+    StateSetter? refreshSheet;
+    BuildContext? activeSheetContext;
+    unawaited(widget.state.refreshGiftCatalog().then((_) {
+      if(mounted && activeSheetContext?.mounted == true) refreshSheet?.call((){});
+    }).catchError((Object _) {}));
+    List<GiftDefinition> visibleGifts() => widget.state.gifts.catalogFor(
+      giftCategory,GiftsScreen.catalogFor(giftCategory));
 
     List<(String, String)> recipients() {
       final account = widget.state.auth.current;
@@ -3763,6 +3771,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           receiverIds: selectedRecipients,
         );
         _applyGiftServerWallet(response);
+        widget.state.applyConfirmedGiftRelationships(response);
         _refreshRoomSendingSummary();
         // Any non-Lucky send breaks the "same Lucky gift consecutively"
         // sequence, so an older Combo must not remain actionable.
@@ -3795,7 +3804,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (_luckyComboGift != null) {
         setState(_resetLuckyComboState);
       }
-      _triggerSeatGiftEffect(gift, selectedRecipients);
+      final confirmedTransactions = response['transactions'];
+      final confirmedGift = confirmedTransactions is List && confirmedTransactions.isNotEmpty
+        ? gift.withServerMetadata(Map<String,dynamic>.from(confirmedTransactions.first as Map)) : gift;
+      _triggerSeatGiftEffect(confirmedGift, selectedRecipients);
 
       if (!sheetContext.mounted) return;
       Navigator.pop(sheetContext);
@@ -3814,6 +3826,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       backgroundColor: RoyalPalette.nearBlack,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
+          refreshSheet = setSheetState;
+          activeSheetContext = context;
           final roomRecipients = recipients();
           final filteredGifts = visibleGifts();
           return SafeArea(
@@ -8642,6 +8656,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         ),
                     ),
+                  if (occupied && _pairedInRoom(presenceMember?.userId))
+                    Positioned.fill(child:IgnorePointer(child:RelationshipSeatAura(level:widget.state.cp.relationship!.level))),
+                  if (occupied && _pairedInRoom(presenceMember?.userId,rivalry:true))
+                    Positioned.fill(child:IgnorePointer(child:RelationshipSeatAura(level:widget.state.vsRelationship!.level,rivalry:true))),
                   if (occupied && speakingUserId != null)
                     Positioned(
                       left: compact ? -15 : -19,

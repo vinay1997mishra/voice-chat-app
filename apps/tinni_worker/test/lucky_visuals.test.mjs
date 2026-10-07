@@ -15,7 +15,7 @@ test('Lucky HUD includes rare results beyond 32 units and shares one room timeli
     const index = roll++ % 99;
     return index === 98 ? 1000 : index === 1 ? 20 : 0;
   };
-  const response = await r.request('/gifts/send', sender.token, {
+  const response = await r.request('/gifts/send', sender.token,{request_id:crypto.randomUUID(),
     room_id: room.id, gift_id: 'lucky-neon-butterfly', quantity: 99,
     unit_price: 1, receiver_ids: [receiver.user_id], lucky_session_id: 'lucky-visual-test',
   });
@@ -35,7 +35,7 @@ test('Lucky HUD includes rare results beyond 32 units and shares one room timeli
   assert.deepEqual(broadcasts.find(row => row.type === 'gift_sent').gift, event);
   assert.equal(event.visual_started_at >= event.server_time + 450, true);
 
-  const next = await r.request('/gifts/send', sender.token, {
+  const next = await r.request('/gifts/send', sender.token,{request_id:crypto.randomUUID(),
     room_id: room.id, gift_id: 'lucky-neon-butterfly', quantity: 9,
     receiver_ids: [receiver.user_id], lucky_session_id: 'lucky-visual-test',
   });
@@ -68,14 +68,14 @@ test('Owner Lucky disable and banner controls remain authoritative', async t => 
   r.directory._setOwnerSetting('lucky_gift_config', {
     enabled: true, banners_enabled: false, max_multiplier: 1000, multiplier_weights: { '1000': 1 },
   });
-  const data = { room_id: room.id, gift_id: 'lucky-neon-butterfly', quantity: 1, receiver_ids: [receiver.user_id] };
+  const data = { request_id:'lucky_controls_win', room_id: room.id, gift_id: 'lucky-neon-butterfly', quantity: 1, receiver_ids: [receiver.user_id] };
   const win = await r.request('/gifts/send', sender.token, data);
   assert.equal(win.status, 201, JSON.stringify(win.data));
   assert.equal(win.data.lucky.rebate_coins, 500000);
   assert.equal(win.data.visual_event.banners_enabled, false);
   r.directory._setOwnerSetting('lucky_gift_config', { enabled: false });
   const balance = r.directory.getWallet(sender.user_id).coins;
-  const off = await r.request('/gifts/send', sender.token, data);
+  const off = await r.request('/gifts/send', sender.token, {...data,request_id:'lucky_controls_off'});
   assert.equal(off.status, 400);
   assert.equal(r.directory.getWallet(sender.user_id).coins, balance);
 });

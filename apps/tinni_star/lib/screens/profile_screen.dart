@@ -1,3 +1,4 @@
+import 'enemy_screen.dart';
 import 'dart:convert';
 import 'dart:io';
 
@@ -1095,6 +1096,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
               ),
               const SizedBox(height: 8),
+              ListTile(
+                key:const Key('mine-vs-panel'),
+                leading:const Icon(Icons.bolt_rounded,color:Color(0xFFFF3549)),
+                title:Text('VS · Lv.${widget.state.vsRelationship?.level ?? 1}'),
+                trailing:const Icon(Icons.chevron_right),
+                onTap:()=>_openMineScreen(EnemyScreen(state:widget.state)),
+              ),
               InkWell(
                 key: const Key('mine-cp-panel'),
                 borderRadius: BorderRadius.circular(11),

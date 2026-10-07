@@ -20,7 +20,7 @@ test('country ribbons push only to eligible countries, Rocket broadcasts globall
   assert.equal(india.received.length,1);
   d.getWallet(a.user_id);
   d._creditNormalWalletAuthorized(a.user_id,8000000,'test_fixture');
-  const sent=await r.request('/gifts/send',a.token,{room_id:room.id,gift_id:'hot-biryani',
+  const sent=await r.request('/gifts/send',a.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:'hot-biryani',
     quantity:160,receiver_ids:[b.user_id]});
   assert.equal(sent.status,201,JSON.stringify(sent.data));
   assert.equal(sent.data.room_summary.lifetime_total,8000000);
@@ -50,7 +50,7 @@ test('delivery failure cannot rollback a paid gift and live long-stay audience s
   d.ctx.storage.sql.exec('UPDATE app_user_presence SET last_seen=0,room_socket_connected=1 WHERE user_id=?',b.user_id);
   d.ctx.getWebSockets=()=>[{deserializeAttachment:()=>({countryCode:'IN'}),
     send:()=>{throw new Error('closed socket');}}];
-  const sent=await r.request('/gifts/send',a.token,{room_id:room.id,gift_id:'hot-biryani',
+  const sent=await r.request('/gifts/send',a.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:'hot-biryani',
     quantity:160,receiver_ids:[b.user_id]});
   assert.equal(sent.status,201,JSON.stringify(sent.data));
   assert.equal(sent.data.wallet.coins,0);

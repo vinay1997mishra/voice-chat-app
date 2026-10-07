@@ -124,7 +124,8 @@ export async function inventoryStorage(store, now=Date.now()) {
   return {ok:false,reason:"Inventory continuation",used_bytes:total};
 }
 export async function reserveMediaBudget(store, key, size, leaseId) {
-  if(!Number.isSafeInteger(size)||size<1||size>4_000_000||!key||!leaseId) throw new Error("Invalid media reservation");
+  const maxSize = /^(gifts\/(cp|vs)\/)/.test(String(key)) ? 30 * 1024 * 1024 : 4_000_000;
+  if(!Number.isSafeInteger(size)||size<1||size>maxSize||!key||!leaseId) throw new Error("Invalid media reservation");
   let state=storageBudget(store);
   if(!state.known&&!state.scanning) {
     await store.ctx.blockConcurrencyWhile(()=>inventoryStorage(store));

@@ -8,6 +8,8 @@ import '../infra/app_backend_service.dart';
 import '../ui/royal_theme.dart';
 import 'cp_screen.dart';
 import 'enemy_screen.dart';
+import 'chat_user_profile_screen.dart';
+import '../ui/relationship_visuals.dart';
 import 'personal_profile_screen.dart';
 
 class PublicProfileScreen extends StatefulWidget {
@@ -171,6 +173,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
       }
       cpPartnerProfile = partnerProfile;
       enemyRelation = enemyResult;
+      widget.state.vsRelationship = enemyResult;
       enemyPartnerProfile = resolvedEnemyPartner;
       loading = false;
     });
@@ -745,6 +748,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
+            Positioned(top:0,right:0,child:RelationshipBadge(level:cp?.level ?? 1)),
             Positioned.fill(
               child: CustomPaint(
                 painter: const _RelationWavePainter(
@@ -768,12 +772,32 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                 _glowingCpHeart(104),
                 Expanded(
                   child: Center(
-                    child: _relationAvatar(
-                      image: partnerAvatar,
-                      fallback: '',
-                      accent: const Color(0xFFFF8FC3),
-                      size: 92,
-                      add: cp == null,
+                    child: GestureDetector(
+                      onTap: cp == null
+                          ? null
+                          : () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => ChatUserProfileScreen(
+                                    state: widget.state,
+                                    userId: cp.userA == account.userId
+                                        ? cp.userB
+                                        : cp.userA,
+                                    displayName: cpPartnerProfile?['display_name']
+                                            ?.toString() ??
+                                        '',
+                                    avatarDataUrl: cpPartnerProfile?['avatar_data_url']
+                                        ?.toString(),
+                                  ),
+                                ),
+                              ),
+                      child: _relationAvatar(
+                        image: partnerAvatar,
+                        fallback: '',
+                        accent: const Color(0xFFFF8FC3),
+                        size: 92,
+                        add: cp == null,
+                      ),
                     ),
                   ),
                 ),
@@ -833,6 +857,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
         child: Stack(
           alignment: Alignment.center,
           children: [
+            Positioned(top:0,right:0,child:RelationshipBadge(level:enemyRelation?.level ?? 1,rivalry:true)),
             Positioned.fill(
               child: CustomPaint(
                 painter: const _RelationWavePainter(
@@ -854,7 +879,7 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                     ),
                   ),
                 ),
-                _murderEnemyEmblem(106),
+                Column(mainAxisSize:MainAxisSize.min,children:[_murderEnemyEmblem(72),const Text('VS',style:TextStyle(color:red,fontWeight:FontWeight.w900))]),
                 Expanded(
                   child: Center(
                     child: _relationAvatar(

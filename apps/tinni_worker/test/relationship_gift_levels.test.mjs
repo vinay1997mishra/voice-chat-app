@@ -8,6 +8,8 @@ test('CP and Enemy levels advance only from their own gift categories', async t 
   const a = await r.user(97001);
   const b = await r.user(97002);
   const d = r.directory;
+  d._setOwnerSetting('cp_coin_thresholds', [6000000]);
+  d._setOwnerSetting('vs_coin_thresholds', [6000000]);
   const room = await d.createRoom(a.user_id, {
     title: 'Relationship gifts',
     seat_count: 12,
@@ -91,7 +93,13 @@ test('Enemy challenge requires acceptance and can be removed', async t => {
   assert.equal(mine.status, 200);
   assert.equal(mine.data.enemy.state, 'accepted');
 
-  const removed = await r.request('/enemy/disconnect', a.token, {});
+  const unconfirmed = await r.request('/vs/disconnect', a.token, {});
+  assert.equal(unconfirmed.status, 409);
+  const relation = mine.data.enemy;
+  const removed = await r.request('/vs/disconnect', a.token, {
+    confirmed: true,
+    expected_pair: relation.user_a + ':' + relation.user_b + ':' + relation.created_at,
+  });
   assert.equal(removed.status, 200);
   assert.equal(removed.data.enemy, null);
 });
