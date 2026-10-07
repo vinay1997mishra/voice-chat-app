@@ -334,6 +334,7 @@ export class AppDirectoryStore extends DurableObject {
       );
     `);
     if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
+      coldStorage.initMainGameRetention(this);
       this._retireFruitJackpotRecords();
       this._armStorageSweep();
       return;
