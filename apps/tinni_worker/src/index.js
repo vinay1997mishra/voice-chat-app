@@ -4689,7 +4689,11 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const state = await getFruitGameStore(env).state(appSession.user.user_id);
-      return json(state);
+      const gameConfig = (await getAppDirectoryStore(env).ownerState()).game_config || {};
+      return json({ ...state, owner_limits: {
+        min_bet: Number(gameConfig.min_bet || 0),
+        max_bet: Number(gameConfig.max_bet || 0),
+      } });
     }
 
     if (url.pathname === "/fruit-game/bet" && request.method === "POST") {
@@ -4713,7 +4717,10 @@ export default {
           ...body,
           user_id: appSession.user.user_id,
         });
-        return json(state, 201);
+        return json({ ...state, owner_limits: {
+          min_bet: Number(gameConfig.min_bet || 0),
+          max_bet: Number(gameConfig.max_bet || 0),
+        } }, 201);
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to place bet") }, 400);
       }
@@ -4723,7 +4730,11 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const state = await getFruitPartyStore(env).state(appSession.user.user_id);
-      return json(state);
+      const gameConfig = (await getAppDirectoryStore(env).ownerState()).game_config || {};
+      return json({ ...state, owner_limits: {
+        min_bet: Number(gameConfig.min_bet || 0),
+        max_bet: Number(gameConfig.max_bet || 0),
+      } });
     }
 
     if (url.pathname === "/fruit-party/bet" && request.method === "POST") {
@@ -4747,7 +4758,10 @@ export default {
           ...body,
           user_id: appSession.user.user_id,
         });
-        return json(state, 201);
+        return json({ ...state, owner_limits: {
+          min_bet: Number(gameConfig.min_bet || 0),
+          max_bet: Number(gameConfig.max_bet || 0),
+        } }, 201);
       } catch (error) {
         return json({
           ok: false,

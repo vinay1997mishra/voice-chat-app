@@ -10541,6 +10541,58 @@ export class AppDirectoryStore extends DurableObject {
       game_net_coins:stats ? Number(stats.net || 0)+Number(this.ctx.storage.sql.exec("SELECT net_coins FROM main_game_lifetime WHERE user_id=? AND game_key=?",userId,gameKey).toArray()[0]?.net_coins||0) : null};
   }
 
+  awardJackpotRewards(eventIdValue, rewardsValue) {
+    const eventId = String(eventIdValue || "").trim();
+    const rewards = Array.isArray(rewardsValue) ? rewardsValue : [];
+    if (!/^fruit-jackpot:[0-9]+$/.test(eventId) || rewards.length > 3) {
+      throw new Error("Invalid jackpot reward event");
+    }
+    const changed = new Set();
+    const awarded = [];
+    this.ctx.storage.transactionSync(() => {
+      for (let index = 0; index < rewards.length; index++) {
+        const item = rewards[index] || {};
+        const rank = Number(item.rank || index + 1);
+        const userId = this._resolveOwnerUserId(String(item.user_id || "").trim());
+        const coins = Math.floor(Number(item.coins || 0));
+        const percent = Number(item.percent || 0);
+        if (!userId || ![1,2,3].includes(rank) || !Number.isSafeInteger(coins) || coins <= 0 ||
+            ![10,5,3].includes(percent)) throw new Error("Invalid jackpot reward");
+        const referenceId = eventId + ":rank:" + rank;
+        const existing = this.ctx.storage.sql.exec(
+          "SELECT coins_delta FROM wallet_transactions WHERE user_id=? AND reference_id=? LIMIT 1",
+          userId, referenceId,
+        ).toArray()[0];
+        if (existing) {
+          if (Number(existing.coins_delta) !== coins) throw new Error("Jackpot reward cannot change");
+          awarded.push({ ...item, user_id: userId, rank, coins, percent, already_paid: true });
+          continue;
+        }
+        const user = this.ctx.storage.sql.exec(
+          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1", userId,
+        ).toArray()[0];
+        if (!user) throw new Error("Jackpot winner is unavailable");
+        const now = Date.now();
+        this._normalWalletGuard(userId);
+        this.ctx.storage.sql.exec(
+          "UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?", coins, now, userId,
+        );
+        this.ctx.storage.sql.exec(
+          "UPDATE wallet_coin_guards SET expected_coins=expected_coins+?,updated_at=? WHERE user_id=?",
+          coins, now, userId,
+        );
+        this.ctx.storage.sql.exec(
+          "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,'jackpot_win',?,0,?,?,?)",
+          crypto.randomUUID(), userId, coins, referenceId,
+          "Fruit Jackpot • Rank " + rank + " • " + percent + "%", now,
+        );
+        changed.add(userId);
+        awarded.push({ ...item, user_id: userId, rank, coins, percent, already_paid: false });
+      }
+    });
+    for (const userId of changed) this._notifyAccountChanged(userId);
+    return { ok: true, event_id: eventId, rewards: awarded };
+  }
   recordGameResults(results) {
     if (!Array.isArray(results) || results.length > 500) throw new Error("Invalid game receipts");
     const changed = new Set();

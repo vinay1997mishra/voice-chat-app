@@ -7,6 +7,10 @@ export const ROUND_MS = 21000;
 export const RESULT_SPIN_MS = 5000;
 export const ROUND_CYCLE_MS = ROUND_MS + RESULT_SPIN_MS;
 export const BET_LOCK_MS = 0;
+export const JACKPOT_CONTRIBUTION_PERCENT = 7;
+export const JACKPOT_OPENINGS_PER_HOUR = 8;
+export const JACKPOT_WINDOW_MS = Math.floor(60 * 60 * 1000 / JACKPOT_OPENINGS_PER_HOUR);
+export const JACKPOT_REWARD_PERCENTAGES = Object.freeze([10, 5, 3]);
 export const HIGH_VOLUME_PLAYER_THRESHOLD = 20;
 export const COMPANY_MARGIN_PERCENT = 30;
 export const START_BALANCE = 10000000;
@@ -142,6 +146,16 @@ export class FruitGameStore extends DurableObject {
       );
 
       CREATE INDEX IF NOT EXISTS idx_fruit_empty_history ON fruit_results(total_bet,round_id);
+      CREATE TABLE IF NOT EXISTS fruit_jackpot_events (
+        slot_id INTEGER PRIMARY KEY,
+        opened_at INTEGER NOT NULL,
+        pool_before INTEGER NOT NULL,
+        pool_after INTEGER NOT NULL,
+        winners_json TEXT NOT NULL DEFAULT '[]',
+        paid INTEGER NOT NULL DEFAULT 0,
+        result_round_id INTEGER
+      );
+      CREATE INDEX IF NOT EXISTS idx_fruit_jackpot_events_opened ON fruit_jackpot_events(opened_at DESC);
       CREATE TABLE IF NOT EXISTS fruit_result_outbox (
         user_id TEXT NOT NULL, round_id INTEGER NOT NULL, payload TEXT NOT NULL,
         PRIMARY KEY(user_id, round_id)
@@ -340,11 +354,114 @@ export class FruitGameStore extends DurableObject {
     return this._luckySchedule(roundId).includes(roundId);
   }
 
+  _latestJackpotEvent() {
+    const row = this.ctx.storage.sql.exec(
+      "SELECT slot_id,opened_at,pool_before,pool_after,winners_json,paid,result_round_id FROM fruit_jackpot_events WHERE paid=1 ORDER BY slot_id DESC LIMIT 1",
+    ).toArray()[0];
+    if (!row) return null;
+    let winners = [];
+    try { winners = JSON.parse(String(row.winners_json || "[]")); } catch { winners = []; }
+    return {
+      slot_id: Number(row.slot_id), opened_at: Number(row.opened_at),
+      pool_before: Number(row.pool_before), pool_after: Number(row.pool_after),
+      jackpot_payout: Math.max(0, Number(row.pool_before) - Number(row.pool_after)),
+      winners: Array.isArray(winners) ? winners : [],
+      result_round_id: row.result_round_id == null ? null : Number(row.result_round_id),
+    };
+  }
+
+  async _openDueJackpots(now = Date.now(), resultRoundId = null) {
+    const closedSlot = Math.floor(now / JACKPOT_WINDOW_MS) - 1;
+    let lastSlot = Number(this._meta("last_jackpot_slot", closedSlot));
+    if (!Number.isFinite(lastSlot)) lastSlot = closedSlot;
+    const lastToProcess = Math.min(closedSlot, lastSlot + 16);
+    for (let slot = lastSlot + 1; slot <= lastToProcess; slot++) {
+      let event = this.ctx.storage.sql.exec(
+        "SELECT * FROM fruit_jackpot_events WHERE slot_id=? LIMIT 1", slot,
+      ).toArray()[0];
+      if (!event) {
+        const start = slot * JACKPOT_WINDOW_MS;
+        const end = start + JACKPOT_WINDOW_MS;
+        const leaders = this.ctx.storage.sql.exec(
+          `SELECT user_id, SUM(amount) AS total_bet, MIN(created_at) AS first_bet
+             FROM fruit_bets
+            WHERE created_at >= ? AND created_at < ?
+            GROUP BY user_id
+            ORDER BY total_bet DESC, first_bet ASC, user_id ASC
+            LIMIT 3`,
+          start, end,
+        ).toArray();
+        const poolBefore = Math.max(0, Number(this._meta("jackpot", "85763")));
+        const rawRewards = leaders.map((row, index) => {
+          const percent = JACKPOT_REWARD_PERCENTAGES[index];
+          return {
+            rank: index + 1, user_id: String(row.user_id), percent,
+            bet_coins: Number(row.total_bet || 0),
+            coins: Math.floor(poolBefore * percent / 100),
+          };
+        }).filter(item => item.coins > 0);
+        const rewardMap = new Map(rawRewards.map(item => [item.user_id, item.coins]));
+        const profiles = await this._topWinnerProfiles(rewardMap);
+        const byId = new Map(profiles.map(item => [String(item.user_id), item]));
+        const winners = rawRewards.map(item => ({
+          ...item,
+          display_name: String(byId.get(item.user_id)?.display_name || item.user_id),
+          avatar_data_url: byId.get(item.user_id)?.avatar_data_url || null,
+          winning_coins: item.coins,
+        }));
+        const payout = winners.reduce((sum, item) => sum + Number(item.coins || 0), 0);
+        const poolAfter = Math.max(0, poolBefore - payout);
+        this.ctx.storage.transactionSync(() => {
+          this.ctx.storage.sql.exec(
+            "INSERT INTO fruit_jackpot_events(slot_id,opened_at,pool_before,pool_after,winners_json,paid,result_round_id) VALUES(?,?,?,?,?,0,?)",
+            slot, end, poolBefore, poolAfter, JSON.stringify(winners), resultRoundId,
+          );
+          this._setMeta("jackpot", poolAfter);
+        });
+        event = this.ctx.storage.sql.exec(
+          "SELECT * FROM fruit_jackpot_events WHERE slot_id=? LIMIT 1", slot,
+        ).toArray()[0];
+      }
+      let winners = [];
+      try { winners = JSON.parse(String(event.winners_json || "[]")); } catch { winners = []; }
+      if (Number(event.paid || 0) !== 1) {
+        try {
+          if (winners.length) {
+            await mainDirectory(this).awardJackpotRewards(
+              "fruit-jackpot:" + slot, winners.map(item => ({
+                rank: Number(item.rank), user_id: String(item.user_id),
+                coins: Number(item.coins || item.winning_coins || 0), percent: Number(item.percent),
+              })),
+            );
+          }
+          this.ctx.storage.sql.exec(
+            "UPDATE fruit_jackpot_events SET paid=1,result_round_id=COALESCE(result_round_id,?) WHERE slot_id=?",
+            resultRoundId, slot,
+          );
+        } catch (error) {
+          console.error("Jackpot reward delivery will retry", String(error?.message || error));
+          break;
+        }
+      }
+      const payout = Math.max(0, Number(event.pool_before || 0) - Number(event.pool_after || 0));
+      if (payout > 0 && resultRoundId != null) {
+        this.ctx.storage.sql.exec(
+          "UPDATE fruit_results SET jackpot_hit=1,jackpot_payout=?,top_winners_json=? WHERE round_id=?",
+          payout, JSON.stringify(winners), resultRoundId,
+        );
+      }
+      this._setMeta("last_jackpot_slot", slot);
+      lastSlot = slot;
+    }
+  }
   async _ensureStarted(now = Date.now()) {
     const currentRound = roundIdAt(now);
     if (this._meta("started_round") === null) {
       this._setMeta("started_round", currentRound);
       this._setMeta("jackpot", 85763);
+    }
+    if (this._meta("last_jackpot_slot") === null) {
+      this._setMeta("last_jackpot_slot", Math.floor(now / JACKPOT_WINDOW_MS) - 1);
     }
     await this._sync(now);
     this._notifyPhase(now);
@@ -386,21 +503,32 @@ export class FruitGameStore extends DurableObject {
       await this._settle(round);
     }
     if (nextToSettle <= eligible) this._setMeta("last_settled_round", eligible);
+    await this._openDueJackpots(now, eligible >= 0 ? eligible : null);
     const pending = this.ctx.storage.sql.exec(
       "SELECT round_id FROM fruit_bets WHERE round_id > ? LIMIT 1", eligible,
     ).toArray().length > 0;
     await flushGameResults(this, "fruit");
     const deliveryPending = pendingGameResults(this, "fruit");
+    const jackpotDeliveryPending = this.ctx.storage.sql.exec(
+      "SELECT slot_id FROM fruit_jackpot_events WHERE paid=0 LIMIT 1",
+    ).toArray().length > 0;
+    const jackpotSlotStart = Math.floor(now / JACKPOT_WINDOW_MS) * JACKPOT_WINDOW_MS;
+    const jackpotHasBets = this.ctx.storage.sql.exec(
+      "SELECT id FROM fruit_bets WHERE created_at>=? AND created_at<? LIMIT 1",
+      jackpotSlotStart, jackpotSlotStart + JACKPOT_WINDOW_MS,
+    ).toArray().length > 0;
     const watching = (this.ctx.getWebSockets?.("game:fruit-jackpot") || []).length > 0;
-    if (!watching && !pending && !deliveryPending) {
+    if (!watching && !pending && !deliveryPending && !jackpotDeliveryPending && !jackpotHasBets) {
       if (await this.ctx.storage.getAlarm() !== null) await this.ctx.storage.deleteAlarm();
       return;
     }
 
-    const nextAlarm = deliveryPending && !watching && !pending ? now + 15000 :
+    const normalNextAlarm = (deliveryPending || jackpotDeliveryPending) && !watching && !pending ? now + 15000 :
       now < bettingEndAt(currentRound)
         ? bettingEndAt(currentRound)
         : roundEndAt(currentRound);
+    const jackpotNextAlarm = jackpotHasBets ? jackpotSlotStart + JACKPOT_WINDOW_MS : Number.POSITIVE_INFINITY;
+    const nextAlarm = Math.min(normalNextAlarm, jackpotNextAlarm);
     const existingAlarm = await this.ctx.storage.getAlarm();
     if (existingAlarm === null || Math.abs(existingAlarm - nextAlarm) > 500) {
       await this.ctx.storage.setAlarm(nextAlarm);
@@ -422,10 +550,25 @@ export class FruitGameStore extends DurableObject {
     const totalBet = bets.reduce((sum, bet) => sum + bet.amount, 0);
     const players = new Set(bets.map((bet) => bet.user_id));
     const lucky11 = this._isLuckyRound(roundId);
-    const bonusFruits = lucky11 ? randomDistinctFruits(3) : [];
-    const winner = lucky11 ? bonusFruits[0] : weightedRandomFruit();
+    const bonusFruits = lucky11 ? randomDistinctFruits(4) : [];
+    let winner = lucky11 ? bonusFruits[0] : weightedRandomFruit();
+    if (!lucky11) {
+      const previous = this.ctx.storage.sql.exec(
+        "SELECT fruit_key FROM fruit_results WHERE round_id<? ORDER BY round_id DESC LIMIT 1", roundId,
+      ).toArray()[0];
+      if (previous && String(previous.fruit_key) === winner.key) {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const candidate = weightedRandomFruit();
+          if (candidate.key !== String(previous.fruit_key)) { winner = candidate; break; }
+        }
+        if (winner.key === String(previous.fruit_key)) {
+          const alternatives = FRUITS.filter(fruit => fruit.key !== String(previous.fruit_key));
+          winner = alternatives[randomIndex(alternatives.length)];
+        }
+      }
+    }
     const mode = lucky11
-      ? "lucky_11_random_3"
+      ? "lucky_11_random_4"
       : "weighted_random_75_20_5";
     const winningKeys = lucky11
       ? new Set(bonusFruits.map((fruit) => fruit.key))
@@ -671,11 +814,18 @@ export class FruitGameStore extends DurableObject {
           window_ms: LUCKY_WINDOW_MS,
           events_per_window_min: 3,
           events_per_window_max: 4,
-          random_bonus_fruits: 3,
+          random_bonus_fruits: 4,
         },
         fruits: FRUITS,
       },
       jackpot: Number(this._meta("jackpot", "85763")),
+      jackpot_config: {
+        contribution_percent: JACKPOT_CONTRIBUTION_PERCENT,
+        openings_per_hour: JACKPOT_OPENINGS_PER_HOUR,
+        reward_percentages: JACKPOT_REWARD_PERCENTAGES,
+        next_open_at: (Math.floor(now / JACKPOT_WINDOW_MS) + 1) * JACKPOT_WINDOW_MS,
+      },
+      jackpot_event: this._latestJackpotEvent(),
       last_bet_result: mainWallet.last_bet_result || lastGameResult(this, "fruit", userId),
       wallet_balance: wallet.balance,
       today_winnings: wallet.today_winnings,
@@ -719,7 +869,7 @@ export class FruitGameStore extends DurableObject {
         bet.id,bet.round_id,bet.user_id,bet.fruit_key,bet.amount,bet.room_id,bet.created_at,
       );
 
-      const contribution = Math.floor(amount / 100);
+      const contribution = Math.floor(amount * JACKPOT_CONTRIBUTION_PERCENT / 100);
       if (contribution > 0) this._setMeta("jackpot", Number(this._meta("jackpot", "85763")) + contribution);
     });
     notifyGameChanged(this, "fruit-jackpot");

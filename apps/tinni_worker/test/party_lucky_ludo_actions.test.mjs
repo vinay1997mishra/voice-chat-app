@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { runtime } from './helpers/runtime.mjs';
 
-test('Fruit Party Lucky settles three distinct fruits once despite a notice failure', async t => {
+test('Fruit Party Lucky settles four distinct fruits once despite a notice failure', async t => {
   const r=runtime(); t.after(r.close);
   const user=await r.user(1);
   const room=await r.directory.createRoom(user.user_id,{title:'Lucky room',seat_count:12});
@@ -21,8 +21,8 @@ test('Fruit Party Lucky settles three distinct fruits once despite a notice fail
   const state=await party.state(user.user_id);
   const result=state.history[0];
   assert.equal(result.special_kind,'lucky11');
-  assert.equal(result.bonus_fruits.length,3);
-  assert.equal(new Set(result.bonus_fruits.map(x=>x.key)).size,3);
+  assert.equal(result.bonus_fruits.length,4);
+  assert.equal(new Set(result.bonus_fruits.map(x=>x.key)).size,4);
   const expected=result.bonus_fruits.reduce((sum,x)=>sum+x.multiplier*100000,0);
   assert.equal(result.total_payout,expected);
   assert.equal(state.wallet_balance,before+expected);

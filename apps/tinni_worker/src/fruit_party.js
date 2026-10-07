@@ -379,8 +379,23 @@ export class FruitPartyStore extends DurableObject {
     const players = new Set(bets.map((bet) => bet.user_id));
     const totalBet = bets.reduce((sum, bet) => sum + bet.amount, 0);
     const lucky11 = this._isLuckyRound(roundId);
-    const bonusFruits = lucky11 ? randomDistinctFruits(3) : [];
-    const winner = lucky11 ? bonusFruits[0] : weightedFruit();
+    const bonusFruits = lucky11 ? randomDistinctFruits(4) : [];
+    let winner = lucky11 ? bonusFruits[0] : weightedFruit();
+    if (!lucky11) {
+      const previous = this.ctx.storage.sql.exec(
+        "SELECT fruit_key FROM party_results WHERE round_id<? ORDER BY round_id DESC LIMIT 1", roundId,
+      ).toArray()[0];
+      if (previous && String(previous.fruit_key) === winner.key) {
+        for (let attempt = 0; attempt < 8; attempt++) {
+          const candidate = weightedFruit();
+          if (candidate.key !== String(previous.fruit_key)) { winner = candidate; break; }
+        }
+        if (winner.key === String(previous.fruit_key)) {
+          const alternatives = PARTY_FRUITS.filter(fruit => fruit.key !== String(previous.fruit_key));
+          winner = alternatives[randomIndex(alternatives.length)];
+        }
+      }
+    }
     const winningKeys = new Set(lucky11 ? bonusFruits.map(fruit => fruit.key) : [winner.key]);
 
     const payouts = new Map();
@@ -425,7 +440,7 @@ export class FruitPartyStore extends DurableObject {
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       roundId,
       winner.key,
-      lucky11 ? "lucky_11_random_3" : "weighted_random",
+      lucky11 ? "lucky_11_random_4" : "weighted_random",
       JSON.stringify(bonusFruits.map((fruit) => fruit.key)),
       totalBet,
       totalPayout,
@@ -600,7 +615,7 @@ export class FruitPartyStore extends DurableObject {
         bet_amounts: PARTY_BET_AMOUNTS,
         lucky_window_ms: PARTY_LUCKY_WINDOW_MS,
         lucky_rounds_min: 3, lucky_rounds_max: 4,
-        lucky_fruit_count: 3,
+        lucky_fruit_count: 4,
         fruits: PARTY_FRUITS,
       },
       last_bet_result: mainWallet.last_bet_result || lastGameResult(this, "party", userId),
