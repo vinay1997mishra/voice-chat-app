@@ -77,6 +77,7 @@ class FruitRoundResult {
     this.bonusFruits = const <FruitKind>[],
     this.jackpotHit = false,
     this.jackpotPayout = 0,
+    this.topWinners = const <Map<String, dynamic>>[],
   });
 
   final int roundId;
@@ -92,6 +93,7 @@ class FruitRoundResult {
   final List<FruitKind> bonusFruits;
   final bool jackpotHit;
   final int jackpotPayout;
+  final List<Map<String, dynamic>> topWinners;
 
   bool get isLucky11 => specialKind == 'lucky11';
 }
