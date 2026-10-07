@@ -134,6 +134,22 @@ void main() {
     expect(rtc.joins,2);expect(session.connected,true);
     await session.close();session.dispose();presence.dispose();
   });
+  testWidgets('stuck LiveKit reconnect forces a fresh join without dropping room presence',(tester) async {
+    final rtc=_Rtc(),presence=_Presence(),session=_session(rtc,presence,now:tester.binding.clock.now);
+    await session.open(_room,userId:'me',authToken:'token');
+    expect(session.connected,true);
+    expect(rtc.joins,1);
+    rtc.state=RtcConnectionState.reconnecting;
+    await tester.pump(const Duration(seconds:3));
+    expect(session.connected,false);
+    expect(session.backendSessionActive,true);
+    await tester.pump(const Duration(seconds:18));
+    await tester.pump();
+    expect(rtc.joins,greaterThanOrEqualTo(2));
+    expect(session.connected,true);
+    expect(session.backendSessionActive,true);
+    await session.close();session.dispose();presence.dispose();
+  });
   testWidgets('permission-denied room can retry voice when reopened after permission grant',(tester) async {
     _permissions.granted = false;
     final rtc=_Rtc(),presence=_Presence(),session=_session(rtc,presence);
