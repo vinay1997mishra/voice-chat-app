@@ -32,6 +32,21 @@ test('game snapshots use the socket identity and invalidations reveal no private
   assert.equal(exp.closed,true); assert.equal(exp.events.length,0);
 });
 
+test('room discovery remains readable when Durable Object writes are unavailable',async t=>{
+  const r=runtime();t.after(r.close);
+  const owner=await r.user(1);
+  const room=await r.directory.createRoom(owner.user_id,{title:'Read only discovery',seat_count:12});
+  const exec=r.directory.ctx.storage.sql.exec;
+  r.directory.ctx.storage.sql.exec=(query,...args)=>{
+    if (/^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|REPLACE)/i.test(String(query))) {
+      throw new Error('Exceeded allowed rows written in Durable Objects free tier.');
+    }
+    return exec(query,...args);
+  };
+  const rooms=await r.directory.listRooms();
+  assert.ok(rooms.some(item=>item.id===room.id));
+});
+
 test('Ludo invalidations stay in the room where a move happened', () => {
   const a=socket({userId:'a'}), b=socket({userId:'b'});
   const store={ctx:{getWebSockets:tag=>tag==='game:ludo:room-a'?[a]:[b]}};
