@@ -320,7 +320,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     return age >= 0 && age < 12000 ? event : null;
   }
 
-  void _history  void _history(CasinoSnapshot view) {
+  void _history(CasinoSnapshot view) {
     showModalBottomSheet<void>(
       context: context, showDragHandle: true, backgroundColor: const Color(0xFF19112A),
       builder: (_) => SafeArea(
