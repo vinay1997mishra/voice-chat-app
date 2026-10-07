@@ -25,7 +25,7 @@ test('owner actions persist through real SQLite/RPC and require the owner sessio
     r2Buckets: ['EFFECT_MEDIA'],
     durableObjects: Object.fromEntries([
       ['APP_DIRECTORY','AppDirectoryStore'], ['ROOM_PRESENCE','RoomPresenceStore'],
-      ['FRUIT_GAME','FruitGameStore'], ['FRUIT_PARTY','FruitPartyStore'],
+      ['FRUIT_PARTY','FruitPartyStore'],
       ['STAFF_AUTH','StaffAuthStore'],
     ].map(([binding,className]) => [binding,{className,useSQLite:true}])),
   });
