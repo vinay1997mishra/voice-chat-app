@@ -1543,8 +1543,10 @@ export default {
     }
 
     if (url.pathname === "/health/deep" && request.method === "GET") {
+      let failedCheck = "app_directory";
       try {
         const directory = getAppDirectoryStore(env);
+        failedCheck = "list_rooms";
         const rooms = await directory.listRooms();
         const probeRoomId = Array.isArray(rooms) && rooms.length
           ? String(rooms[0]?.id || rooms[0]?.room_id || "")
@@ -1559,17 +1561,22 @@ export default {
         let roomPresenceOk = true;
 
         if (probeUserId) {
+          failedCheck = "profile";
           profileOk = Boolean(await directory.getUserById(probeUserId));
+          failedCheck = "messages";
           messagesOk = Array.isArray(
             await directory.listMessageThreads(probeUserId),
           );
+          failedCheck = "wallet";
           walletOk = Boolean(await directory.getWallet(probeUserId));
+          failedCheck = "recent_rooms";
           recentRoomsOk = Array.isArray(
             await directory.listRecentRooms(probeUserId),
           );
         }
 
         if (probeRoomId) {
+          failedCheck = "room_presence";
           const presenceState =
             await getRoomPresenceStore(env, probeRoomId).state();
           roomPresenceOk = Boolean(
@@ -1597,12 +1604,13 @@ export default {
           checks,
         }, ok ? 200 : 503);
       } catch (error) {
-        console.error("Tinni Star deep health failed", error);
+        console.error("Tinni Star deep health failed at " + failedCheck, error);
         return json({
           ok: false,
           service: "tinni-star-api",
-          app_directory: "unavailable",
-          room_presence: "unavailable",
+          app_directory: failedCheck === "room_presence" ? "ok" : "unavailable",
+          room_presence: failedCheck === "room_presence" ? "unavailable" : "unknown",
+          failed_check: failedCheck,
           error: "Backend storage is temporarily unavailable",
         }, 503);
       }
