@@ -32,6 +32,9 @@ import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import '../ui/room_emotion_backdrop.dart';
+import '../ui/animated_emoji.dart';
+import '../ui/animated_seat_emote.dart';
+import '../ui/seat_emote_catalog.dart';
 import '../ui/animated_avatar_frame.dart';
 import '../ui/rocket_rewards_panel.dart';
 import '../ui/rocket_personal_reward.dart';
@@ -43,6 +46,8 @@ import 'ludo_screen.dart';
 import 'messages_screen.dart';
 import 'recharge_screen.dart';
 import 'chat_user_profile_screen.dart';
+import 'gifts_screen.dart';
+import '../ui/relationship_visuals.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.room});
@@ -1229,23 +1234,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
   }
 
-  GiftDefinition _giftDefinitionForVisualEvent(
-    RoomGiftVisualEvent event,
-  ) {
-    for (final gift in <GiftDefinition>[
-      ...PremiumGiftCatalog.normal,...PremiumGiftCatalog.cp,...PremiumGiftCatalog.countries,
-      ...GiftService.catalog,
-      ...GiftService.luckyCatalog,
-    ]) {
-      if (gift.id == event.giftId) return gift;
+  GiftDefinition _giftDefinitionForVisualEvent(RoomGiftVisualEvent event) {
+    GiftDefinition? base;
+    for (final gift in widget.state.gifts.approvedCatalog ?? GiftsScreen.catalogFor('Popular')) {
+      if(gift.id == event.giftId) {base=gift;break;}
     }
-    return GiftDefinition(
-      id: event.giftId,
-      name: event.giftName,
-      price: 0,
-      effectKind: event.lucky ? 'lucky' : 'svga',
-      lucky: event.lucky,
-    );
+    base ??= PremiumGiftCatalog.find(event.giftId);
+    return (base ?? GiftDefinition(id:event.giftId,name:event.giftName,price:event.unitPrice,
+      effectKind:event.lucky?'lucky':'scene',lucky:event.lucky)).withServerMetadata({
+        'gift_name':event.giftName,'unit_price':event.unitPrice,'category':event.category,
+        'animation_url':event.animationUrl,'poster_url':event.posterUrl,'effect_tier':event.effectTier,
+        'animation_duration_ms':event.animationDurationMs,'level_before':event.levelBefore,'level_after':event.levelAfter,
+      });
   }
 
   void _syncGiftVisualEvent() {
@@ -1639,77 +1639,98 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showEmojiPicker() {
-    const emojis = <String>[
-      '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥰',
-      '😎', '🤩', '🥳', '😇', '🙂', '🙃', '😉', '😋',
-      '😜', '🤪', '🤗', '🤭', '🫣', '🤔', '🫡', '😴',
-      '😭', '🥺', '😢', '😡', '🤬', '😱', '😳', '🫠',
-      '❤️', '🩷', '💖', '💕', '💞', '💔', '🔥', '✨',
-      '🎉', '🎊', '🎁', '👑', '🌹', '🌟', '💯', '⚡',
-      '👍', '👎', '👏', '🙌', '🙏', '🤝', '💪', '✌️',
-      '👌', '🤟', '🤘', '👋', '💋', '🫶', '💃', '🕺',
-    ];
-
+    var enemyFilter = 'All';
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: 300,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Emoji & Emotes',
-                    style: TextStyle(
-                      color: FeaturePalette.games,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
-                    ),
+        child: DefaultTabController(
+          length: 3,
+          child: SizedBox(
+            height: 360,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Emoji & Emotes',
+                      style: TextStyle(color: FeaturePalette.games,
+                        fontSize: 17, fontWeight: FontWeight.w900)),
                   ),
                 ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
-                  itemCount: emojis.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 8,
-                    mainAxisSpacing: 6,
-                    crossAxisSpacing: 6,
-                  ),
-                  itemBuilder: (_, index) {
-                    final emoji = emojis[index];
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () async {
-                        try {
-                          await widget.state.roomSession.setMySeatEmote(emoji);
-                          if (sheetContext.mounted) {
-                            Navigator.pop(sheetContext);
-                          }
-                        } catch (error) {
-                          _snack(
-                            error.toString().replaceFirst('Bad state: ', ''),
-                          );
-                        }
-                      },
-                      child: Center(
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 27),
+                const TabBar(
+                  labelColor: FeaturePalette.games,
+                  unselectedLabelColor: RoyalPalette.muted,
+                  tabs: [
+                    Tab(text: 'Normal (64)'),
+                    Tab(text: 'Panda (25)'),
+                    Tab(text: 'Enemy (25)'),
+                  ],
+                ),
+                Expanded(
+                  child: EmojiMotion(builder: (context, emojiMotion) {
+                    Widget grid(List<String> ids, {bool named = false}) =>
+                      GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
+                        itemCount: ids.length,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: named ? 5 : 8,
+                          childAspectRatio: named ? .85 : 1,
+                          mainAxisSpacing: 6, crossAxisSpacing: 6,
                         ),
-                      ),
-                    );
-                  },
+                        itemBuilder: (_, index) {
+                          final emote = ids[index];
+                          final definition = seatEmoteFor(emote);
+                          return InkWell(
+                            key: ValueKey('emote-select-$emote'),
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () async {
+                              try {
+                                await widget.state.roomSession.setMySeatEmote(emote);
+                                if (sheetContext.mounted) Navigator.pop(sheetContext);
+                              } catch (error) {
+                                _snack(error.toString().replaceFirst('Bad state: ', ''));
+                              }
+                            },
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                AnimatedSeatEmote(emote: emote,
+                                  size: named ? 44 : 34, timeline: emojiMotion),
+                                if (named) Text(
+                                  definition?.name.replaceFirst('Panda ', '') ?? '',
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 9, color: RoyalPalette.cream),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    return TabBarView(children: [
+                      grid(roomEmojis),
+                      grid(pandaSeatEmotes.map((emote) => emote.id).toList(), named: true),
+                      StatefulBuilder(builder: (context, setEnemyFilter) {
+                        final filtered = enemySeatEmotes.where((emote) =>
+                          enemyFilter == 'All' || emote.enemyPersona == EnemyPersona.clash ||
+                          (enemyFilter == 'Male' && emote.enemyPersona == EnemyPersona.male) ||
+                          (enemyFilter == 'Female' && emote.enemyPersona == EnemyPersona.female));
+                        return Column(children: [
+                          Wrap(spacing: 8, children: [
+                            for (final filter in ['All', 'Male', 'Female'])
+                              ChoiceChip(label: Text(filter), selected: enemyFilter == filter,
+                                onSelected: (_) => setEnemyFilter(() => enemyFilter = filter)),
+                          ]),
+                          Expanded(child: grid(filtered.map((emote) => emote.id).toList(), named: true)),
+                        ]);
+                      }),
+                    ]);
+                  }),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -3170,21 +3191,32 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  bool _pairedInRoom(String? userId,{bool rivalry=false}) {
+    if(userId==null) return false;
+    final cp=widget.state.cp.relationship,vs=widget.state.vsRelationship;
+    final a=rivalry?vs?.userA:cp?.userA,b=rivalry?vs?.userB:cp?.userB;
+    if(a==null||b==null || (rivalry && vs?.state!='accepted') || (userId!=a&&userId!=b)) return false;
+    final ids=widget.state.roomSession.liveMembers.map((member)=>member.userId).toSet();
+    return ids.contains(a)&&ids.contains(b);
+  }
+
   Widget _luckyArtwork(
     GiftDefinition gift, {
     required double size,
     BoxFit fit = BoxFit.contain,
   }) {
     final asset = gift.artworkAsset;
+    if(gift.posterUrl?.startsWith('https://') == true) { return SizedBox(
+      width:size,height:size,child:Image.network(gift.posterUrl!,fit:fit,
+        errorBuilder:(_,error,stackTrace)=>Center(child:AnimatedEmoji(emoji:gift.emoji,size:size*.82,
+          effect:gift.resolvedCategory=='vs'?EmojiEffect.fire:null)))); }
     if (asset == null || asset.isEmpty) {
       return SizedBox(
         width: size,
         height: size,
         child: Center(
-          child: Text(
-            gift.emoji,
-            style: TextStyle(fontSize: size * 0.62),
-          ),
+          child: AnimatedEmoji(emoji: gift.emoji, size: size * .82,
+            effect: gift.resolvedCategory == 'vs' ? EmojiEffect.fire : null),
         ),
       );
     }
@@ -3196,10 +3228,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         fit: fit,
         filterQuality: FilterQuality.high,
         errorBuilder: (context, error, stackTrace) => Center(
-          child: Text(
-            gift.emoji,
-            style: TextStyle(fontSize: size * 0.62),
-          ),
+          child: AnimatedEmoji(emoji: gift.emoji, size: size * .82,
+            effect: gift.resolvedCategory == 'vs' ? EmojiEffect.fire : null),
         ),
       ),
     );
@@ -3675,19 +3705,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       'Normal',
       'Lucky',
       'CP',
+      'VS',
       'Country',
       'Luxury',
     ];
 
-    List<GiftDefinition> visibleGifts() {
-      switch(giftCategory) {
-        case 'Lucky': return GiftService.luckyCatalog;
-        case 'CP': return PremiumGiftCatalog.cp;
-        case 'Country': return PremiumGiftCatalog.countries;
-        case 'Luxury': return PremiumGiftCatalog.normal.where((gift)=>gift.price>=1000000).toList();
-        default: return PremiumGiftCatalog.normal;
-      }
-    }
+    StateSetter? refreshSheet;
+    BuildContext? activeSheetContext;
+    unawaited(widget.state.refreshGiftCatalog().then((_) {
+      if(mounted && activeSheetContext?.mounted == true) refreshSheet?.call((){});
+    }).catchError((Object _) {}));
+    List<GiftDefinition> visibleGifts() => widget.state.gifts.catalogFor(
+      giftCategory,GiftsScreen.catalogFor(giftCategory));
 
     List<(String, String)> recipients() {
       final account = widget.state.auth.current;
@@ -3763,6 +3792,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
           receiverIds: selectedRecipients,
         );
         _applyGiftServerWallet(response);
+        widget.state.applyConfirmedGiftRelationships(response);
         _refreshRoomSendingSummary();
         // Any non-Lucky send breaks the "same Lucky gift consecutively"
         // sequence, so an older Combo must not remain actionable.
@@ -3795,7 +3825,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       if (_luckyComboGift != null) {
         setState(_resetLuckyComboState);
       }
-      _triggerSeatGiftEffect(gift, selectedRecipients);
+      final confirmedTransactions = response['transactions'];
+      final confirmedGift = confirmedTransactions is List && confirmedTransactions.isNotEmpty
+        ? gift.withServerMetadata(Map<String,dynamic>.from(confirmedTransactions.first as Map)) : gift;
+      _triggerSeatGiftEffect(confirmedGift, selectedRecipients);
 
       if (!sheetContext.mounted) return;
       Navigator.pop(sheetContext);
@@ -3814,6 +3847,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       backgroundColor: RoyalPalette.nearBlack,
       builder: (context) => StatefulBuilder(
         builder: (context, setSheetState) {
+          refreshSheet = setSheetState;
+          activeSheetContext = context;
           final roomRecipients = recipients();
           final filteredGifts = visibleGifts();
           return SafeArea(
@@ -8642,6 +8677,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           ),
                         ),
                     ),
+                  if (occupied && _pairedInRoom(presenceMember?.userId))
+                    Positioned.fill(child:IgnorePointer(child:RelationshipSeatAura(level:widget.state.cp.relationship!.level))),
+                  if (occupied && _pairedInRoom(presenceMember?.userId,rivalry:true))
+                    Positioned.fill(child:IgnorePointer(child:RelationshipSeatAura(level:widget.state.vsRelationship!.level,rivalry:true))),
                   if (occupied && speakingUserId != null)
                     Positioned(
                       left: compact ? -15 : -19,
@@ -8686,13 +8725,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                   if (seatEmote != null && seatEmote.isNotEmpty)
                     IgnorePointer(
-                      child: Text(
-                        seatEmote,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: seatDiameter * 0.82,
-                          height: 1,
-                        ),
+                      child: AnimatedSeatEmote(
+                        key: ValueKey('seat-emote-$index-$seatEmote-${emoteUntil?.millisecondsSinceEpoch ?? 0}'),
+                        emote: seatEmote,
+                        size: seatDiameter * 1.08,
                       ),
                     ),
                   if (showSeatGiftEffect &&

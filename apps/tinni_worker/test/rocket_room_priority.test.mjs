@@ -36,10 +36,10 @@ test('only a completed launch boosts a room, independently in every room',async 
  for(const [sender,room,receiver] of [[a,ra,b],[b,rb,a]]){
   r.directory.getWallet(sender.user_id);
   r.directory._creditNormalWalletAuthorized(sender.user_id,8000000,'test_fixture');
-  const partial=await r.request('/gifts/send',sender.token,{room_id:room.id,gift_id:'hot-biryani',quantity:159,receiver_ids:[receiver.user_id]});
+  const partial=await r.request('/gifts/send',sender.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:'hot-biryani',quantity:159,receiver_ids:[receiver.user_id]});
   assert.equal(partial.status,201);
   assert.equal((await r.directory.listRooms()).find(x=>x.id===room.id).rocket_launch_level,0);
-  const launch=await r.request('/gifts/send',sender.token,{room_id:room.id,gift_id:'hot-biryani',quantity:1,receiver_ids:[receiver.user_id]});
+  const launch=await r.request('/gifts/send',sender.token,{request_id:crypto.randomUUID(),room_id:room.id,gift_id:'hot-biryani',quantity:1,receiver_ids:[receiver.user_id]});
   assert.equal(launch.status,201);
   assert.equal((await r.directory.listRooms()).find(x=>x.id===room.id).rocket_launch_level,1);
  }
