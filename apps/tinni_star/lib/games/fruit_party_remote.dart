@@ -186,7 +186,7 @@ class FruitPartyRemoteService extends ChangeNotifier {
     return 'Server connection failed. Please retry.';
   }
 
-  Future<Map<String, dynamic>> _requestJson  Future<Map<String, dynamic>> _requestJson(HttpClientRequest request) async {
+  Future<Map<String, dynamic>> _requestJson(HttpClientRequest request) async {
     try {
       final response = await closeBackendRequest(request).timeout(requestTimeout);
       final data = await _readJson(response).timeout(requestTimeout);
