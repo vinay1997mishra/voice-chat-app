@@ -1,5 +1,5 @@
 import * as coldStorage from "./cold_storage.js";
-const APP_SCHEMA_VERSION = "2026-10-08-room-directory-schema-repair-1";
+const APP_SCHEMA_VERSION = "2026-10-06-cp-vs-transactions-2";
 import { openGameSocket, handleGameMessage, notifyGameChanged } from "./game_live.js";
 import { countryDay } from './country_clock.js';
 import { rocketPolicy, rocketAllocation, rocketDraw } from './rocket_rewards.js';
@@ -11908,8 +11908,8 @@ export class AppDirectoryStore extends DurableObject {
   }
 
     async listRooms() {
-    this._ensureRocketTables();
-    this._pruneRoomThemes();
+    // Discovery must stay read-only. Read traffic is allowed to keep working
+    // even if the account has exhausted its Durable Object row-write quota.
     const onlineCutoff = Date.now() - 90000;
     const now = Date.now();
     const rows = this.ctx.storage.sql.exec(
@@ -11960,7 +11960,7 @@ export class AppDirectoryStore extends DurableObject {
 
   _pruneRoomThemes(now = Date.now()) {
     this.ctx.storage.sql.exec(
-      "UPDATE room_themes SET enabled = 0 WHERE expires_at IS NOT NULL AND expires_at <= ?",
+      "UPDATE room_themes SET enabled = 0 WHERE enabled != 0 AND expires_at IS NOT NULL AND expires_at <= ?",
       now,
     );
     this.ctx.storage.sql.exec(
@@ -11982,7 +11982,6 @@ export class AppDirectoryStore extends DurableObject {
   listRoomThemes(roomIdValue) {
     const roomId = String(roomIdValue || "").trim();
     const now = Date.now();
-    this._pruneRoomThemes(now);
     return this.ctx.storage.sql.exec(
       `SELECT *
          FROM room_themes
@@ -12000,12 +11999,12 @@ export class AppDirectoryStore extends DurableObject {
 
   listPanelRoomThemes() {
     const now = Date.now();
-    this._pruneRoomThemes(now);
     return this.ctx.storage.sql.exec(
       `SELECT *
          FROM room_themes
         WHERE source = 'panel'
           AND enabled = 1
+          AND (expires_at IS NULL OR expires_at > ?)
         ORDER BY
           CASE
             WHEN starts_at IS NULL OR starts_at <= ? THEN 0
@@ -12013,6 +12012,7 @@ export class AppDirectoryStore extends DurableObject {
           END,
           COALESCE(starts_at, created_at) ASC,
           created_at DESC`,
+      now,
       now,
     ).toArray().map(rowToRoomTheme);
   }
