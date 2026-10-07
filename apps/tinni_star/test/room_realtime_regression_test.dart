@@ -78,7 +78,9 @@ void main() {
     expect(session, contains('_presenceRecoveryTimer'));
     expect(session, contains('int _presenceRecoveryDelaySeconds = 2;'));
     expect(session, contains('_schedulePresenceRecovery(immediate: true)'));
-    expect(session, contains('(_presenceRecoveryDelaySeconds * 2).clamp(2, 120)'));
+    expect(session, contains('(_presenceRecoveryDelaySeconds * 2).clamp(2, 30)'));
+    expect(presence, contains('(_liveReconnectDelaySeconds * 2).clamp(2, 30)'));
+    expect(presence, contains('math.Random().nextInt(1200)'));
     expect(session, contains('await presence.join('));
     expect(session, contains("throw StateError('Room presence reconnect pending')"));
   });
