@@ -146,6 +146,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     _active = state == AppLifecycleState.resumed;
     _clock?.cancel();
     _poll?.cancel();
+    _poll = null;
     if (!_active) widget.disconnectLive?.call();
     if (_active) {
       _startClock();
@@ -217,6 +218,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
 
   Future<void> _runRefresh() async {
     _poll?.cancel();
+    _poll = null;
     try {
       await widget.refresh();
     } catch (_) {
