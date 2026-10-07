@@ -960,7 +960,7 @@ export class RoomPresenceStore extends DurableObject {
       targetUserId,
     );
     this.ctx.storage.sql.exec(
-      "UPDATE room_members SET seat_index = NULL, mic_enabled = 0, last_seen = ? WHERE user_id = ?",
+      "UPDATE room_members SET seat_index = NULL, mic_enabled = 0, seat_emote = NULL, seat_emote_until = NULL, last_seen = ? WHERE user_id = ?",
       now,
       targetUserId,
     );
