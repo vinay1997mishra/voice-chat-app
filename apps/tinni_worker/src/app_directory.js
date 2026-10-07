@@ -1755,27 +1755,24 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   _retireFruitJackpotRecords() {
-    // Fruit Jackpot is permanently retired. Purge only tables that already
-    // exist so older live Durable Objects can upgrade without constructor
-    // failures. Wallet ledger rows remain intact for balance audit integrity.
-    const existing = new Set(
-      this.ctx.storage.sql.exec(
-        "SELECT name FROM sqlite_master WHERE type='table'"
-      ).toArray().map((row) => String(row.name || "")),
-    );
+    // Fruit Jackpot is permanently retired. Each cleanup is best-effort so a
+    // legacy live schema can never fail AppDirectory construction. Wallet
+    // ledger rows remain intact for balance audit integrity.
     const statements = [
-      ["main_game_bets", "DELETE FROM main_game_bets WHERE game_key='fruit_jackpot'"],
-      ["latest_game_results", "DELETE FROM latest_game_results WHERE game_key='fruit_jackpot'"],
-      ["settled_game_receipts", "DELETE FROM settled_game_receipts WHERE game_key='fruit_jackpot'"],
-      ["main_game_lifetime", "DELETE FROM main_game_lifetime WHERE game_key='fruit_jackpot'"],
-      ["room_game_actions", "DELETE FROM room_game_actions WHERE game_key='fruit_jackpot'"],
-      ["country_ribbons", "DELETE FROM country_ribbons WHERE game_key='fruit_jackpot'"],
+      "DELETE FROM main_game_bets WHERE game_key='fruit_jackpot'",
+      "DELETE FROM latest_game_results WHERE game_key='fruit_jackpot'",
+      "DELETE FROM settled_game_receipts WHERE game_key='fruit_jackpot'",
+      "DELETE FROM main_game_lifetime WHERE game_key='fruit_jackpot'",
+      "DELETE FROM room_game_actions WHERE game_key='fruit_jackpot'",
+      "DELETE FROM country_ribbons WHERE game_key='fruit_jackpot'",
     ];
-    this.ctx.storage.transactionSync(() => {
-      for (const [table, statement] of statements) {
-        if (existing.has(table)) this.ctx.storage.sql.exec(statement);
+    for (const statement of statements) {
+      try {
+        this.ctx.storage.sql.exec(statement);
+      } catch (_) {
+        // Missing legacy tables are expected on some existing Durable Objects.
       }
-    });
+    }
   }
 
   _armStorageSweep() {
