@@ -1546,6 +1546,8 @@ export default {
       let failedCheck = "app_directory";
       try {
         const directory = getAppDirectoryStore(env);
+        failedCheck = "directory_ping";
+        await directory.readPing();
         failedCheck = "list_rooms";
         const rooms = await directory.listRooms();
         const probeRoomId = Array.isArray(rooms) && rooms.length
