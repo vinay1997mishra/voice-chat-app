@@ -14,12 +14,15 @@ class _Game extends ChangeNotifier {
   int balance = 50000;
   int mine = 0;
   int round = 1;
+  bool spinning = false;
+  Map<String, dynamic>? lastBetResult;
   Duration remaining = const Duration(seconds: 21);
   CasinoSnapshot snapshot() => CasinoSnapshot(
-    connected: true, loading: false, bettingOpen: remaining > Duration.zero,
-    spinning: false, remaining: remaining, spinRemaining: Duration.zero,
+    connected: true, loading: false, bettingOpen: !spinning && remaining > Duration.zero,
+    spinning: spinning, remaining: remaining,
+    spinRemaining: spinning ? const Duration(seconds: 5) : Duration.zero,
     roundDuration: 21000, round: round, balance: balance, mine: mine, winnings: 0,
-    jackpot: party ? null : 85763, history: history,
+    jackpot: party ? null : 85763, history: history, lastBetResult: lastBetResult,
     fruits: [
       for (final key in ['lemon', 'cherry', 'kiwi', 'strawberry',
         'watermelon', 'banana', 'raspberry', 'plum'])
@@ -145,6 +148,52 @@ void main() {
       });
     }
   }
+
+  testWidgets('settled result floats during result spin and lists every personal bet', (tester) async {
+    tester.view.physicalSize = const Size(360, 800);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+    final game = _Game();
+    game.spinning = true;
+    game.remaining = Duration.zero;
+    game.history = [
+      CasinoResult(
+        round: 1,
+        fruit: 'cherry',
+        settledAt: DateTime.now().toUtc(),
+        topWinners: const [
+          {'user_id': '1001', 'display_name': 'Alice', 'winning_coins': 100000},
+          {'user_id': '1002', 'display_name': 'Bob', 'winning_coins': 50000},
+        ],
+      ),
+    ];
+    game.lastBetResult = {
+      'round_id': 1,
+      'bet_coins': 30000,
+      'winning_coins': 100000,
+      'outcome': 'win',
+      'bets': [
+        {'fruit_key': 'lemon', 'bet_coins': 5000, 'winning_coins': 0, 'outcome': 'lose'},
+        {'fruit_key': 'cherry', 'bet_coins': 25000, 'winning_coins': 100000, 'outcome': 'win'},
+      ],
+    };
+    await tester.pumpWidget(_harness(game, id: 'fruit-jackpot'));
+    await tester.pump();
+    expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
+    expect(find.textContaining('LAST RESULT'), findsOneWidget);
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.textContaining('5K → LOSE'), findsOneWidget);
+    expect(find.textContaining('25K → +1L'), findsOneWidget);
+
+    await tester.tap(find.byKey(const Key('fruit-jackpot-history')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('lemon • Bet 5K'), findsOneWidget);
+    expect(find.textContaining('cherry • Bet 25K'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+    await tester.pumpWidget(const SizedBox.shrink());
+    game.dispose();
+  });
 
   testWidgets('a pending bet freezes its amount and rejects additional fruit taps', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
