@@ -12,7 +12,7 @@ The active line is `tinnistar`. Consolidation preserves the entire verified runt
 | Inbox, seen status, calls and verification/billing | messages/call/verification screens, social/call services and Worker routes |
 | Family, CP, store, VIP, sharing and profile | current feature screens/services and server catalogs/transactions |
 | Gifts, Lucky Combo, rocket, diamonds and economy | room/gift/wallet services and server transaction stores |
-| Fruit Jackpot/Party and newest seven results | remote games, shared casino panel and atomic server settlements |
+| Fruit Party and newest seven results | remote game, casino panel and atomic server settlements |
 | Ludo four player corners, real DP/name and microphone | Ludo screen/game, room session and server-authoritative Ludo routes |
 | Owner master panel and staff permission controls | standalone owner website and protected Worker APIs; not added to Android |
 
@@ -38,7 +38,6 @@ The branch comparisons below are Git ancestry results, not proof that every hist
 | feature/app-fruit-server-sync | diverged | 7 |
 | feature/email-otp-password-login | diverged | 12 |
 | feature/facebook-login | diverged | 10 |
-| feature/fruit-jackpot-live-game | diverged | 11 |
 | feature/global-room-presence | diverged | 14 |
 | feature/livekit-voice-rtc | diverged | 7 |
 | feature/real-users-rooms-google-auth | diverged | 52 |
