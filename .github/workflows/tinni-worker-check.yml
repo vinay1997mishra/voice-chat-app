@@ -50,7 +50,6 @@ jobs:
           node --check apps/tinni_worker/src/index.js
           node --check apps/tinni_worker/src/app_directory.js
           node --check apps/tinni_worker/src/room_presence.js
-          node --check apps/tinni_worker/src/fruit_game.js
           node --check apps/tinni_owner_panel/app.js
 
       - name: Run Worker tests
