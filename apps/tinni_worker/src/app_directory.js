@@ -334,7 +334,6 @@ export class AppDirectoryStore extends DurableObject {
       );
     `);
     if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
-      coldStorage.initMainGameRetention(this);
       this._retireFruitJackpotRecords();
       this._armStorageSweep();
       return;
@@ -1756,16 +1755,26 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   _retireFruitJackpotRecords() {
-    // Fruit Jackpot is permanently retired. Delete game-specific state and
-    // receipts, while leaving wallet transaction rows intact for coin-ledger
-    // audit consistency.
+    // Fruit Jackpot is permanently retired. Purge only tables that already
+    // exist so older live Durable Objects can upgrade without constructor
+    // failures. Wallet ledger rows remain intact for balance audit integrity.
+    const existing = new Set(
+      this.ctx.storage.sql.exec(
+        "SELECT name FROM sqlite_master WHERE type='table'"
+      ).toArray().map((row) => String(row.name || "")),
+    );
+    const statements = [
+      ["main_game_bets", "DELETE FROM main_game_bets WHERE game_key='fruit_jackpot'"],
+      ["latest_game_results", "DELETE FROM latest_game_results WHERE game_key='fruit_jackpot'"],
+      ["settled_game_receipts", "DELETE FROM settled_game_receipts WHERE game_key='fruit_jackpot'"],
+      ["main_game_lifetime", "DELETE FROM main_game_lifetime WHERE game_key='fruit_jackpot'"],
+      ["room_game_actions", "DELETE FROM room_game_actions WHERE game_key='fruit_jackpot'"],
+      ["country_ribbons", "DELETE FROM country_ribbons WHERE game_key='fruit_jackpot'"],
+    ];
     this.ctx.storage.transactionSync(() => {
-      this.ctx.storage.sql.exec("DELETE FROM main_game_bets WHERE game_key='fruit_jackpot'");
-      this.ctx.storage.sql.exec("DELETE FROM latest_game_results WHERE game_key='fruit_jackpot'");
-      this.ctx.storage.sql.exec("DELETE FROM settled_game_receipts WHERE game_key='fruit_jackpot'");
-      this.ctx.storage.sql.exec("DELETE FROM main_game_lifetime WHERE game_key='fruit_jackpot'");
-      this.ctx.storage.sql.exec("DELETE FROM room_game_actions WHERE game_key='fruit_jackpot'");
-      this.ctx.storage.sql.exec("DELETE FROM country_ribbons WHERE game_key='fruit_jackpot'");
+      for (const [table, statement] of statements) {
+        if (existing.has(table)) this.ctx.storage.sql.exec(statement);
+      }
     });
   }
 
