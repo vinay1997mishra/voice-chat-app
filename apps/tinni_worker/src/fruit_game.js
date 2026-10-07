@@ -173,6 +173,10 @@ export class FruitGameStore extends DurableObject {
       "jackpot_payout",
       "INTEGER NOT NULL DEFAULT 0",
     );
+    this._ensureResultColumn(
+      "top_winners_json",
+      "TEXT NOT NULL DEFAULT '[]'",
+    );
     try { this.ctx.storage.sql.exec("ALTER TABLE fruit_bets ADD COLUMN main_wallet INTEGER NOT NULL DEFAULT 0"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
     try { this.ctx.storage.sql.exec("ALTER TABLE fruit_bets ADD COLUMN room_id TEXT"); } catch (error) { const m=String(error?.message||"").toLowerCase(); if(!m.includes("duplicate")&&!m.includes("already exists")) throw error; }
     coldStorage.initGameRetention(this,"fruit");
@@ -225,6 +229,29 @@ export class FruitGameStore extends DurableObject {
       room_id: row.room_id ? String(row.room_id) : null,
       created_at: Number(row.created_at),
     }));
+  }
+
+  async _topWinnerProfiles(payouts) {
+    const ranked = [...payouts.entries()]
+      .filter(([, amount]) => Number(amount) > 0)
+      .sort((a, b) => Number(b[1]) - Number(a[1]))
+      .slice(0, 3);
+    if (!ranked.length) return [];
+    const directory = this.env?.APP_DIRECTORY ? mainDirectory(this) : null;
+    const winners = [];
+    for (const [userId, amount] of ranked) {
+      let profile = null;
+      if (directory) {
+        try { profile = await directory.getUserById(userId); } catch {}
+      }
+      winners.push({
+        user_id: userId,
+        display_name: String(profile?.display_name || userId),
+        avatar_data_url: profile?.avatar_data_url || null,
+        winning_coins: Number(amount),
+      });
+    }
+    return winners;
   }
 
   _ensureWallet(userId, now = Date.now()) {
@@ -473,6 +500,12 @@ export class FruitGameStore extends DurableObject {
     );
     saveGameResults(this, "fruit", "fruit_jackpot", roundId, bets, payoutsByUser, winner, bonusFruits);
     });
+    const topWinners = await this._topWinnerProfiles(payoutsByUser);
+    this.ctx.storage.sql.exec(
+      "UPDATE fruit_results SET top_winners_json=? WHERE round_id=?",
+      JSON.stringify(topWinners),
+      roundId,
+    );
     if (this.env?.APP_DIRECTORY) {
       const directory = this.env.APP_DIRECTORY.get(this.env.APP_DIRECTORY.idFromName("tinni-app-directory"));
       for (const [userId, payout] of payoutsByUser) {
@@ -565,7 +598,8 @@ export class FruitGameStore extends DurableObject {
     const history = this.ctx.storage.sql.exec(
       `SELECT round_id, fruit_key, mode, total_bet, total_payout,
               company_retained, active_players, margin_target_met, settled_at,
-              special_kind, bonus_fruits_json, jackpot_hit, jackpot_payout
+              special_kind, bonus_fruits_json, jackpot_hit, jackpot_payout,
+              top_winners_json
          FROM fruit_results
         WHERE settled_at >= ${now - coldStorage.GAME_HISTORY_MS}
         ORDER BY round_id DESC
@@ -581,6 +615,13 @@ export class FruitGameStore extends DurableObject {
       const bonusFruits = Array.isArray(bonusKeys)
         ? bonusKeys.map((key) => FRUIT_BY_KEY.get(String(key))).filter(Boolean)
         : [];
+      let topWinners = [];
+      try {
+        const parsed = JSON.parse(String(row.top_winners_json || "[]"));
+        if (Array.isArray(parsed)) topWinners = parsed.slice(0, 3);
+      } catch {
+        topWinners = [];
+      }
       return {
         round_id: Number(row.round_id),
         fruit,
@@ -594,6 +635,7 @@ export class FruitGameStore extends DurableObject {
         margin_target_met: Number(row.margin_target_met) === 1,
         jackpot_hit: Number(row.jackpot_hit || 0) === 1,
         jackpot_payout: Number(row.jackpot_payout || 0),
+        top_winners: topWinners,
         settled_at: Number(row.settled_at),
       };
     });
