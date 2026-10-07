@@ -635,11 +635,14 @@ class _FloatingRoundResult extends StatelessWidget {
     if (row != null && (row['round_id'] as num?)?.toInt() == result.round) {
       final raw = row['bets'];
       if (raw is List) {
-        return [
+        final parsed = <Map<String, dynamic>>[
           for (final item in raw)
             if (item is Map)
               item.map((key, value) => MapEntry(key.toString(), value)),
         ];
+        if (parsed.isNotEmpty || fallbackBets.isEmpty) {
+          return parsed;
+        }
       }
     }
     return fallbackBets;
