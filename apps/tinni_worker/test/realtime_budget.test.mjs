@@ -60,12 +60,12 @@ test('current AppDirectory rehydration stays read-only when SQL writes are unava
   assert.doesNotThrow(()=>new r.directory.constructor(r.directory.ctx,r.env));
 });
 
-test('temporary repair schema rehydrates without migration writes',async t=>{
+test('historical schema labels rehydrate without migration writes',async t=>{
   const r=runtime();t.after(r.close);
   await r.user(1);
   r.directory.ctx.storage.sql.exec(
     "UPDATE app_schema_versions SET version=? WHERE id=1",
-    '2026-10-08-room-directory-schema-repair-1',
+    'legacy-live-schema-label',
   );
   const exec=r.directory.ctx.storage.sql.exec;
   r.directory.ctx.storage.sql.exec=(query,...args)=>{
