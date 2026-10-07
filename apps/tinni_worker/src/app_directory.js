@@ -317,14 +317,18 @@ export class AppDirectoryStore extends DurableObject {
     // rehydrated. Cloudflare's free tier rejects further SQL writes after the
     // daily row-write allowance is exhausted, but reads can continue.
     let currentSchemaVersion = null;
+    let hasExistingTables = false;
     try {
       currentSchemaVersion = this.ctx.storage.sql.exec(
         "SELECT version FROM app_schema_versions WHERE id=1"
       ).toArray()[0]?.version || null;
-    } catch (_) {
-      // Fresh/legacy objects without the version table fall through to init.
-    }
-    if (currentSchemaVersion) {
+    } catch (_) {}
+    try {
+      hasExistingTables = this.ctx.storage.sql.exec(
+        "SELECT name FROM sqlite_master WHERE type='table' LIMIT 1"
+      ).toArray().length > 0;
+    } catch (_) {}
+    if (currentSchemaVersion || hasExistingTables) {
       // Existing objects never migrate on a read-triggered rehydration.
       // Schema maintenance is a write concern and must not take discovery,
       // health, profile or wallet reads offline when write quota is exhausted.
