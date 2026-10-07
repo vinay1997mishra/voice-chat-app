@@ -267,6 +267,10 @@ class FruitPartyRemoteService extends ChangeNotifier {
         _asInt(row['settled_at']),
         isUtc: true,
       ),
+      topWinners: [
+        for (final item in _asList(row['top_winners']))
+          Map<String, dynamic>.from(_asMap(item)),
+      ],
     );
   }
 
