@@ -2897,13 +2897,10 @@ async function loadGameStats(userId = "") {
       "Min " + fmt(state.gameConfig.min_bet || 0) + " • Max " + fmt(state.gameConfig.max_bet || 0);
 
     if (root) {
-      const playerJackpot = data.jackpot?.player;
       const playerParty = data.party?.player;
       root.className = "action-list";
       root.innerHTML = `
         <div class="rule-grid">
-          <div class="rule"><strong>Jackpot bets</strong><span>${fmt(data.jackpot?.total_bet || 0)}</span></div>
-          <div class="rule"><strong>Jackpot payout</strong><span>${fmt(data.jackpot?.total_payout || 0)}</span></div>
           <div class="rule"><strong>Party bets</strong><span>${fmt(data.party?.total_bet || 0)}</span></div>
           <div class="rule"><strong>Party payout</strong><span>${fmt(data.party?.total_payout || 0)}</span></div>
           <div class="rule"><strong>House net</strong><span>${fmt(totals.house_net || 0)}</span></div>
@@ -2912,9 +2909,7 @@ async function loadGameStats(userId = "") {
         ${data.user_id ? `
           <h3 style="margin-top:12px">ID ${escapeHtml(data.user_id)}</h3>
           <div class="rule-grid">
-            <div class="rule"><strong>Jackpot net</strong><span>${fmt(playerJackpot?.net_profit || 0)}</span></div>
             <div class="rule"><strong>Party net</strong><span>${fmt(playerParty?.net_profit || 0)}</span></div>
-            <div class="rule"><strong>Jackpot bet coins</strong><span>${fmt(playerJackpot?.total_bet || 0)}</span></div>
             <div class="rule"><strong>Party bet coins</strong><span>${fmt(playerParty?.total_bet || 0)}</span></div>
           </div>` : ""}
       `;
@@ -3681,13 +3676,9 @@ document.body.addEventListener("click", async e => {
     root.textContent = "Loading game activity…";
     try {
       const data = await api("/api/owner/game-stats?user_id=" + encodeURIComponent(ownerFullDashboardUserId));
-      const jackpot = data.jackpot?.player || {};
       const party = data.party?.player || {};
       root.className = "rule-grid";
       root.innerHTML = `
-        <div class="rule"><strong>Jackpot bets</strong><span>${fmt(jackpot.total_bet || 0)}</span></div>
-        <div class="rule"><strong>Jackpot payout</strong><span>${fmt(jackpot.total_payout || 0)}</span></div>
-        <div class="rule"><strong>Jackpot net</strong><span>${fmt(jackpot.net_profit || 0)}</span></div>
         <div class="rule"><strong>Party bets</strong><span>${fmt(party.total_bet || 0)}</span></div>
         <div class="rule"><strong>Party payout</strong><span>${fmt(party.total_payout || 0)}</span></div>
         <div class="rule"><strong>Party net</strong><span>${fmt(party.net_profit || 0)}</span></div>
