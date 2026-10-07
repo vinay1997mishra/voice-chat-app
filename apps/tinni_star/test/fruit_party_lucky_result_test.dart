@@ -34,7 +34,7 @@ void main() {
   testWidgets('Party Lucky is visible in the real casino panel',(tester) async {
     final source=ValueNotifier<int>(0);
     await tester.pumpWidget(MaterialApp(home:Scaffold(body:CasinoGameDock(
-      child:CasinoFruitPanel(title:'Fruit Party',gameId:'party-lucky',party:true,
+      child:CasinoFruitPanel(title:'Fruit Party',gameId:'party-lucky',
         source:source,refresh:()async{},bet:(_,_)async=>null,
         snapshot:()=>CasinoSnapshot(connected:true,loading:false,bettingOpen:true,spinning:false,
           remaining:const Duration(seconds:21),spinRemaining:Duration.zero,roundDuration:21000,
