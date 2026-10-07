@@ -417,7 +417,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                           fontWeight: FontWeight.w900, letterSpacing: .7)),
                       const Text('Pick your fruit • choose your chip',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(color: _gold, fontSize: 10,
+                        style: TextStyle(color: _gold, fontSize: 10,
                           fontWeight: FontWeight.w700)),
                     ])),
                   Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
