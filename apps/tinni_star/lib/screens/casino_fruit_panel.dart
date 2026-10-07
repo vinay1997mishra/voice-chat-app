@@ -627,16 +627,17 @@ class _FloatingRoundResult extends StatelessWidget {
                 maxLines: 1, overflow: TextOverflow.ellipsis,
                 style: const TextStyle(color: _cream, fontSize: 9, fontWeight: FontWeight.w700)),
             ])),
-            Text('BET ${casinoAmount(personalBet)}  •  WIN ${casinoAmount(personalWin)}',
-              style: TextStyle(color: personalWin > 0 ? const Color(0xFF7CF2B5) : _cream,
-                fontSize: 8, fontWeight: FontWeight.w900)),
           ]),
+          const SizedBox(height: 2),
+          Align(alignment: Alignment.centerRight, child: Text(
+            'BET ${casinoAmount(personalBet)} • WIN ${casinoAmount(personalWin)}',
+            maxLines: 1, overflow: TextOverflow.ellipsis,
+            style: TextStyle(color: personalWin > 0 ? const Color(0xFF7CF2B5) : _cream,
+              fontSize: 8, fontWeight: FontWeight.w900))),
           if (result.topWinners.isNotEmpty) ...[
-            const SizedBox(height: 6),
-            SizedBox(height: 38, child: Row(children: [
-              for (var i = 0; i < math.min(3, result.topWinners.length); i++)
-                Expanded(child: _TopWinnerMini(rank: i + 1, data: result.topWinners[i])),
-            ])),
+            const SizedBox(height: 4),
+            for (var i = 0; i < math.min(3, result.topWinners.length); i++)
+              SizedBox(height: 27, child: _TopWinnerMini(rank: i + 1, data: result.topWinners[i])),
           ],
           if (bets.isNotEmpty) ...[
             const SizedBox(height: 5),
