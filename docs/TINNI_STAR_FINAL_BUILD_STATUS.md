@@ -10,7 +10,7 @@ The separate package needs its Android package name and certificate registered w
 
 ## Changes
 
-- Both Fruit Jackpot and Fruit Party show seven persistent visible result slots. Only confirmed settled rounds are shown, sorted newest first and deduplicated by round ID. The eighth result removes the oldest visible result. Empty slots remain placeholders before seven rounds exist; Lucky 11 shows a dedicated icon and tooltip listing bonus fruits.
+- Fruit Party shows seven persistent visible result slots. Only confirmed settled rounds are shown, sorted newest first and deduplicated by round ID. The eighth result removes the oldest visible result. Empty slots remain placeholders before seven rounds exist; Lucky 11 shows a dedicated icon and tooltip listing bonus fruits.
 - Preserve server-authoritative Ludo with four corner-coloured player positions, real names, avatars and room microphone controls, including token selection, leave/rejoin and turn validation.
 - Midnight-blue shared surfaces, readable slate text, champagne accents and a shaded rose CP heart.
 - Correct Owner numeric Unique ID creation validation.
@@ -25,7 +25,7 @@ Two-device LiveKit voice/audio, Bluetooth routing, reconnecting on real mobile n
 
 ## Feature inventory retained
 
-Authentication/profile/privacy and ID, home/discovery/rooms, room presence/seats/moderation/voice/music/video, messages/social/friends/moments, CP/rings/memories/ranking, gifts/Lucky/Combo/rocket/effects/inventory/VIP/store, wallets/coin-seller/merchant/hierarchy/host/agency/BD, Fruit Jackpot/Fruit Party/Ludo, and existing Anamika/function-pack interfaces. Runtime tests and configured-provider checks run in CI; incomplete integrations remain reported as such.
+Authentication/profile/privacy and ID, home/discovery/rooms, room presence/seats/moderation/voice/music/video, messages/social/friends/moments, CP/rings/memories/ranking, gifts/Lucky/Combo/rocket/effects/inventory/VIP/store, wallets/coin-seller/merchant/hierarchy/host/agency/BD, Fruit Party/Ludo, and existing Anamika/function-pack interfaces. Runtime tests and configured-provider checks run in CI; incomplete integrations remain reported as such.
 
 Owner runtime audit also caught a Full ID dashboard failure: its recent-room query used a non-existent last_entered_at SQL column. Read visited_at with a compatible last_entered_at response alias.
 
