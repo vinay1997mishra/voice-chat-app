@@ -313,29 +313,9 @@ function validateRoomThemePolicy(nameValue, assetValue) {
 export class AppDirectoryStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
-    // A hot/read-only Durable Object must never write just because it was
-    // rehydrated. Cloudflare's free tier rejects further SQL writes after the
-    // daily row-write allowance is exhausted, but reads can continue.
-    let currentSchemaVersion = null;
-    let hasExistingTables = false;
-    try {
-      currentSchemaVersion = this.ctx.storage.sql.exec(
-        "SELECT version FROM app_schema_versions WHERE id=1"
-      ).toArray()[0]?.version || null;
-    } catch (_) {}
-    try {
-      hasExistingTables = this.ctx.storage.sql.exec(
-        "SELECT name FROM sqlite_master WHERE type='table' LIMIT 1"
-      ).toArray().length > 0;
-    } catch (_) {}
-    if (currentSchemaVersion || hasExistingTables) {
-      // Existing objects never migrate on a read-triggered rehydration.
-      // Schema maintenance is a write concern and must not take discovery,
-      // health, profile or wallet reads offline when write quota is exhausted.
-      return;
-    }
-
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS app_schema_versions(id INTEGER PRIMARY KEY,version TEXT NOT NULL)");
+    // Security tables must be created even when the application schema version
+    // is already current so older Durable Objects receive the hardening patch.
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS security_rate_limits (
         rate_key TEXT PRIMARY KEY,
@@ -353,6 +333,11 @@ export class AppDirectoryStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
     `);
+    if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
+      this._retireFruitJackpotRecords();
+      this._armStorageSweep();
+      return;
+    }
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS app_users (
         user_id TEXT PRIMARY KEY,
@@ -1798,10 +1783,6 @@ export class AppDirectoryStore extends DurableObject {
       const next=Math.max(Date.now()+1000,Number(row?.next_sweep)||Date.now()+10000);
       if(current===null||current>next) await this.ctx.storage.setAlarm(next);
     });
-  }
-
-  readPing() {
-    return { ok: true };
   }
 
   async consumeSecurityRateLimit(keyValue, limitValue, windowMsValue) {
@@ -11927,8 +11908,8 @@ export class AppDirectoryStore extends DurableObject {
   }
 
     async listRooms() {
-    // Discovery must stay read-only. Read traffic is allowed to keep working
-    // even if the account has exhausted its Durable Object row-write quota.
+    this._ensureRocketTables();
+    this._pruneRoomThemes();
     const onlineCutoff = Date.now() - 90000;
     const now = Date.now();
     const rows = this.ctx.storage.sql.exec(
@@ -11979,7 +11960,7 @@ export class AppDirectoryStore extends DurableObject {
 
   _pruneRoomThemes(now = Date.now()) {
     this.ctx.storage.sql.exec(
-      "UPDATE room_themes SET enabled = 0 WHERE enabled != 0 AND expires_at IS NOT NULL AND expires_at <= ?",
+      "UPDATE room_themes SET enabled = 0 WHERE expires_at IS NOT NULL AND expires_at <= ?",
       now,
     );
     this.ctx.storage.sql.exec(
@@ -12001,6 +11982,7 @@ export class AppDirectoryStore extends DurableObject {
   listRoomThemes(roomIdValue) {
     const roomId = String(roomIdValue || "").trim();
     const now = Date.now();
+    this._pruneRoomThemes(now);
     return this.ctx.storage.sql.exec(
       `SELECT *
          FROM room_themes
@@ -12018,12 +12000,12 @@ export class AppDirectoryStore extends DurableObject {
 
   listPanelRoomThemes() {
     const now = Date.now();
+    this._pruneRoomThemes(now);
     return this.ctx.storage.sql.exec(
       `SELECT *
          FROM room_themes
         WHERE source = 'panel'
           AND enabled = 1
-          AND (expires_at IS NULL OR expires_at > ?)
         ORDER BY
           CASE
             WHEN starts_at IS NULL OR starts_at <= ? THEN 0
@@ -12031,7 +12013,6 @@ export class AppDirectoryStore extends DurableObject {
           END,
           COALESCE(starts_at, created_at) ASC,
           created_at DESC`,
-      now,
       now,
     ).toArray().map(rowToRoomTheme);
   }
