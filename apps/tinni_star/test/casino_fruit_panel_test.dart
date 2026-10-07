@@ -35,7 +35,8 @@ class _Game extends ChangeNotifier {
 
 Widget _harness(_Game game, {required String id, bool party = false,
   Future<void> Function()? refresh, Future<String?> Function(String, int)? bet,
-  VoidCallback? close, Future<void> Function()? connectLive, VoidCallback? disconnectLive}) => RepaintBoundary(
+  VoidCallback? close, Future<void> Function()? connectLive, VoidCallback? disconnectLive,
+  bool Function()? liveConnected}) => RepaintBoundary(
     key: const Key('casino-preview-root'),
     child: MaterialApp(home: Scaffold(backgroundColor: const Color(0xFF100C1C),
       body: MediaQuery(
@@ -43,7 +44,7 @@ Widget _harness(_Game game, {required String id, bool party = false,
         child: CasinoGameDock(child: CasinoFruitPanel(
           title: party ? 'Fruit Party' : 'Fruit Jackpot', gameId: id,
           party: party, source: game, snapshot: game.snapshot,
-          connectLive: connectLive, disconnectLive: disconnectLive,
+          connectLive: connectLive, disconnectLive: disconnectLive, liveConnected: liveConnected,
           refresh: refresh ?? () async {}, bet: bet ?? (_, _) async => null, onClose: close,
         )),
       ),
@@ -58,6 +59,7 @@ void main() {
       refresh: () async { reads++; },
       connectLive: () async { connects++; },
       disconnectLive: () { disconnects++; },
+      liveConnected: () => true,
     ));
     await tester.pump();
     expect(reads, 1);
@@ -73,6 +75,48 @@ void main() {
     expect(reads, 2);
     await tester.pumpWidget(const SizedBox.shrink());
     expect(disconnects, 1);
+    game.dispose();
+  });
+
+  testWidgets('disconnected live socket falls back to state refresh', (tester) async {
+    final game = _Game();
+    var reads = 0;
+    var live = false;
+    await tester.pumpWidget(_harness(
+      game,
+      id: 'fruit-jackpot',
+      connectLive: () async {},
+      liveConnected: () => live,
+      refresh: () async {
+        reads++;
+        if (reads == 2) {
+          game.spinning = true;
+          game.remaining = Duration.zero;
+          game.history = [
+            CasinoResult(
+              round: 1,
+              fruit: 'cherry',
+              settledAt: DateTime.now().toUtc(),
+            ),
+          ];
+          game.change();
+        }
+      },
+    ));
+    await tester.pump();
+    expect(reads, 1);
+    await tester.pump(const Duration(seconds: 3));
+    expect(reads, greaterThanOrEqualTo(2));
+    expect(find.byKey(const Key('fruit-jackpot-floating-result')), findsOneWidget);
+    expect(find.byTooltip('Round 1 • cherry'), findsOneWidget);
+
+    live = true;
+    game.change();
+    await tester.pump();
+    final readsWhenLive = reads;
+    await tester.pump(const Duration(seconds: 5));
+    expect(reads, readsWhenLive);
+    await tester.pumpWidget(const SizedBox.shrink());
     game.dispose();
   });
 
