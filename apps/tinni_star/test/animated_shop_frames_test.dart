@@ -1,3 +1,4 @@
+import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -21,5 +22,15 @@ void main() {
       }
     }
     await tester.pumpWidget(const SizedBox());
+  });
+
+  test('room seat frames touch the DP edge but paint only outside it', () {
+    final room = File('lib/screens/room_screen.dart').readAsStringSync();
+    final frame = File('lib/ui/animated_avatar_frame.dart').readAsStringSync();
+
+    expect(room, contains('outsideOnly: true'));
+    expect(frame, contains('protectedInnerRadius: avatarSize / 2'));
+    expect(frame, contains('PathOperation.difference'));
+    expect(frame, contains('frameCanvasSize ='));
   });
 }
