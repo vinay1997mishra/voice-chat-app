@@ -582,8 +582,8 @@ class _JackpotEventPanel extends StatelessWidget {
     return Material(elevation: 14, color: Colors.transparent, borderRadius: BorderRadius.circular(18),
       child: Container(width: 174, height: 174, padding: const EdgeInsets.all(9),
         decoration: BoxDecoration(borderRadius: BorderRadius.circular(18),
-          color: const Color(0xF51C0B18), border: Border.all(color: const Color(0xFFFF334E), width: 2),
-          boxShadow: const [BoxShadow(color: Color(0x99FF183F), blurRadius: 16)]),
+          color: const Color(0xF51C0B18), border: Border.all(color: const Color(0xFF8E2034), width: 2),
+          boxShadow: const [BoxShadow(color: Color(0x668E2034), blurRadius: 16)]),
         child: Column(children: [
           const Text('JACKPOT OPEN', style: TextStyle(color: Color(0xFFFFD580), fontSize: 12, fontWeight: FontWeight.w900)),
           Text('POOL ${casinoAmount(pool)} • 10% / 5% / 3%',
@@ -841,58 +841,317 @@ class _RecentFruitResult extends StatelessWidget {
   }
 }
 
-class _FruitTile extends StatelessWidget {
+class _FruitTile extends StatefulWidget {
   const _FruitTile({required this.fruit, required this.moving, required this.bonus,
     required this.winner, required this.pending, required this.disableMotion, this.onTap});
   final CasinoFruit fruit;
   final bool moving, bonus, winner, pending, disableMotion;
   final VoidCallback? onTap;
+
+  @override
+  State<_FruitTile> createState() => _FruitTileState();
+}
+
+class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMixin {
+  late final AnimationController _surface;
+
+  bool get _active => widget.moving || widget.bonus || widget.winner;
+
+  Color get _accent => widget.moving || widget.bonus
+      ? const Color(0xFF8E2034)
+      : widget.winner
+          ? _gold
+          : const Color(0xFFB77ADC);
+
+  @override
+  void initState() {
+    super.initState();
+    _surface = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1800),
+      value: .18,
+    );
+    _syncSurface();
+  }
+
+  @override
+  void didUpdateWidget(covariant _FruitTile oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.moving != widget.moving ||
+        oldWidget.bonus != widget.bonus ||
+        oldWidget.winner != widget.winner ||
+        oldWidget.disableMotion != widget.disableMotion) {
+      _syncSurface();
+    }
+  }
+
+  void _syncSurface() {
+    if (widget.disableMotion) {
+      _surface.stop();
+      _surface.value = .18;
+      return;
+    }
+    if (_active) {
+      if (!_surface.isAnimating) {
+        _surface.repeat();
+      }
+    } else {
+      _surface.stop();
+      _surface.animateTo(
+        .18,
+        duration: const Duration(milliseconds: 180),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  @override
+  void dispose() {
+    _surface.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final active = moving || bonus || winner;
-    final accent = moving || bonus ? const Color(0xFFFF334E)
-      : winner ? const Color(0xFF71E5B0) : const Color(0xFFD8A2FF);
+    final active = _active;
+    final accent = _accent;
     return Semantics(
-      button: true, enabled: onTap != null,
-      label: fruit.label + ', ' + fruit.multiplier.toString() + ' times, bet ' + fruit.bet.toString(),
-      child: Material(color: Colors.transparent,
-        child: InkWell(key: Key('casino-fruit-' + fruit.key),
-          borderRadius: BorderRadius.circular(12), onTap: onTap,
-          child: AnimatedContainer(duration: disableMotion ? Duration.zero : const Duration(milliseconds: 140),
-            padding: const EdgeInsets.fromLTRB(4, 3, 4, 3),
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12),
-              gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-                colors: active ? const [Color(0xFFFFFFFF), Color(0xFFFFE2A8)]
-                  : const [Color(0xFFFFF9EC), Color(0xFFEDE1CD)]),
-              border: Border.all(color: active ? accent : const Color(0xFFBBA481), width: 1.5),
-              boxShadow: active ? [BoxShadow(color: accent.withValues(alpha: .35), blurRadius: 7)] : const []),
-            child: LayoutBuilder(builder: (context, constraints) => Column(children: [
-              Expanded(child: Center(child: CasinoFruitArt(fruitKey: fruit.key,
-                size: math.min(constraints.maxWidth * .75, math.max(18.0, constraints.maxHeight - 22))))),
-              Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                Flexible(child: Text(fruit.label, maxLines: 1, overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Color(0xFF403045), fontSize: 9, fontWeight: FontWeight.w800))),
-                const SizedBox(width: 3),
-                Text(fruit.multiplier.toString() + '×',
-                  style: const TextStyle(color: Color(0xFF8B481B), fontSize: 9, fontWeight: FontWeight.w900)),
-                if (bonus) ...[
-                  const SizedBox(width: 3),
-                  Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-                    decoration: BoxDecoration(color: const Color(0xFFFF334E), borderRadius: BorderRadius.circular(5)),
-                    child: const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 6, fontWeight: FontWeight.w900))),
-                ],
-              ]),
-              SizedBox(height: 9, child: Text(fruit.bet > 0
-                ? casinoAmount(fruit.bet) + ' coins' + (pending ? ' • pending' : '')
-                : pending ? 'pending' : '',
-                maxLines: 1, style: const TextStyle(color: Color(0xFF725848),
-                  fontSize: 7, fontWeight: FontWeight.w700))),
-            ])),
+      button: true,
+      enabled: widget.onTap != null,
+      label: widget.fruit.label + ', ' + widget.fruit.multiplier.toString() +
+          ' times, bet ' + widget.fruit.bet.toString(),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          key: Key('casino-fruit-' + widget.fruit.key),
+          borderRadius: BorderRadius.circular(12),
+          onTap: widget.onTap,
+          child: AnimatedBuilder(
+            animation: _surface,
+            builder: (context, child) => AnimatedContainer(
+              duration: widget.disableMotion
+                  ? Duration.zero
+                  : const Duration(milliseconds: 140),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: active ? accent : const Color(0xFF735B78),
+                  width: active ? 1.8 : 1.25,
+                ),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: accent.withValues(
+                            alpha: widget.moving || widget.bonus ? .24 : .32,
+                          ),
+                          blurRadius: widget.winner ? 11 : 8,
+                          spreadRadius: widget.winner ? .5 : 0,
+                        ),
+                      ]
+                    : const [
+                        BoxShadow(
+                          color: Color(0x55000000),
+                          blurRadius: 4,
+                          offset: Offset(0, 2),
+                        ),
+                      ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(10.5),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    CustomPaint(
+                      painter: _FruitSurfacePainter(
+                        progress: _surface.value,
+                        active: active,
+                        accent: accent,
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(4, 3, 4, 3),
+                      child: LayoutBuilder(
+                        builder: (context, constraints) => Column(children: [
+                          Expanded(
+                            child: Center(
+                              child: CasinoFruitArt(
+                                fruitKey: widget.fruit.key,
+                                size: math.min(
+                                  constraints.maxWidth * .75,
+                                  math.max(18.0, constraints.maxHeight - 22),
+                                ),
+                              ),
+                            ),
+                          ),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  widget.fruit.label,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(
+                                    color: _cream,
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 3),
+                              Text(
+                                widget.fruit.multiplier.toString() + '×',
+                                style: const TextStyle(
+                                  color: _gold,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w900,
+                                ),
+                              ),
+                              if (widget.bonus) ...[
+                                const SizedBox(width: 3),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 3,
+                                    vertical: 1,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF7A1A2B),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                      color: const Color(0xFFB44A5C),
+                                      width: .7,
+                                    ),
+                                  ),
+                                  child: const Text(
+                                    'HOT',
+                                    style: TextStyle(
+                                      color: Color(0xFFFFE7EA),
+                                      fontSize: 6,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          SizedBox(
+                            height: 9,
+                            child: Text(
+                              widget.fruit.bet > 0
+                                  ? casinoAmount(widget.fruit.bet) +
+                                      ' coins' +
+                                      (widget.pending ? ' • pending' : '')
+                                  : widget.pending
+                                      ? 'pending'
+                                      : '',
+                              maxLines: 1,
+                              style: const TextStyle(
+                                color: Color(0xFFD7BED2),
+                                fontSize: 7,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ),
+                        ]),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
           ),
         ),
       ),
     );
   }
+}
+
+class _FruitSurfacePainter extends CustomPainter {
+  const _FruitSurfacePainter({
+    required this.progress,
+    required this.active,
+    required this.accent,
+  });
+
+  final double progress;
+  final bool active;
+  final Color accent;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Offset.zero & size;
+    final radius = Radius.circular(math.min(11.0, size.shortestSide * .16));
+    final shape = RRect.fromRectAndRadius(rect, radius);
+
+    canvas.save();
+    canvas.clipRRect(shape);
+
+    final base = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [
+          Color(0xFF2B1A34),
+          Color(0xFF17101F),
+          Color(0xFF0B0911),
+          Color(0xFF25152D),
+        ],
+        stops: [0, .34, .72, 1],
+      ).createShader(rect);
+    canvas.drawRect(rect, base);
+
+    final lightCenter = Offset(
+      size.width * (.18 + .64 * progress),
+      size.height * .18,
+    );
+    final glowRect = Rect.fromCircle(
+      center: lightCenter,
+      radius: size.longestSide * .68,
+    );
+    final glow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          accent.withValues(alpha: active ? .18 : .075),
+          const Color(0x00120B19),
+        ],
+        stops: const [0, 1],
+      ).createShader(glowRect);
+    canvas.drawRect(rect, glow);
+
+    final sheen = Paint()
+      ..shader = LinearGradient(
+        begin: Alignment(-1.8 + progress * 3.6, -1),
+        end: Alignment(-.8 + progress * 3.6, 1),
+        colors: [
+          const Color(0x00FFFFFF),
+          (active ? accent : _gold).withValues(alpha: active ? .11 : .035),
+          const Color(0x00FFFFFF),
+        ],
+        stops: const [0, .5, 1],
+      ).createShader(rect);
+    canvas.drawRect(rect, sheen);
+
+    final depth = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0x00120C18),
+          Color(0x22000000),
+          Color(0x66000000),
+        ],
+        stops: [0, .58, 1],
+      ).createShader(rect);
+    canvas.drawRect(rect, depth);
+
+    canvas.restore();
+  }
+
+  @override
+  bool shouldRepaint(covariant _FruitSurfacePainter oldDelegate) =>
+      oldDelegate.progress != progress ||
+      oldDelegate.active != active ||
+      oldDelegate.accent != accent;
 }
 
 class _RoundTile extends StatelessWidget {
