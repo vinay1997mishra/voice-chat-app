@@ -40,7 +40,6 @@ import '../ui/rocket_rewards_panel.dart';
 import '../ui/rocket_personal_reward.dart';
 import '../ui/rocket_launch_banner.dart';
 import '../ui/premium_effects.dart';
-import 'fruit_jackpot_panel.dart';
 import 'fruit_party_panel.dart';
 import 'ludo_screen.dart';
 import 'messages_screen.dart';
@@ -95,7 +94,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   Timer? _emoteExpiryTimer;
   int? _handledSeatInviteCreatedAtMs;
   bool _seatInviteDialogOpen = false;
-  bool _fruitJackpotOpen = false;
   bool _fruitPartyOpen = false;
   String? _roomTitleOverride;
   String? _roomPhotoOverride;
@@ -5107,7 +5105,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
   Color _roomToolColor(String label) {
     final value = label.toLowerCase();
-    if (value.contains('fruit jackpot')) return FeaturePalette.fruitJackpot;
     if (value.contains('fruit party')) return FeaturePalette.fruitParty;
     if (value.contains('game')) return FeaturePalette.games;
     if (value.contains('gift')) return FeaturePalette.gift;
@@ -5272,18 +5269,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     childAspectRatio: 0.82,
                     children: [
                       _ReferenceGameTile(
-                        key: const Key('game-center-fruit-jackpot'),
-                        label: 'Fruit Jackpot',
-                        icon: Icons.casino_rounded,
-                        onTap: () {
-                          Navigator.pop(sheetContext);
-                          setState(() {
-                            _fruitJackpotOpen = true;
-                            _fruitPartyOpen = false;
-                          });
-                        },
-                      ),
-                      _ReferenceGameTile(
                         key: const Key('game-center-fruit-party'),
                         label: 'Fruit Party',
                         icon: Icons.local_activity_rounded,
@@ -5291,7 +5276,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           Navigator.pop(sheetContext);
                           setState(() {
                             _fruitPartyOpen = true;
-                            _fruitJackpotOpen = false;
                           });
                         },
                       ),
@@ -9648,16 +9632,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             Positioned.fill(child: LuckyGiftOverlay(
               queue: _luckyVisuals, lane: _cinematicLane,
               reserveCombo: _luckyComboTimer.active && _luckyComboGift != null &&
-                  !_fruitJackpotOpen && !_fruitPartyOpen,
+                  !_fruitPartyOpen,
               onStarted: _playLuckySeatVisual,
               enabled: widget.state.roomControls.effectsEnabled &&
                   widget.state.roomControls.luckyGiftEffectEnabled,
             )),
             if (_luckyComboTimer.active && _luckyComboGift != null &&
-                !_fruitJackpotOpen &&
                 !_fruitPartyOpen)
               _buildLuckyComboOverlay(),
-            if (!_fruitJackpotOpen && !_fruitPartyOpen)
+            if (!_fruitPartyOpen)
               Positioned(
                 key: const Key('room-game-floating-position'),
                 right: 8,
@@ -9716,19 +9699,6 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 right: 20,
                 bottom: 94,
                 child: _buildRoomConnectionStatus(),
-              ),
-            if (_fruitJackpotOpen)
-              Positioned(
-                left: 0,
-                right: 0,
-                bottom: 0,
-                height: MediaQuery.sizeOf(context).height * 0.50,
-                child: FruitJackpotPanel(
-                  state: widget.state,
-                  onClose: () => setState(
-                    () => _fruitJackpotOpen = false,
-                  ),
-                ),
               ),
             if (_fruitPartyOpen)
               Positioned(
