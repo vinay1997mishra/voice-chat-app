@@ -77,6 +77,20 @@ test('historical schema labels rehydrate without migration writes',async t=>{
   assert.doesNotThrow(()=>new r.directory.constructor(r.directory.ctx,r.env));
 });
 
+test('legacy AppDirectory without version table rehydrates without writes',async t=>{
+  const r=runtime();t.after(r.close);
+  await r.user(1);
+  r.directory.ctx.storage.sql.exec("DROP TABLE app_schema_versions");
+  const exec=r.directory.ctx.storage.sql.exec;
+  r.directory.ctx.storage.sql.exec=(query,...args)=>{
+    if (/^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|REPLACE)/i.test(String(query))) {
+      throw new Error('Exceeded allowed rows written in Durable Objects free tier.');
+    }
+    return exec(query,...args);
+  };
+  assert.doesNotThrow(()=>new r.directory.constructor(r.directory.ctx,r.env));
+});
+
 test('Ludo invalidations stay in the room where a move happened', () => {
   const a=socket({userId:'a'}), b=socket({userId:'b'});
   const store={ctx:{getWebSockets:tag=>tag==='game:ludo:room-a'?[a]:[b]}};
