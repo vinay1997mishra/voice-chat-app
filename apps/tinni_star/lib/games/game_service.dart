@@ -1,5 +1,4 @@
 enum GameKind {
-  fruitJackpot,
   fruitParty,
   ludo,
   lucky777,
@@ -78,7 +77,6 @@ class GameService {
   GameService();
 
   static const List<GameDefinition> catalog = <GameDefinition>[
-    GameDefinition(kind: GameKind.fruitJackpot, title: 'Fruit Jackpot', requiresServerAuthority: true),
     GameDefinition(kind: GameKind.fruitParty, title: 'Fruit Party', requiresServerAuthority: true),
     GameDefinition(kind: GameKind.ludo, title: 'Ludo', requiresServerAuthority: true),
     GameDefinition(kind: GameKind.lucky777, title: 'Lucky 777', requiresServerAuthority: true),
