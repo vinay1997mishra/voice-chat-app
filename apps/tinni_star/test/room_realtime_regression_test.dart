@@ -75,6 +75,8 @@ void main() {
   test('room presence retries immediately and backs off prolonged outages to protect quota', () {
     final session =
         File('lib/room/active_room_session.dart').readAsStringSync();
+    final presence =
+        File('lib/room/room_presence_service.dart').readAsStringSync();
     expect(session, contains('_presenceRecoveryTimer'));
     expect(session, contains('int _presenceRecoveryDelaySeconds = 2;'));
     expect(session, contains('_schedulePresenceRecovery(immediate: true)'));
