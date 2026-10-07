@@ -535,6 +535,24 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
             final body = viewport.maxHeight < 230
               ? SingleChildScrollView(child: SizedBox(height: 320, child: content))
               : content;
+            final fallbackWinningKeys = result == null
+              ? <String>{}
+              : result.lucky
+                  ? result.bonus.toSet()
+                  : <String>{result.fruit};
+            final fallbackBets = result != null && result.round == view.round
+              ? <Map<String, dynamic>>[
+                  for (final fruit in view.fruits)
+                    if (fruit.bet > 0)
+                      <String, dynamic>{
+                        'fruit_key': fruit.key,
+                        'bet_coins': fruit.bet,
+                        'winning_coins': fallbackWinningKeys.contains(fruit.key)
+                          ? fruit.bet * fruit.multiplier
+                          : 0,
+                      },
+                ]
+              : const <Map<String, dynamic>>[];
             return Stack(clipBehavior: Clip.none, children: [
               body,
               if (jackpotEvent != null)
@@ -557,6 +575,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                       key: Key(widget.gameId + '-floating-result'),
                       result: result,
                       personalResult: view.lastBetResult,
+                      fallbackBets: fallbackBets,
                     ),
                   ),
                 ),
@@ -601,22 +620,29 @@ class _JackpotEventPanel extends StatelessWidget {
 }
 
 class _FloatingRoundResult extends StatelessWidget {
-  const _FloatingRoundResult({super.key, required this.result, this.personalResult});
+  const _FloatingRoundResult({
+    super.key,
+    required this.result,
+    this.personalResult,
+    this.fallbackBets = const <Map<String, dynamic>>[],
+  });
   final CasinoResult result;
   final Map<String, dynamic>? personalResult;
+  final List<Map<String, dynamic>> fallbackBets;
 
   List<Map<String, dynamic>> get _bets {
     final row = personalResult;
-    if (row == null || (row['round_id'] as num?)?.toInt() != result.round) {
-      return const <Map<String, dynamic>>[];
+    if (row != null && (row['round_id'] as num?)?.toInt() == result.round) {
+      final raw = row['bets'];
+      if (raw is List) {
+        return [
+          for (final item in raw)
+            if (item is Map)
+              item.map((key, value) => MapEntry(key.toString(), value)),
+        ];
+      }
     }
-    final raw = row['bets'];
-    if (raw is! List) return const <Map<String, dynamic>>[];
-    return [
-      for (final item in raw)
-        if (item is Map)
-          item.map((key, value) => MapEntry(key.toString(), value)),
-    ];
+    return fallbackBets;
   }
 
   @override
@@ -624,12 +650,20 @@ class _FloatingRoundResult extends StatelessWidget {
     final bets = _bets;
     final sameRound = personalResult != null &&
         (personalResult!['round_id'] as num?)?.toInt() == result.round;
+    final fallbackBet = bets.fold<int>(
+      0,
+      (sum, bet) => sum + ((bet['bet_coins'] as num?)?.toInt() ?? 0),
+    );
+    final fallbackWin = bets.fold<int>(
+      0,
+      (sum, bet) => sum + ((bet['winning_coins'] as num?)?.toInt() ?? 0),
+    );
     final personalWin = sameRound
-        ? ((personalResult!['winning_coins'] as num?)?.toInt() ?? 0)
-        : 0;
+        ? ((personalResult!['winning_coins'] as num?)?.toInt() ?? fallbackWin)
+        : fallbackWin;
     final personalBet = sameRound
-        ? ((personalResult!['bet_coins'] as num?)?.toInt() ?? 0)
-        : 0;
+        ? ((personalResult!['bet_coins'] as num?)?.toInt() ?? fallbackBet)
+        : fallbackBet;
     return Material(
       elevation: 12,
       color: Colors.transparent,
@@ -852,16 +886,52 @@ class _FruitTile extends StatefulWidget {
   State<_FruitTile> createState() => _FruitTileState();
 }
 
+class _FruitSurfacePalette {
+  const _FruitSurfacePalette(this.top, this.middle, this.bottom, this.glow, this.edge);
+  final Color top, middle, bottom, glow, edge;
+}
+
+_FruitSurfacePalette _fruitSurfacePalette(String key) => switch (key) {
+  'lemon' => const _FruitSurfacePalette(
+    Color(0xFF9A6508), Color(0xFF49310A), Color(0xFF16121B),
+    Color(0xFFFFC632), Color(0xFFD3A13D)),
+  'banana' => const _FruitSurfacePalette(
+    Color(0xFFA97808), Color(0xFF4A3509), Color(0xFF17131B),
+    Color(0xFFFFC83F), Color(0xFFD8A83E)),
+  'cherry' => const _FruitSurfacePalette(
+    Color(0xFF8C1634), Color(0xFF4B0D28), Color(0xFF190E1B),
+    Color(0xFFFF355D), Color(0xFFC64966)),
+  'strawberry' => const _FruitSurfacePalette(
+    Color(0xFF9A183C), Color(0xFF4F1031), Color(0xFF1A0F20),
+    Color(0xFFFF3F6E), Color(0xFFC64C70)),
+  'watermelon' => const _FruitSurfacePalette(
+    Color(0xFF8A1833), Color(0xFF4B1028), Color(0xFF190F1E),
+    Color(0xFFFF405E), Color(0xFFC44762)),
+  'raspberry' => const _FruitSurfacePalette(
+    Color(0xFF94184E), Color(0xFF4B113A), Color(0xFF180F21),
+    Color(0xFFFF42A0), Color(0xFFC44D91)),
+  'kiwi' => const _FruitSurfacePalette(
+    Color(0xFF39751C), Color(0xFF1D3B19), Color(0xFF10161A),
+    Color(0xFF7EDC39), Color(0xFF67A943)),
+  'plum' => const _FruitSurfacePalette(
+    Color(0xFF6B279F), Color(0xFF351852), Color(0xFF150F20),
+    Color(0xFFC85CFF), Color(0xFF9E62C7)),
+  _ => const _FruitSurfacePalette(
+    Color(0xFF3B2447), Color(0xFF21142B), Color(0xFF100C16),
+    Color(0xFFB77ADC), Color(0xFF80618D)),
+};
+
 class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMixin {
   late final AnimationController _surface;
 
   bool get _active => widget.moving || widget.bonus || widget.winner;
+  _FruitSurfacePalette get _palette => _fruitSurfacePalette(widget.fruit.key);
 
   Color get _accent => widget.moving || widget.bonus
-      ? const Color(0xFF8E2034)
+      ? const Color(0xFF7F172A)
       : widget.winner
           ? _gold
-          : const Color(0xFFB77ADC);
+          : _palette.edge;
 
   @override
   void initState() {
@@ -892,9 +962,7 @@ class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMi
       return;
     }
     if (_active) {
-      if (!_surface.isAnimating) {
-        _surface.repeat();
-      }
+      if (!_surface.isAnimating) _surface.repeat();
     } else {
       _surface.stop();
       _surface.animateTo(
@@ -915,6 +983,7 @@ class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMi
   Widget build(BuildContext context) {
     final active = _active;
     final accent = _accent;
+    final palette = _palette;
     return Semantics(
       button: true,
       enabled: widget.onTap != null,
@@ -935,23 +1004,23 @@ class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMi
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(12),
                 border: Border.all(
-                  color: active ? accent : const Color(0xFF735B78),
-                  width: active ? 1.8 : 1.25,
+                  color: active ? accent : palette.edge.withValues(alpha: .82),
+                  width: active ? 1.9 : 1.25,
                 ),
                 boxShadow: active
                     ? [
                         BoxShadow(
                           color: accent.withValues(
-                            alpha: widget.moving || widget.bonus ? .24 : .32,
+                            alpha: widget.moving || widget.bonus ? .22 : .34,
                           ),
-                          blurRadius: widget.winner ? 11 : 8,
-                          spreadRadius: widget.winner ? .5 : 0,
+                          blurRadius: widget.winner ? 12 : 8,
+                          spreadRadius: widget.winner ? .6 : 0,
                         ),
                       ]
                     : const [
                         BoxShadow(
-                          color: Color(0x55000000),
-                          blurRadius: 4,
+                          color: Color(0x66000000),
+                          blurRadius: 5,
                           offset: Offset(0, 2),
                         ),
                       ],
@@ -966,6 +1035,7 @@ class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMi
                         progress: _surface.value,
                         active: active,
                         accent: accent,
+                        palette: palette,
                       ),
                     ),
                     Padding(
@@ -1010,17 +1080,11 @@ class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMi
                               if (widget.bonus) ...[
                                 const SizedBox(width: 3),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 3,
-                                    vertical: 1,
-                                  ),
+                                  padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF7A1A2B),
+                                    color: const Color(0xFF721425),
                                     borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                      color: const Color(0xFFB44A5C),
-                                      width: .7,
-                                    ),
+                                    border: Border.all(color: const Color(0xFFA94455), width: .7),
                                   ),
                                   child: const Text(
                                     'HOT',
@@ -1046,7 +1110,7 @@ class _FruitTileState extends State<_FruitTile> with SingleTickerProviderStateMi
                                       : '',
                               maxLines: 1,
                               style: const TextStyle(
-                                color: Color(0xFFD7BED2),
+                                color: Color(0xFFE0C9DA),
                                 fontSize: 7,
                                 fontWeight: FontWeight.w700,
                               ),
@@ -1071,52 +1135,62 @@ class _FruitSurfacePainter extends CustomPainter {
     required this.progress,
     required this.active,
     required this.accent,
+    required this.palette,
   });
 
   final double progress;
   final bool active;
   final Color accent;
+  final _FruitSurfacePalette palette;
 
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Offset.zero & size;
     final radius = Radius.circular(math.min(11.0, size.shortestSide * .16));
     final shape = RRect.fromRectAndRadius(rect, radius);
-
     canvas.save();
     canvas.clipRRect(shape);
 
     final base = Paint()
-      ..shader = const LinearGradient(
+      ..shader = LinearGradient(
         begin: Alignment.topLeft,
         end: Alignment.bottomRight,
-        colors: [
-          Color(0xFF2B1A34),
-          Color(0xFF17101F),
-          Color(0xFF0B0911),
-          Color(0xFF25152D),
-        ],
-        stops: [0, .34, .72, 1],
+        colors: [palette.top, palette.middle, palette.bottom],
+        stops: const [0, .46, 1],
       ).createShader(rect);
     canvas.drawRect(rect, base);
 
-    final lightCenter = Offset(
-      size.width * (.18 + .64 * progress),
-      size.height * .18,
+    final fruitHalo = Rect.fromCircle(
+      center: Offset(size.width * .5, size.height * .38),
+      radius: size.longestSide * .58,
     );
-    final glowRect = Rect.fromCircle(
-      center: lightCenter,
-      radius: size.longestSide * .68,
-    );
-    final glow = Paint()
+    final halo = Paint()
       ..shader = RadialGradient(
         colors: [
-          accent.withValues(alpha: active ? .18 : .075),
+          palette.glow.withValues(alpha: active ? .36 : .25),
+          palette.glow.withValues(alpha: .07),
           const Color(0x00120B19),
         ],
-        stops: const [0, 1],
-      ).createShader(glowRect);
-    canvas.drawRect(rect, glow);
+        stops: const [0, .48, 1],
+      ).createShader(fruitHalo);
+    canvas.drawRect(rect, halo);
+
+    final movingCenter = Offset(
+      size.width * (.12 + .76 * progress),
+      size.height * .15,
+    );
+    final movingGlowRect = Rect.fromCircle(
+      center: movingCenter,
+      radius: size.longestSide * .46,
+    );
+    final movingGlow = Paint()
+      ..shader = RadialGradient(
+        colors: [
+          (active ? accent : palette.glow).withValues(alpha: active ? .14 : .035),
+          const Color(0x00000000),
+        ],
+      ).createShader(movingGlowRect);
+    canvas.drawRect(rect, movingGlow);
 
     final sheen = Paint()
       ..shader = LinearGradient(
@@ -1124,7 +1198,7 @@ class _FruitSurfacePainter extends CustomPainter {
         end: Alignment(-.8 + progress * 3.6, 1),
         colors: [
           const Color(0x00FFFFFF),
-          (active ? accent : _gold).withValues(alpha: active ? .11 : .035),
+          Colors.white.withValues(alpha: active ? .085 : .035),
           const Color(0x00FFFFFF),
         ],
         stops: const [0, .5, 1],
@@ -1135,11 +1209,7 @@ class _FruitSurfacePainter extends CustomPainter {
       ..shader = const LinearGradient(
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
-        colors: [
-          Color(0x00120C18),
-          Color(0x22000000),
-          Color(0x66000000),
-        ],
+        colors: [Color(0x00000000), Color(0x18000000), Color(0x70000000)],
         stops: [0, .58, 1],
       ).createShader(rect);
     canvas.drawRect(rect, depth);
@@ -1151,7 +1221,8 @@ class _FruitSurfacePainter extends CustomPainter {
   bool shouldRepaint(covariant _FruitSurfacePainter oldDelegate) =>
       oldDelegate.progress != progress ||
       oldDelegate.active != active ||
-      oldDelegate.accent != accent;
+      oldDelegate.accent != accent ||
+      oldDelegate.palette != palette;
 }
 
 class _RoundTile extends StatelessWidget {
