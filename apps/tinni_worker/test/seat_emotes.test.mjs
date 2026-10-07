@@ -8,7 +8,7 @@ async function fixture(t) {
   const room = await r.directory.createRoom(owner.user_id, {title:'Seat emotes',seat_count:12});
   for (const user of [owner, viewer]) {
     const joined = await r.request('/room-presence/join', user.token, {room_id:room.id});
-    assert.equal(joined.status,200,JSON.stringify(joined.data));
+    assert.equal(joined.status,201,JSON.stringify(joined.data));
   }
   const taken = await r.request('/room-presence/seat-take', owner.token, {room_id:room.id,seat_index:0});
   assert.equal(taken.status,200,JSON.stringify(taken.data));

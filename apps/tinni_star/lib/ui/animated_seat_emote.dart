@@ -136,9 +136,12 @@ class _PandaFacePainter extends _EmotePainter {
       }
       canvas.drawLine(Offset(s * .39, s * .42), Offset(s * .61, s * .42), black..strokeWidth = s * .025);
     }
-    if (expression == 'royal') glyph(canvas, '👑', Offset(s * .5, s * .15), s * .36);
-    else glyph(canvas, definition.glyph,
-      Offset(s * .77, s * (.73 + (reduced ? 0 : math.sin(t * math.pi * 2) * .03))), s * .3);
+    if (expression == 'royal') {
+      glyph(canvas, '👑', Offset(s * .5, s * .15), s * .36);
+    } else {
+      glyph(canvas, definition.glyph,
+        Offset(s * .77, s * (.73 + (reduced ? 0 : math.sin(t * math.pi * 2) * .03))), s * .3);
+    }
     canvas.restore();
   }
 }

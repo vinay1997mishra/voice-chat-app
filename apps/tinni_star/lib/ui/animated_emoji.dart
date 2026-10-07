@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import 'emoji_reaction_face.dart';
+
 const roomEmojis = <String>[
   '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥰',
   '😎', '🤩', '🥳', '😇', '🙂', '🙃', '😉', '😋',
@@ -70,7 +72,7 @@ class _EmojiMotionState extends State<EmojiMotion>
   }
 
   void _syncMotion() {
-    final enabled = _foreground && TickerMode.of(context) &&
+    final enabled = _foreground && TickerMode.valuesOf(context).enabled &&
         !(MediaQuery.maybeOf(context)?.disableAnimations ?? false);
     if (enabled && !_motion.isAnimating) _motion.repeat();
     if (!enabled) {
@@ -138,8 +140,10 @@ class AnimatedEmoji extends StatelessWidget {
             height: size,
             child: AnimatedBuilder(
               animation: clock,
-              child: artwork ?? Text(emoji, textAlign: TextAlign.center,
-                style: TextStyle(fontSize: size * .76, height: 1)),
+              child: artwork ?? (reactionFaceEmojis.contains(emoji)
+                  ? EmojiReactionFace(emoji: emoji, timeline: clock, size: size)
+                  : Text(emoji, textAlign: TextAlign.center,
+                    style: TextStyle(fontSize: size * .76, height: 1))),
               builder: (context, child) {
                 final reduced = MediaQuery.maybeOf(context)?.disableAnimations ?? false;
                 final t = reduced ? 0.0 : clock.value;
@@ -262,9 +266,14 @@ class _EmojiParticles extends CustomPainter {
           canvas.drawOval(Rect.fromCenter(center: point, width: radius * 1.5, height: radius * 3), paint);
           break;
         case EmojiEffect.anger:
-        case EmojiEffect.fire:
           canvas.drawLine(point, point + Offset(radius * 2, -radius * 3),
             paint..strokeWidth = unit * .02..strokeCap = StrokeCap.round);
+          break;
+        case EmojiEffect.fire:
+          final flame = Path()..moveTo(point.dx, point.dy - radius * 4)
+            ..quadraticBezierTo(point.dx + radius * 3, point.dy + radius, point.dx, point.dy + radius * 2)
+            ..quadraticBezierTo(point.dx - radius * 2, point.dy, point.dx, point.dy - radius * 4);
+          canvas.drawPath(flame, paint);
           break;
         case EmojiEffect.party:
           canvas.save();

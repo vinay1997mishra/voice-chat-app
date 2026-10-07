@@ -52,7 +52,7 @@ void main() {
   testWidgets('legacy unicode emotes still render instead of exposing internal IDs', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: AnimatedSeatEmote(emote: '😂')));
     await tester.pump(const Duration(milliseconds: 400));
-    expect(find.text('😂'), findsOneWidget);
+    expect(find.byKey(const ValueKey('emoji-face-😂')), findsOneWidget);
     expect(find.text('panda-01'), findsNothing);
     expect(tester.hasRunningAnimations, isTrue);
     await tester.pumpWidget(const SizedBox());

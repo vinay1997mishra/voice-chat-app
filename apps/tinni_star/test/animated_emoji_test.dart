@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:tinni_star/ui/animated_emoji.dart';
+import 'package:tinni_star/ui/emoji_reaction_face.dart';
 
 void main() {
   testWidgets('all 64 picker emojis animate on one shared clock', (tester) async {
@@ -12,7 +13,11 @@ void main() {
     )));
     expect(roomEmojis.toSet().length, 64);
     for (final emoji in roomEmojis) {
-      expect(find.text(emoji), findsOneWidget);
+      if (reactionFaceEmojis.contains(emoji)) {
+        expect(find.byKey(ValueKey('emoji-face-$emoji')), findsOneWidget);
+      } else {
+        expect(find.text(emoji), findsOneWidget);
+      }
     }
     expect(find.byType(EmojiMotion), findsOneWidget);
     final before = tester.widget<Transform>(
