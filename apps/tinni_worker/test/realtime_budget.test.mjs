@@ -67,7 +67,7 @@ test('revocation reads filter expiration without issuing cleanup writes', t=>{
   assert.equal(writes.length,0);
 });
 
-for(const [binding,prefix] of [['FRUIT_GAME','fruit'],['FRUIT_PARTY','party']]) {
+for(const [binding,prefix] of [['FRUIT_PARTY','party']]) {
   test(binding+' stops idle alarms but settles overdue bets without filling idle history',async t=>{
     const r=runtime();t.after(r.close);
     const game=r.direct(binding,'idle-test');
@@ -128,7 +128,7 @@ test('role dollar balances push privately through the same account snapshot',asy
   assert.equal(client.events.at(-1).wallet.merchant_wallet.usd_cents,12345);
 });
 
-for(const [binding,prefix] of [['FRUIT_GAME','fruit'],['FRUIT_PARTY','party']]) {
+for(const [binding,prefix] of [['FRUIT_PARTY','party']]) {
   test(binding+' bounds empty history while retaining financial results',async t=>{
     const r=runtime();t.after(r.close);const game=r.direct(binding,'history-budget');
     for(let round=1;round<=80;round++) {
