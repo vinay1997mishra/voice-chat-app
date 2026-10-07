@@ -16,13 +16,9 @@ void main() {
       userId: 'user-1',
       kind: GameKind.fruitParty,
     );
-    expect(GameService.catalog, hasLength(7));
+    expect(GameService.catalog, hasLength(6));
     expect(
       GameService.catalog.firstWhere((g) => g.kind == GameKind.ludo).requiresServerAuthority,
-      isTrue,
-    );
-    expect(
-      GameService.catalog.firstWhere((g) => g.kind == GameKind.fruitJackpot).requiresServerAuthority,
       isTrue,
     );
     expect(session.state, GameSessionState.open);
@@ -69,7 +65,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Fruit Jackpot'), findsOneWidget);
+    expect(find.text('Fruit Jackpot'), findsNothing);
     expect(find.text('Ludo'), findsOneWidget);
     expect(find.text('UNO'), findsNothing);
 
