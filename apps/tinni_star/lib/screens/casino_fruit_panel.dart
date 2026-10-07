@@ -126,7 +126,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   String _frame = '';
   bool _active = true;
   int _failures = 0;
-  int? _refreshedBoundary;
+  String _boundaryRefreshKey = '';
+  int _boundaryRefreshAttempts = 0;
+  DateTime? _lastBoundaryRefreshAt;
 
   @override
   void initState() {
@@ -177,10 +179,38 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
         _frame = frame;
         setState(() {});
       }
-      // Refresh the authoritative phase as soon as a round expires.
-      if (view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
-        _refreshedBoundary = view.round;
-        unawaited(_refresh());
+      // Self-heal a missed Durable Object alarm/socket phase event. Never
+      // present the previous round as the current winner: actively fetch until
+      // this round is settled, then fetch once more when its result-spin cycle
+      // has ended so the next round advances even if the live socket stayed up
+      // but missed a change notification.
+      final recent = recentCasinoResults(view.history);
+      final latestSettledRound = recent.isEmpty ? 0 : recent.first.round;
+      final missingSettlement =
+          view.remaining == Duration.zero && latestSettledRound != view.round;
+      final cycleExpired =
+          view.remaining == Duration.zero &&
+          latestSettledRound == view.round &&
+          !view.spinning &&
+          !view.bettingOpen;
+      final boundaryKey = missingSettlement
+          ? 'settle:${view.round}'
+          : cycleExpired
+              ? 'advance:${view.round}'
+              : '';
+      if (boundaryKey != _boundaryRefreshKey) {
+        _boundaryRefreshKey = boundaryKey;
+        _boundaryRefreshAttempts = 0;
+        _lastBoundaryRefreshAt = null;
+      }
+      if (boundaryKey.isNotEmpty && !_waiting && _boundaryRefreshAttempts < 4) {
+        final now = DateTime.now();
+        final last = _lastBoundaryRefreshAt;
+        if (last == null || now.difference(last) >= const Duration(milliseconds: 600)) {
+          _lastBoundaryRefreshAt = now;
+          _boundaryRefreshAttempts += 1;
+          unawaited(_refresh());
+        }
       }
     });
   }
@@ -258,7 +288,10 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final latest = recent.first;
     // RESULT SPIN is authoritative. Keep the panel visible for the whole spin
     // even if the device clock is skewed from the server clock.
-    if (view.spinning) { return latest; }
+    if (view.spinning) {
+      // A stale previous result must never masquerade as this round's winner.
+      return latest.round == view.round ? latest : null;
+    }
     final age = DateTime.now().difference(latest.settledAt).inMilliseconds;
     // Keep the settled result briefly into the next betting round.
     return age >= 0 && age < 8000 ? latest : null;
