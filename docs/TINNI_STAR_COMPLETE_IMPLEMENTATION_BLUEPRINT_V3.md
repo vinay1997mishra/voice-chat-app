@@ -627,10 +627,10 @@ Shows:
 
 #### 5.10 User Activity / Advanced
 
-- Per-user Fruit Jackpot / Fruit Party investigation.
+- Per-user Fruit Party investigation.
 - Set per-user Price / Free / Validity.
 - Remove per-user price override.
-- User game detail exposes Jackpot/Party bets, payouts and net.
+- User game detail exposes Fruit Party bets, payouts and net.
 
 ### 6. Call Verification
 
@@ -1016,7 +1016,7 @@ Catalog authorization is resolved by item kind; decorative item controls must no
 
 ### 17. Games
 
-Covers Fruit Jackpot + Fruit Party server-recorded activity.
+Covers Fruit Party server-recorded activity.
 
 Summary:
 
@@ -1034,13 +1034,10 @@ Controls:
 
 Investigation:
 
-- Jackpot total bet/payout.
 - Party total bet/payout.
 - House net.
 - Unique recorded players.
-- Selected user Jackpot net.
 - Selected user Party net.
-- Selected user Jackpot bet coins.
 - Selected user Party bet coins.
 
 ### 18. Policies & Economy Editor
@@ -1268,7 +1265,7 @@ Unless explicitly changed by Platform Owner:
 - Room WebSocket handshakes have a 15-second deadline. A late handshake, old-room snapshot, or stale socket close must never replace or clear the current room connection.
 - Switching rooms or login sessions closes the previous presence transport before opening its replacement. Closing/disposal invalidates pending connections and prevents new retries.
 - Recovering the same presence snapshot still notifies room controls when connectivity or an error changes. Authoritative HTTP seat placement remains usable during WebSocket recovery.
-- Fruit Jackpot and Fruit Party share an in-flight state refresh, bound response/header/body waits, and refresh disconnected state before a bet. Failed authentication/server responses display their actual error. Bet submissions are never automatically replayed after an ambiguous network failure.
+- Fruit Party shares an in-flight state refresh, bound response/header/body waits, and refreshes disconnected state before a bet. Failed authentication/server responses display their actual error. Bet submissions are never automatically replayed after an ambiguous network failure.
 
 ## App entry and confirmed action recovery — October 5, 2026
 
@@ -1284,9 +1281,9 @@ Unless explicitly changed by Platform Owner:
 
 ## Fruit casino presentation and smooth controls — October 5, 2026
 
-- Fruit Jackpot and Fruit Party open from the bottom and occupy half the available screen. Room activity remains visible above the game.
+- Fruit Party opens from the bottom and occupies half the available screen. Room activity remains visible above the game.
 - Both games use clear resolution-independent fruit artwork, legible fruit names/multipliers, gold casino chips, calm highlight transitions and distinct coordinated palettes.
-- Keep all existing server bet denominations, multipliers, settlement, jackpot and Lucky 11 rules authoritative and unchanged.
+- Keep all existing Fruit Party server bet denominations, multipliers, settlement and Lucky 11 rules authoritative and unchanged.
 - Poll state only while the game is open and the app is active; refresh at round expiry, pause timers in the background and remove listeners/timers on close.
 - Only one bet submission may be pending per panel. Disable fruit/chip submissions during that request, keep the chosen amount fixed and never replay an ambiguous bet automatically.
 - Reflect wallet/bet/result changes only after server confirmation. History displays real settled server rounds.
@@ -1351,7 +1348,7 @@ Realtime refresh release: app version 0.5.49+68. Fruit boards and Ludo also supp
 
 ## 2026-10-06 — One main coin wallet and bets after closing the game
 
-Latest explicit user instruction: Fruit Jackpot and Fruit Party debit the user's main total Coins wallet, and credit winnings into that same wallet. Game or app closure must not cancel a funded bet.
+Latest explicit user instruction: Fruit Party debits the user's main total Coins wallet, and credits winnings into that same wallet. Game or app closure must not cancel a funded bet.
 
 - New bets use the main wallet and its coin guard, frozen/banned checks and permanent debit ledger. Separate historical game balances are retained for auditing; their old starting grants are never copied into spendable main coins.
 - Every bet carries a unique request ID. Duplicate delivery cannot debit twice or create a second stake. A durable game alarm exists before funds are reserved, and games recover reserved stakes after interruption.
