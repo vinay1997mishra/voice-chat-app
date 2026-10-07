@@ -571,12 +571,19 @@ class RoomPresenceService extends ChangeNotifier {
   void _scheduleLiveReconnect() {
     if (_disposed || !_liveWanted || _liveReconnectTimer != null) return;
     final delaySeconds = _liveReconnectDelaySeconds;
+    // Keep recovery responsive while spreading reconnects across clients.
+    // A 120-second cap made a brief carrier/Cloudflare hiccup feel like the
+    // room server was dead long after it had recovered.
     _liveReconnectDelaySeconds =
-        (_liveReconnectDelaySeconds * 2).clamp(2, 120).toInt();
-    _liveReconnectTimer = Timer(Duration(seconds: delaySeconds), () {
-      _liveReconnectTimer = null;
-      _openLiveSocket();
-    });
+        (_liveReconnectDelaySeconds * 2).clamp(2, 30).toInt();
+    final jitterMs = math.Random().nextInt(1200);
+    _liveReconnectTimer = Timer(
+      Duration(milliseconds: delaySeconds * 1000 + jitterMs),
+      () {
+        _liveReconnectTimer = null;
+        _openLiveSocket();
+      },
+    );
   }
 
   Future<void> join({
