@@ -181,7 +181,7 @@ void main() {
     game.dispose();
   });
 
-  testWidgets('a cached board waits for pending state refresh before submitting a bet', (tester) async {
+  testWidgets('a cached board submits a bet immediately even while refresh is pending', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -195,7 +195,7 @@ void main() {
     await tester.pump();
     await tester.tap(find.byKey(const Key('casino-fruit-lemon')));
     await tester.pump();
-    expect(bets, 0);
+    expect(bets, 1);
     refresh.complete();
     await tester.pump();
     expect(bets, 1);
