@@ -4,15 +4,30 @@ export function saveGameResults(store, prefix, gameKey, roundId, bets, payouts, 
   for (const bet of bets) totals.set(bet.user_id, (totals.get(bet.user_id) || 0) + bet.amount);
   for (const [userId, totalBet] of totals) {
     const winnings = payouts.get(userId) || 0;
+    const winningKeys = new Set(
+      bonusFruits.length ? bonusFruits.map((fruit) => fruit.key) : [winner.key],
+    );
+    const userBets = bets.filter((bet) => bet.user_id === userId).map((bet) => {
+      const winningCoins = winningKeys.has(bet.fruit_key)
+        ? bet.amount * fruitMultiplier(gameKey, bet.fruit_key)
+        : 0;
+      return {
+        id: bet.id,
+        fruit_key: bet.fruit_key,
+        bet_coins: bet.amount,
+        winning_coins: winningCoins,
+        outcome: winningCoins > 0 ? 'win' : 'lose',
+      };
+    });
     const result = {
       id: gameKey + ':' + roundId + ':' + userId, user_id: userId, game_key: gameKey,
       round_id: roundId, outcome: winnings > 0 ? 'win' : 'lose',
       bet_coins: totalBet, winning_coins: winnings, net_coins: winnings - totalBet,
       fruit_key: winner.key, bonus_fruits: bonusFruits.map(fruit => fruit.key),
+      bets: userBets,
       wallet_balance: bets.some(bet => bet.user_id === userId && bet.main_wallet) ? 0 : store._wallet(userId).balance, settled_at: Date.now(),
-      main_bets: bets.filter(bet => bet.user_id === userId && bet.main_wallet).map(bet => ({
-        id: bet.id, winning_coins: (bonusFruits.length ? bonusFruits.some(fruit => fruit.key === bet.fruit_key) : winner.key === bet.fruit_key)
-          ? bet.amount * fruitMultiplier(gameKey, bet.fruit_key) : 0,
+      main_bets: userBets.filter((item) => bets.some((bet) => bet.id === item.id && bet.main_wallet)).map((item) => ({
+        id: item.id, winning_coins: item.winning_coins,
       })),
     };
     store.ctx.storage.sql.exec(
