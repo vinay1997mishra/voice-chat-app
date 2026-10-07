@@ -353,7 +353,10 @@ void main() {
     );
 
     await tester.tap(find.byKey(const Key('room-gift-button')));
-    await tester.pumpAndSettle();
+    // The gift panel intentionally keeps preview animations running, so a
+    // bounded pump verifies the rendered state without waiting for animation
+    // clocks to become idle.
+    await tester.pump(const Duration(milliseconds: 300));
     expect(find.byKey(const Key('room-gift-panel')), findsOneWidget);
     expect(find.byKey(const Key('gift-category-normal')), findsOneWidget);
     expect(find.byKey(const Key('gift-category-lucky')), findsOneWidget);
@@ -365,7 +368,7 @@ void main() {
     expect(find.byKey(const Key('room-gift-wallet-coins')), findsOneWidget);
 
     await tester.tap(find.byKey(const Key('gift-category-lucky')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     expect(
       find.byKey(const Key('lucky-gift-quantity-selector')),
       findsOneWidget,
@@ -373,7 +376,7 @@ void main() {
     expect(find.byKey(const Key('lucky-quantity-plus')), findsOneWidget);
     expect(find.byKey(const Key('lucky-quantity-presets')), findsOneWidget);
     await tester.tap(find.byKey(const Key('lucky-quantity-presets')));
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     for (final quantity in const <int>[
       9,
       21,
@@ -388,9 +391,9 @@ void main() {
       expect(find.text('×' + quantity.toString()), findsOneWidget);
     }
     await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
     await tester.binding.handlePopRoute();
-    await tester.pumpAndSettle();
+    await tester.pump(const Duration(milliseconds: 300));
 
     await tester.tap(find.byKey(const Key('room-rank-hall-button')));
     await tester.pumpAndSettle();
