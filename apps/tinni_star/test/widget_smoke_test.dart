@@ -467,7 +467,7 @@ void main() {
     );
     expect(
       find.byKey(const Key('game-center-fruit-jackpot')),
-      findsOneWidget,
+      findsNothing,
     );
     expect(
       find.byKey(const Key('game-center-fruit-party')),
