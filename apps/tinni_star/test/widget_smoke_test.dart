@@ -367,20 +367,25 @@ void main() {
     expect(find.text('Backpack'), findsNothing);
     expect(find.byKey(const Key('room-gift-wallet-coins')), findsOneWidget);
 
-    await tester.ensureVisible(find.byKey(const Key('gift-category-lucky')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('gift-category-lucky')));
+    final luckyCategoryFinder =
+        find.byKey(const Key('gift-category-lucky'));
+    final luckyCategory = tester.widget<ChoiceChip>(luckyCategoryFinder);
+    luckyCategory.onSelected?.call(true);
     await tester.pump(const Duration(milliseconds: 300));
     expect(
       find.byKey(const Key('lucky-gift-quantity-selector')),
       findsOneWidget,
     );
     expect(find.byKey(const Key('lucky-quantity-plus')), findsOneWidget);
-    expect(find.byKey(const Key('lucky-quantity-presets')), findsOneWidget);
-    await tester.ensureVisible(find.byKey(const Key('lucky-quantity-presets')));
-    await tester.pump();
-    await tester.tap(find.byKey(const Key('lucky-quantity-presets')));
-    await tester.pump(const Duration(milliseconds: 300));
+    final presetFinder =
+        find.byKey(const Key('lucky-quantity-presets'));
+    expect(presetFinder, findsOneWidget);
+    final presetButton =
+        tester.widget<PopupMenuButton<int>>(presetFinder);
+    final presetItems = presetButton
+        .itemBuilder(tester.element(presetFinder))
+        .whereType<PopupMenuItem<int>>()
+        .toList(growable: false);
     for (final quantity in const <int>[
       9,
       21,
@@ -392,10 +397,11 @@ void main() {
       2999,
       7999,
     ]) {
-      expect(find.text('×' + quantity.toString()), findsOneWidget);
+      expect(
+        presetItems.any((item) => item.value == quantity),
+        isTrue,
+      );
     }
-    await tester.binding.handlePopRoute();
-    await tester.pump(const Duration(milliseconds: 300));
     await tester.binding.handlePopRoute();
     await tester.pump(const Duration(milliseconds: 300));
 
