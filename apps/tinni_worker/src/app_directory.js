@@ -334,6 +334,7 @@ export class AppDirectoryStore extends DurableObject {
       );
     `);
     if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
+      this._retireFruitJackpotRecords();
       this._armStorageSweep();
       return;
     }
@@ -1740,6 +1741,7 @@ export class AppDirectoryStore extends DurableObject {
 
     coldStorage.initColdStorage(this);
     coldStorage.initMainGameRetention(this);
+    this._retireFruitJackpotRecords();
     // One-time 100x conversion retains the established level pattern and history.
     this.ctx.storage.transactionSync(() => {
       if (!this._ownerSetting("relationship_coin_scale_v1", false)) {
@@ -1750,6 +1752,20 @@ export class AppDirectoryStore extends DurableObject {
     });
     this.ctx.storage.sql.exec("INSERT INTO app_schema_versions(id,version) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET version=excluded.version",APP_SCHEMA_VERSION);
     this._armStorageSweep();
+  }
+
+  _retireFruitJackpotRecords() {
+    // Fruit Jackpot is permanently retired. Delete game-specific state and
+    // receipts, while leaving wallet transaction rows intact for coin-ledger
+    // audit consistency.
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec("DELETE FROM main_game_bets WHERE game_key='fruit_jackpot'");
+      this.ctx.storage.sql.exec("DELETE FROM latest_game_results WHERE game_key='fruit_jackpot'");
+      this.ctx.storage.sql.exec("DELETE FROM settled_game_receipts WHERE game_key='fruit_jackpot'");
+      this.ctx.storage.sql.exec("DELETE FROM main_game_lifetime WHERE game_key='fruit_jackpot'");
+      this.ctx.storage.sql.exec("DELETE FROM room_game_actions WHERE game_key='fruit_jackpot'");
+      this.ctx.storage.sql.exec("DELETE FROM country_ribbons WHERE game_key='fruit_jackpot'");
+    });
   }
 
   _armStorageSweep() {
@@ -10484,7 +10500,7 @@ export class AppDirectoryStore extends DurableObject {
 
   reserveMainGameBet(input) {
     const userId = String(input?.user_id || "").trim(), gameKey = String(input?.game_key || "");
-    if (!userId || !["fruit_jackpot","fruit_party"].includes(gameKey) ||
+    if (!userId || gameKey !== "fruit_party" ||
         !Number.isSafeInteger(input.round_id) || ![5000,25000,100000,500000,2000000,10000000].includes(input.amount) ||
         !fruitMultiplier(gameKey,input.fruit_key) || !String(input.room_id || "").trim() ||
         !String(input.id || "").startsWith(gameKey + ":" + userId + ":")) throw new Error("Invalid main wallet bet");
@@ -10541,58 +10557,6 @@ export class AppDirectoryStore extends DurableObject {
       game_net_coins:stats ? Number(stats.net || 0)+Number(this.ctx.storage.sql.exec("SELECT net_coins FROM main_game_lifetime WHERE user_id=? AND game_key=?",userId,gameKey).toArray()[0]?.net_coins||0) : null};
   }
 
-  awardJackpotRewards(eventIdValue, rewardsValue) {
-    const eventId = String(eventIdValue || "").trim();
-    const rewards = Array.isArray(rewardsValue) ? rewardsValue : [];
-    if (!/^fruit-jackpot:[0-9]+$/.test(eventId) || rewards.length > 3) {
-      throw new Error("Invalid jackpot reward event");
-    }
-    const changed = new Set();
-    const awarded = [];
-    this.ctx.storage.transactionSync(() => {
-      for (let index = 0; index < rewards.length; index++) {
-        const item = rewards[index] || {};
-        const rank = Number(item.rank || index + 1);
-        const userId = this._resolveOwnerUserId(String(item.user_id || "").trim());
-        const coins = Math.floor(Number(item.coins || 0));
-        const percent = Number(item.percent || 0);
-        if (!userId || ![1,2,3].includes(rank) || !Number.isSafeInteger(coins) || coins <= 0 ||
-            ![10,5,3].includes(percent)) throw new Error("Invalid jackpot reward");
-        const referenceId = eventId + ":rank:" + rank;
-        const existing = this.ctx.storage.sql.exec(
-          "SELECT coins_delta FROM wallet_transactions WHERE user_id=? AND reference_id=? LIMIT 1",
-          userId, referenceId,
-        ).toArray()[0];
-        if (existing) {
-          if (Number(existing.coins_delta) !== coins) throw new Error("Jackpot reward cannot change");
-          awarded.push({ ...item, user_id: userId, rank, coins, percent, already_paid: true });
-          continue;
-        }
-        const user = this.ctx.storage.sql.exec(
-          "SELECT user_id FROM app_users WHERE user_id=? LIMIT 1", userId,
-        ).toArray()[0];
-        if (!user) throw new Error("Jackpot winner is unavailable");
-        const now = Date.now();
-        this._normalWalletGuard(userId);
-        this.ctx.storage.sql.exec(
-          "UPDATE app_wallets SET coins=coins+?,updated_at=? WHERE user_id=?", coins, now, userId,
-        );
-        this.ctx.storage.sql.exec(
-          "UPDATE wallet_coin_guards SET expected_coins=expected_coins+?,updated_at=? WHERE user_id=?",
-          coins, now, userId,
-        );
-        this.ctx.storage.sql.exec(
-          "INSERT INTO wallet_transactions(id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES(?,?,'jackpot_win',?,0,?,?,?)",
-          crypto.randomUUID(), userId, coins, referenceId,
-          "Fruit Jackpot • Rank " + rank + " • " + percent + "%", now,
-        );
-        changed.add(userId);
-        awarded.push({ ...item, user_id: userId, rank, coins, percent, already_paid: false });
-      }
-    });
-    for (const userId of changed) this._notifyAccountChanged(userId);
-    return { ok: true, event_id: eventId, rewards: awarded };
-  }
   recordGameResults(results) {
     if (!Array.isArray(results) || results.length > 500) throw new Error("Invalid game receipts");
     const changed = new Set();
@@ -10600,7 +10564,7 @@ export class AppDirectoryStore extends DurableObject {
       for (const result of results) {
         const userId = this._resolveOwnerUserId(String(result?.user_id || "").trim());
         const gameKey = String(result?.game_key || "");
-        if (!userId || !["fruit_jackpot", "fruit_party"].includes(gameKey) ||
+        if (!userId || gameKey !== "fruit_party" ||
             !Number.isSafeInteger(result.round_id) || !Number.isSafeInteger(result.winning_coins) ||
             result.winning_coins < 0 || !Number.isSafeInteger(result.bet_coins) || result.bet_coins <= 0) {
           throw new Error("Invalid game receipt");
