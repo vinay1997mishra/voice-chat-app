@@ -1796,6 +1796,10 @@ export class AppDirectoryStore extends DurableObject {
     });
   }
 
+  readPing() {
+    return { ok: true };
+  }
+
   async consumeSecurityRateLimit(keyValue, limitValue, windowMsValue) {
     const key = cleanText(keyValue, 240);
     const limit = Math.max(1, Math.min(500, Math.floor(Number(limitValue || 1))));
