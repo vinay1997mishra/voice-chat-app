@@ -591,6 +591,12 @@ export class FruitPartyStore extends DurableObject {
 
     const mainWallet = userId ? await mainDirectory(this).mainGameWallet(userId,"fruit_party") : {coins:0,today_winnings:0};
     const wallet = {balance:mainWallet.coins,today_winnings:mainWallet.today_winnings};
+    const localLastBetResult = userId ? lastGameResult(this, "party", userId) : null;
+    const mainLastBetResult = mainWallet.last_bet_result || null;
+    const lastBetResult = !mainLastBetResult ? localLastBetResult
+      : !localLastBetResult ? mainLastBetResult
+      : Number(localLastBetResult.round_id || 0) >= Number(mainLastBetResult.round_id || 0)
+        ? localLastBetResult : mainLastBetResult;
 
     return {
       ok: true,
@@ -618,7 +624,7 @@ export class FruitPartyStore extends DurableObject {
         lucky_fruit_count: 4,
         fruits: PARTY_FRUITS,
       },
-      last_bet_result: mainWallet.last_bet_result || lastGameResult(this, "party", userId),
+      last_bet_result: lastBetResult,
       wallet_balance: wallet.balance,
       today_winnings: wallet.today_winnings,
       my_bets: myBets,
