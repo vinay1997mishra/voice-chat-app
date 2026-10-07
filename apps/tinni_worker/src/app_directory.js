@@ -325,7 +325,8 @@ export class AppDirectoryStore extends DurableObject {
       // Fresh/legacy objects without the version table fall through to init.
     }
     if (currentSchemaVersion === APP_SCHEMA_VERSION) {
-      this._armStorageSweep();
+      // Do not schedule alarms or touch SQL on rehydration. Read RPCs must
+      // remain available even after the free-tier write allowance is spent.
       return;
     }
 
