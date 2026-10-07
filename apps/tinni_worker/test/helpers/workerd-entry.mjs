@@ -1,6 +1,6 @@
 import { RoomPresenceStore } from '../../src/room_presence.js';
 import worker from '../../src/index.js';
-export { StaffAuthStore, AppDirectoryStore, RoomPresenceStore, FruitGameStore, FruitPartyStore } from '../../src/index.js';
+export { StaffAuthStore, AppDirectoryStore, RoomPresenceStore, FruitPartyStore } from '../../src/index.js';
 export default {
   async fetch(request, env, ctx) {
     if (new URL(request.url).pathname === '/__fixture/user') {
