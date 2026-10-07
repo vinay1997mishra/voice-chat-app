@@ -8611,6 +8611,7 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                             child: AnimatedAvatarFrame(
                               size: seatDiameter,
                               avatarScale: 1.0,
+                              outsideOnly: true,
                               frameId: presenceMember?.equippedFrameId,
                               child: Container(
                               width: seatDiameter,
