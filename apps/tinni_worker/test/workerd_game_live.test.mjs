@@ -23,7 +23,7 @@ test('real Workers sockets push private account state and all game states withou
     r2Buckets: ['EFFECT_MEDIA'],
     durableObjects: Object.fromEntries([
       ['APP_DIRECTORY','AppDirectoryStore'], ['ROOM_PRESENCE','RoomPresenceStore'],
-      ['FRUIT_GAME','FruitGameStore'], ['FRUIT_PARTY','FruitPartyStore'],
+      ['FRUIT_PARTY','FruitPartyStore'],
       ['STAFF_AUTH','StaffAuthStore'],
     ].map(([binding,className]) => [binding,{className,useSQLite:true}])),
   });
@@ -75,28 +75,26 @@ test('real Workers sockets push private account state and all game states withou
   const account=await connect('/messages/live',guest);
   await until(()=>account.events.some(x=>x.type==='account_state'));
   assert.equal(account.events.find(x=>x.type==='account_state').user.user_id,guest.user.user_id);
-  for(const path of ['/fruit-game/live','/fruit-party/live','/ludo/live?room_id='+owner.room.id]) {
+  for(const path of ['/fruit-party/live','/ludo/live?room_id='+owner.room.id]) {
     const live=await connect(path,guest);
     await until(()=>live.events.some(x=>x.type==='game_state'));
     live.socket.send(JSON.stringify({type:'state',user_id:owner.user.user_id}));
     await until(()=>live.events.filter(x=>x.type==='game_state').length>=2);
     if(path.startsWith('/ludo')) assert.equal(live.events.at(-1).state.player_color,'red');
   }
-  // Real DO RPC + SQL: both games share one main wallet, and repeat delivery is safe.
+  // Real DO RPC + SQL: Fruit Party uses the main wallet, and repeat delivery is safe.
   const phase=Date.now()%26000;
   if(phase>19000) await new Promise(resolve=>setTimeout(resolve,26000-phase+25));
-  for(const path of ['/fruit-game/bet','/fruit-party/bet']) {
-    const bet={room_id:owner.room.id,fruit_key:'lemon',amount:5000,
-      request_id:path.includes('party')?'workerd-party-bet-0001':'workerd-jackpot-bet-0001'};
-    await action(path,guest,bet);
-    await action(path,guest,bet);
-  }
+  const bet={room_id:owner.room.id,fruit_key:'lemon',amount:5000,
+    request_id:'workerd-party-bet-0001'};
+  await action('/fruit-party/bet',guest,bet);
+  await action('/fruit-party/bet',guest,bet);
   account.socket.send(JSON.stringify({type:'account_state'}));
-  await until(()=>account.events.some(x=>x.type==='account_state'&&x.wallet.coins===90000));
+  await until(()=>account.events.some(x=>x.type==='account_state'&&x.wallet.coins===95000));
   const main=await action('/wallet',guest);
-  assert.equal(main.wallet.coins,90000);
+  assert.equal(main.wallet.coins,95000);
   const gameState=await action('/fruit-party/state',guest);
-  assert.equal(gameState.wallet_balance,90000);
+  assert.equal(gameState.wallet_balance,95000);
 
   const forbidden=await mf.dispatchFetch('https://test.local/ludo/live?room_id=missing',{
     headers:{Upgrade:'websocket',authorization:'Bearer '+guest.token},
