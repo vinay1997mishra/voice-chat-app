@@ -54,10 +54,6 @@
       "type": "durable-object",
       "storage": "sqlite"
     },
-    "FruitGameStore": {
-      "type": "durable-object",
-      "state": "deleted"
-    },
     "FruitPartyStore": {
       "type": "durable-object",
       "storage": "sqlite"
