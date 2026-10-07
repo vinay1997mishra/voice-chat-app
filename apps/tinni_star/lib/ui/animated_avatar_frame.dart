@@ -9,11 +9,13 @@ class AnimatedAvatarFrame extends StatefulWidget {
     required this.frameId,
     required this.size,
     this.avatarScale = .72,
+    this.outsideOnly = false,
   });
   final Widget child;
   final String? frameId;
   final double size;
   final double avatarScale;
+  final bool outsideOnly;
 
   @override
   State<AnimatedAvatarFrame> createState() => _AnimatedAvatarFrameState();
@@ -38,13 +40,16 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame>
     if (frame == null || frame.isEmpty) {
       return SizedBox(width: widget.size, height: widget.size, child: widget.child);
     }
+    final avatarSize = widget.size * widget.avatarScale;
+    final frameCanvasSize =
+        widget.outsideOnly ? avatarSize * 1.34 : widget.size;
     return RepaintBoundary(
       child: AnimatedBuilder(
         animation: _controller,
         child: RepaintBoundary(
           child: SizedBox(
-            width: widget.size * widget.avatarScale,
-            height: widget.size * widget.avatarScale,
+            width: avatarSize,
+            height: avatarSize,
             child: widget.child,
           ),
         ),
@@ -57,10 +62,26 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame>
             children: [
               avatarChild!,
               IgnorePointer(
-                child: CustomPaint(
-                  size: Size.square(widget.size),
-                  painter: _AvatarFramePainter(frame, _controller.value),
-                ),
+                child: widget.outsideOnly
+                    ? OverflowBox(
+                        minWidth: frameCanvasSize,
+                        maxWidth: frameCanvasSize,
+                        minHeight: frameCanvasSize,
+                        maxHeight: frameCanvasSize,
+                        alignment: Alignment.center,
+                        child: CustomPaint(
+                          size: Size.square(frameCanvasSize),
+                          painter: _AvatarFramePainter(
+                            frame,
+                            _controller.value,
+                            protectedInnerRadius: avatarSize / 2,
+                          ),
+                        ),
+                      )
+                    : CustomPaint(
+                        size: Size.square(widget.size),
+                        painter: _AvatarFramePainter(frame, _controller.value),
+                      ),
               ),
             ],
           ),
@@ -71,9 +92,14 @@ class _AnimatedAvatarFrameState extends State<AnimatedAvatarFrame>
 }
 
 class _AvatarFramePainter extends CustomPainter {
-  _AvatarFramePainter(this.id, this.t);
+  _AvatarFramePainter(
+    this.id,
+    this.t, {
+    this.protectedInnerRadius,
+  });
   final String id;
   final double t;
+  final double? protectedInnerRadius;
 
   List<Color> get colors {
     if (id.contains('fire') || id.contains('dragon')) {
@@ -99,13 +125,35 @@ class _AvatarFramePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
+    final protectedRadius = protectedInnerRadius;
+    if (protectedRadius != null && protectedRadius > 0) {
+      final outer = Path()..addRect(Offset.zero & size);
+      final inner = Path()
+        ..addOval(
+          Rect.fromCircle(
+            center: size.center(Offset.zero),
+            radius: protectedRadius,
+          ),
+        );
+      canvas.save();
+      canvas.clipPath(
+        Path.combine(PathOperation.difference, outer, inner),
+      );
+    }
+
     final shopTheme = animatedShopFrame(id);
     if (shopTheme != null) {
       _paintShopFrame(canvas, size, shopTheme);
+      if (protectedRadius != null && protectedRadius > 0) {
+        canvas.restore();
+      }
       return;
     }
     if (id.startsWith('rocket-l')) {
       _paintRocketFrame(canvas, size);
+      if (protectedRadius != null && protectedRadius > 0) {
+        canvas.restore();
+      }
       return;
     }
     final c = size.center(Offset.zero);
@@ -162,6 +210,9 @@ class _AvatarFramePainter extends CustomPainter {
       canvas.drawArc(
         Rect.fromCenter(center: c + Offset(r * .75, flap), width: r, height: r * 1.25),
         math.pi * 1.6, math.pi * .75, false, wing);
+    }
+    if (protectedRadius != null && protectedRadius > 0) {
+      canvas.restore();
     }
   }
 
