@@ -658,12 +658,17 @@ class _FloatingRoundResult extends StatelessWidget {
       0,
       (sum, bet) => sum + ((bet['winning_coins'] as num?)?.toInt() ?? 0),
     );
-    final personalWin = sameRound
-        ? ((personalResult!['winning_coins'] as num?)?.toInt() ?? fallbackWin)
-        : fallbackWin;
-    final personalBet = sameRound
-        ? ((personalResult!['bet_coins'] as num?)?.toInt() ?? fallbackBet)
-        : fallbackBet;
+    final receiptWin = sameRound
+        ? ((personalResult!['winning_coins'] as num?)?.toInt() ?? 0)
+        : 0;
+    final receiptBet = sameRound
+        ? ((personalResult!['bet_coins'] as num?)?.toInt() ?? 0)
+        : 0;
+    // A settlement receipt can briefly arrive before its final totals have
+    // propagated. During that same result round, never replace confirmed
+    // per-fruit bets/payouts with transient zero totals.
+    final personalWin = math.max(receiptWin, fallbackWin);
+    final personalBet = math.max(receiptBet, fallbackBet);
     return Material(
       elevation: 12,
       color: Colors.transparent,
