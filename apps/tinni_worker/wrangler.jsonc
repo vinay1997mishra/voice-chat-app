@@ -36,10 +36,6 @@
         "class_name": "StaffAuthStore"
       },
       {
-        "name": "FRUIT_GAME",
-        "class_name": "FruitGameStore"
-      },
-      {
         "name": "FRUIT_PARTY",
         "class_name": "FruitPartyStore"
       },
@@ -60,7 +56,7 @@
     },
     "FruitGameStore": {
       "type": "durable-object",
-      "storage": "sqlite"
+      "state": "deleted"
     },
     "FruitPartyStore": {
       "type": "durable-object",
@@ -87,10 +83,6 @@
         {
           "name": "STAFF_AUTH",
           "class_name": "StaffAuthStore"
-        },
-        {
-          "name": "FRUIT_GAME",
-          "class_name": "FruitGameStore"
         },
         {
           "name": "FRUIT_PARTY",
