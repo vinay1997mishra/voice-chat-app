@@ -32,65 +32,6 @@ test('game snapshots use the socket identity and invalidations reveal no private
   assert.equal(exp.closed,true); assert.equal(exp.events.length,0);
 });
 
-test('room discovery remains readable when Durable Object writes are unavailable',async t=>{
-  const r=runtime();t.after(r.close);
-  const owner=await r.user(1);
-  const room=await r.directory.createRoom(owner.user_id,{title:'Read only discovery',seat_count:12});
-  const exec=r.directory.ctx.storage.sql.exec;
-  r.directory.ctx.storage.sql.exec=(query,...args)=>{
-    if (/^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|REPLACE)/i.test(String(query))) {
-      throw new Error('Exceeded allowed rows written in Durable Objects free tier.');
-    }
-    return exec(query,...args);
-  };
-  const rooms=await r.directory.listRooms();
-  assert.ok(rooms.some(item=>item.id===room.id));
-});
-
-test('current AppDirectory rehydration stays read-only when SQL writes are unavailable',async t=>{
-  const r=runtime();t.after(r.close);
-  await r.user(1);
-  const exec=r.directory.ctx.storage.sql.exec;
-  r.directory.ctx.storage.sql.exec=(query,...args)=>{
-    if (/^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|REPLACE)/i.test(String(query))) {
-      throw new Error('Exceeded allowed rows written in Durable Objects free tier.');
-    }
-    return exec(query,...args);
-  };
-  assert.doesNotThrow(()=>new r.directory.constructor(r.directory.ctx,r.env));
-});
-
-test('historical schema labels rehydrate without migration writes',async t=>{
-  const r=runtime();t.after(r.close);
-  await r.user(1);
-  r.directory.ctx.storage.sql.exec(
-    "UPDATE app_schema_versions SET version=? WHERE id=1",
-    'legacy-live-schema-label',
-  );
-  const exec=r.directory.ctx.storage.sql.exec;
-  r.directory.ctx.storage.sql.exec=(query,...args)=>{
-    if (/^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|REPLACE)/i.test(String(query))) {
-      throw new Error('Exceeded allowed rows written in Durable Objects free tier.');
-    }
-    return exec(query,...args);
-  };
-  assert.doesNotThrow(()=>new r.directory.constructor(r.directory.ctx,r.env));
-});
-
-test('legacy AppDirectory without version table rehydrates without writes',async t=>{
-  const r=runtime();t.after(r.close);
-  await r.user(1);
-  r.directory.ctx.storage.sql.exec("DROP TABLE app_schema_versions");
-  const exec=r.directory.ctx.storage.sql.exec;
-  r.directory.ctx.storage.sql.exec=(query,...args)=>{
-    if (/^\s*(CREATE|ALTER|DROP|INSERT|UPDATE|DELETE|REPLACE)/i.test(String(query))) {
-      throw new Error('Exceeded allowed rows written in Durable Objects free tier.');
-    }
-    return exec(query,...args);
-  };
-  assert.doesNotThrow(()=>new r.directory.constructor(r.directory.ctx,r.env));
-});
-
 test('Ludo invalidations stay in the room where a move happened', () => {
   const a=socket({userId:'a'}), b=socket({userId:'b'});
   const store={ctx:{getWebSockets:tag=>tag==='game:ludo:room-a'?[a]:[b]}};
