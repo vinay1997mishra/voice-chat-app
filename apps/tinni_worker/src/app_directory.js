@@ -324,11 +324,10 @@ export class AppDirectoryStore extends DurableObject {
     } catch (_) {
       // Fresh/legacy objects without the version table fall through to init.
     }
-    const readCompatibleSchema = currentSchemaVersion === APP_SCHEMA_VERSION
-      || currentSchemaVersion === "2026-10-08-room-directory-schema-repair-1";
-    if (readCompatibleSchema) {
-      // Do not schedule alarms or touch SQL on rehydration. Read RPCs must
-      // remain available even after the free-tier write allowance is spent.
+    if (currentSchemaVersion) {
+      // Existing objects never migrate on a read-triggered rehydration.
+      // Schema maintenance is a write concern and must not take discovery,
+      // health, profile or wallet reads offline when write quota is exhausted.
       return;
     }
 
