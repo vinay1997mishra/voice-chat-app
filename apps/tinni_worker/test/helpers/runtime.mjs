@@ -52,7 +52,6 @@ export function runtime({ legacyRoomSettings = false } = {}) {
   const classes = {
     AppDirectoryStore: storeClass('app_directory.js', 'AppDirectoryStore'),
     RoomPresenceStore: storeClass('room_presence.js', 'RoomPresenceStore'),
-    FruitGameStore: storeClass('fruit_game.js', 'FruitGameStore'),
     FruitPartyStore: storeClass('fruit_party.js', 'FruitPartyStore'),
   };
   function context(binding) {
@@ -105,7 +104,7 @@ export function runtime({ legacyRoomSettings = false } = {}) {
   }
   for (const [binding, name] of Object.entries({
     APP_DIRECTORY: 'AppDirectoryStore', ROOM_PRESENCE: 'RoomPresenceStore',
-    FRUIT_GAME: 'FruitGameStore', FRUIT_PARTY: 'FruitPartyStore',
+    FRUIT_PARTY: 'FruitPartyStore',
   })) {
     env[binding] = {
       idFromName: value => value,
