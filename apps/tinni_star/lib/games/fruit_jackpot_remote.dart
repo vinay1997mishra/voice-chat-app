@@ -10,6 +10,13 @@ import 'package:flutter/foundation.dart';
 
 import 'fruit_jackpot_game.dart';
 
+class _GameRequestError implements Exception {
+  const _GameRequestError(this.statusCode, this.message);
+  final int statusCode;
+  final String message;
+  @override String toString() => message;
+}
+
 class FruitJackpotRemoteService extends ChangeNotifier {
   FruitJackpotRemoteService({
     Uri? apiBase,
@@ -42,6 +49,8 @@ class FruitJackpotRemoteService extends ChangeNotifier {
 
   int currentRoundId = 0;
   int jackpot = 0;
+  Map<String, dynamic>? jackpotEvent;
+  int minBet = 5000, maxBet = 10000000;
   int totalBet = 0;
   int activePlayers = 0;
   int walletBalance = 0;
@@ -143,48 +152,49 @@ class FruitJackpotRemoteService extends ChangeNotifier {
       }
     }
     if (!bettingOpen) return 'Betting locked for this round.';
-
-    try {
-      final uri = apiBase.replace(path: '/fruit-game/bet');
-      final request = await openBackendRequest(_httpClient, 'POST', uri).timeout(requestTimeout);
-      request.headers.contentType = ContentType.json;
-      request.headers.set(
-        HttpHeaders.authorizationHeader,
-        'Bearer $authToken',
-      );
-      request.write(
-        jsonEncode(<String, Object>{
-          'request_id': List.generate(16, (_) => math.Random.secure().nextInt(256).toRadixString(16).padLeft(2, '0')).join(),
-          'fruit_key': fruit.name,
-          'amount': amount,
-          'room_id': roomId,
-        }),
-      );
-
-      final startedAt = DateTime.now().millisecondsSinceEpoch;
-      final data = await _requestJson(request);
-
-      final finishedAt = DateTime.now().millisecondsSinceEpoch;
-      final midpoint = startedAt + ((finishedAt - startedAt) ~/ 2);
-      _applyState(data, clientMidpointMs: midpoint);
-      connected = true;
-      lastError = null;
-      if (!_disposed) notifyListeners();
-      return null;
-    } catch (error) {
-      connected = false;
-      lastError = error.toString();
-      if (!_disposed) notifyListeners();
-      return lastError!.replaceFirst('Bad state: ', '');
+    final requestId = List.generate(16, (_) => math.Random.secure().nextInt(256)
+      .toRadixString(16).padLeft(2, '0')).join();
+    for (var attempt = 0; attempt < 2; attempt++) {
+      try {
+        final uri = apiBase.replace(path: '/fruit-game/bet');
+        final request = await openBackendRequest(_httpClient, 'POST', uri).timeout(requestTimeout);
+        request.headers.contentType = ContentType.json;
+        request.headers.set(HttpHeaders.authorizationHeader, 'Bearer $authToken');
+        request.write(jsonEncode(<String, Object>{
+          'request_id': requestId, 'fruit_key': fruit.name, 'amount': amount, 'room_id': roomId,
+        }));
+        final startedAt = DateTime.now().millisecondsSinceEpoch;
+        final data = await _requestJson(request);
+        final finishedAt = DateTime.now().millisecondsSinceEpoch;
+        final midpoint = startedAt + ((finishedAt - startedAt) ~/ 2);
+        _applyState(data, clientMidpointMs: midpoint);
+        connected = true; lastError = null;
+        if (!_disposed) notifyListeners();
+        return null;
+      } catch (error) {
+        final message = error is _GameRequestError ? error.message
+          : error.toString().replaceFirst('Bad state: ', '');
+        if (error is _GameRequestError && error.statusCode < 500) {
+          connected = true; lastError = null;
+          if (!_disposed) notifyListeners();
+          return message;
+        }
+        if (attempt == 0) { continue; }
+        connected = false; lastError = message;
+        if (!_disposed) notifyListeners();
+        return message;
+      }
     }
+    return 'Server connection failed. Please retry.';
   }
 
-  Future<Map<String, dynamic>> _requestJson(HttpClientRequest request) async {
+  Future<Map<String, dynamic>> _requestJson  Future<Map<String, dynamic>> _requestJson(HttpClientRequest request) async {
     try {
       final response = await closeBackendRequest(request).timeout(requestTimeout);
       final data = await _readJson(response).timeout(requestTimeout);
       if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw StateError(
+        throw _GameRequestError(
+          response.statusCode,
           data['error']?.toString() ?? 'Server HTTP ${response.statusCode}',
         );
       }
@@ -202,7 +212,12 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     final serverTime = _asInt(data['server_time']);
     if (serverTime > 0 && serverTime < _latestServerTime) return;
     _latestServerTime = serverTime;
-    _serverOffsetMs = serverTime - clientMidpointMs;
+    final measuredOffset = serverTime - clientMidpointMs;
+    if (_serverOffsetMs == 0 || (measuredOffset - _serverOffsetMs).abs() > 5000) {
+      _serverOffsetMs = measuredOffset;
+    } else {
+      _serverOffsetMs = ((_serverOffsetMs * 3) + measuredOffset) ~/ 4;
+    }
 
     final round = _asMap(data['round']);
     currentRoundId = _asInt(round['round_id']);
@@ -220,8 +235,16 @@ class FruitJackpotRemoteService extends ChangeNotifier {
     phase = round['phase']?.toString() ?? 'betting';
     totalBet = _asInt(round['total_bet']);
     activePlayers = _asInt(round['active_players']);
+    final limits = _asMap(data['owner_limits']);
+    if (limits.isNotEmpty) {
+      final nextMin = _asInt(limits['min_bet']);
+      final nextMax = _asInt(limits['max_bet']);
+      if (nextMin > 0) minBet = nextMin;
+      if (nextMax > 0) maxBet = nextMax;
+    }
 
     jackpot = _asInt(data['jackpot']);
+    jackpotEvent = data['jackpot_event'] is Map ? _asMap(data['jackpot_event']) : jackpotEvent;
     walletBalance = _asInt(data['wallet_balance']);
     lastBetResult = data['last_bet_result'] is Map ? _asMap(data['last_bet_result']) : null;
     todayWinnings = _asInt(data['today_winnings']);

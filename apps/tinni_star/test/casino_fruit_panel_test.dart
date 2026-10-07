@@ -239,42 +239,37 @@ void main() {
     game.dispose();
   });
 
-  testWidgets('a pending bet freezes its amount and rejects additional fruit taps', (tester) async {
+  testWidgets('rapid intentional taps each submit and appear immediately', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     final game = _Game();
     final pending = Completer<String?>();
-    var calls = 0, amount = 0;
+    var calls = 0;
     await tester.pumpWidget(_harness(game, id: 'fruit-jackpot', bet: (fruit, value) {
-      calls++; amount = value;
+      calls++;
       return pending.future;
     }));
     await tester.pump();
     await tester.tap(find.byKey(const Key('fruit-jackpot-chip-25000')));
     await tester.pump();
     await tester.tap(find.byKey(const Key('casino-fruit-lemon')));
+    await tester.tap(find.byKey(const Key('casino-fruit-lemon')));
     await tester.pump();
-    await tester.tap(find.byKey(const Key('casino-fruit-cherry')));
+    expect(calls, 2);
+    expect(find.textContaining('50K coins'), findsOneWidget);
     await tester.tap(find.byKey(const Key('fruit-jackpot-chip-100000')));
     await tester.pump();
-    expect(calls, 1);
-    expect(amount, 25000);
-    expect(game.balance, 50000);
-    expect(game.mine, 0);
-    game.balance = 25000; game.mine = 25000;
     pending.complete(null);
-    game.change();
+    game.balance = 0; game.mine = 50000; game.change();
     await tester.pump();
-    expect(find.byKey(const Key('fruit-jackpot-balance')), findsOneWidget);
-    expect(find.text('25K'), findsWidgets);
     expect(tester.takeException(), isNull);
     await tester.pumpWidget(const SizedBox.shrink());
     game.dispose();
   });
 
-  testWidgets('a cached board submits a bet immediately even while refresh is pending', (tester) async {
+  testWidgets('a cached board submits a bet immediately even while refresh is pending'  testWidgets('a cached board submits a bet immediately even while refresh is pending', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);

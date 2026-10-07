@@ -31,6 +31,7 @@ class FruitPartyPanel extends StatelessWidget {
         balance: game.currentRoundId > 0 ? game.walletBalance : state.wallet.coins,
         mine: game.userTotalBet, winnings: game.todayWinnings,
         lastBetResult: game.lastBetResult,
+        minBet: game.minBet, maxBet: game.maxBet,
         
         error: game.lastError == null ? null : state.backend.userSafeError(StateError(game.lastError!)),
         fruits: [for (final fruit in FruitPartyKind.values) CasinoFruit(

@@ -32,6 +32,8 @@ class FruitJackpotPanel extends StatelessWidget {
         mine: game.userTotalBet, winnings: game.todayWinnings,
         lastBetResult: game.lastBetResult,
         jackpot: game.jackpot,
+        jackpotEvent: game.jackpotEvent,
+        minBet: game.minBet, maxBet: game.maxBet,
         error: game.lastError == null ? null : state.backend.userSafeError(StateError(game.lastError!)),
         fruits: [for (final fruit in FruitKind.values) CasinoFruit(
           key: fruit.name, label: fruit.label, multiplier: fruit.multiplier,

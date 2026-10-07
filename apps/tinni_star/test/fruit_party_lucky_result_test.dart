@@ -7,7 +7,7 @@ import 'package:tinni_star/games/fruit_party_remote.dart';
 import 'package:tinni_star/screens/casino_fruit_panel.dart';
 class _RealHttp extends HttpOverrides {}
 void main() {
-  test('Fruit Party server Lucky result retains all three payout fruits',()=>HttpOverrides.runWithHttpOverrides(() async {
+  test('Fruit Party server Lucky result retains all four payout fruits',()=>HttpOverrides.runWithHttpOverrides(() async {
     final server=await HttpServer.bind(InternetAddress.loopbackIPv4,0);
     final now=DateTime.now().millisecondsSinceEpoch;
     server.listen((request) async {
@@ -18,7 +18,7 @@ void main() {
           'phase':'betting','round_duration_ms':21000},
         'my_bets':{},
         'history':[{'round_id':1,'fruit':{'key':'lemon'},'special_kind':'lucky11',
-          'bonus_fruits':[{'key':'lemon'},{'key':'banana'},{'key':'cherry'}],
+          'bonus_fruits':[{'key':'lemon'},{'key':'banana'},{'key':'watermelon'},{'key':'cherry'}],
           'total_bet':5000,'total_payout':300000,'active_players':1,'settled_at':now}],
       }));
       await request.response.close();
@@ -27,7 +27,7 @@ void main() {
     try {
       await remote.sync('test-token');
       expect(remote.connected,true);expect(remote.history.single.lucky11,true);
-      expect(remote.history.single.bonusFruits,[FruitPartyKind.lemon,FruitPartyKind.banana,FruitPartyKind.cherry]);
+      expect(remote.history.single.bonusFruits,[FruitPartyKind.lemon,FruitPartyKind.banana,FruitPartyKind.watermelon,FruitPartyKind.cherry]);
       expect(remote.walletBalance,12345);
     } finally { remote.dispose();await server.close(force:true); }
   },_RealHttp()));
@@ -41,12 +41,13 @@ void main() {
           round:2,balance:12345,mine:5000,winnings:300000,
           fruits:[for(final fruit in FruitPartyKind.values) CasinoFruit(
             key:fruit.name,label:fruit.label,multiplier:fruit.multiplier,bet:0)],
-          history:[CasinoResult(round:1,fruit:'lemon',lucky:true,bonus:const ['lemon','banana','cherry'],
+          history:[CasinoResult(round:1,fruit:'lemon',lucky:true,bonus:const ['lemon','banana','watermelon','cherry'],
             settledAt:DateTime.now().subtract(const Duration(seconds:1)))]),
       )))));
     await tester.pump();
     expect(find.text('LUCKY 11'),findsOneWidget);
-    expect(find.text('3 bonus fruits'),findsOneWidget);
+    expect(find.text('4 HOT fruits'),findsOneWidget);
+    expect(find.text('HOT'),findsWidgets);
     expect(tester.takeException(),isNull);
     await tester.pumpWidget(const SizedBox());source.dispose();
   });

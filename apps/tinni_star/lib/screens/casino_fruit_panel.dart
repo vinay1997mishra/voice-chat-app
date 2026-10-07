@@ -8,6 +8,8 @@ import '../ui/stable_image_provider.dart';
 const casinoBetAmounts = <int>[5000, 25000, 100000, 500000, 2000000, 10000000];
 const _board = <String?>['lemon', 'cherry', 'kiwi', 'strawberry', null,
   'watermelon', 'banana', 'raspberry', 'plum'];
+const _spinOrder = <String>['lemon', 'cherry', 'kiwi', 'strawberry',
+  'watermelon', 'banana', 'raspberry', 'plum'];
 const _gold = Color(0xFFFFD580);
 const _cream = Color(0xFFFFF2D4);
 
@@ -60,7 +62,8 @@ class CasinoSnapshot {
     required this.bettingOpen, required this.spinning, required this.remaining,
     required this.spinRemaining, required this.roundDuration, required this.round,
     required this.balance, required this.mine, required this.winnings,
-    required this.fruits, required this.history, this.jackpot, this.error, this.lastBetResult});
+    required this.fruits, required this.history, this.jackpot, this.error, this.lastBetResult,
+    this.minBet = 0, this.maxBet = 0, this.jackpotEvent});
   final bool connected;
   final bool loading;
   final bool bettingOpen;
@@ -77,6 +80,8 @@ class CasinoSnapshot {
   final int? jackpot;
   final String? error;
   final Map<String, dynamic>? lastBetResult;
+  final int minBet, maxBet;
+  final Map<String, dynamic>? jackpotEvent;
 }
 
 /// Shared bottom-half placement for room and standalone game routes.
@@ -116,7 +121,8 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   Timer? _poll;
   Future<void>? _refreshFuture;
   int _selected = casinoBetAmounts.first;
-  String? _pendingFruit;
+  final Map<String, int> _optimisticBets = <String, int>{};
+  int _pendingBets = 0;
   String _frame = '';
   bool _active = true;
   int _failures = 0;
@@ -163,13 +169,16 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
       if (!view.connected) { return; }
       final seconds = _seconds(view.spinning ? view.spinRemaining : view.remaining);
       final result = _revealed(view)?.round;
-      final frame = '$seconds:${view.spinning}:$result';
+      final remainingMs = view.remaining.inMilliseconds;
+      final lightTick = view.bettingOpen && remainingMs > 0 && remainingMs <= 5000
+        ? (math.max(0, 5000 - remainingMs) ~/ 150) : -1;
+      final frame = '$seconds:${view.spinning}:$result:$lightTick';
       if (frame != _frame) {
         _frame = frame;
         setState(() {});
       }
       // Refresh the authoritative phase as soon as a round expires.
-      if (!_liveReady && view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
+      if (view.remaining == Duration.zero && !view.spinning && !_waiting && _refreshedBoundary != view.round) {
         _refreshedBoundary = view.round;
         unawaited(_refresh());
       }
@@ -189,6 +198,11 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
 
   void _onServerChanged() {
     if (!mounted || !_active) { return; }
+    final view = widget.snapshot();
+    final allowed = casinoBetAmounts.where((amount) =>
+      (view.minBet <= 0 || amount >= view.minBet) &&
+      (view.maxBet <= 0 || amount <= view.maxBet)).toList();
+    if (allowed.isNotEmpty && !allowed.contains(_selected)) { _selected = allowed.first; }
     if (_liveReady) {
       _poll?.cancel();
       _poll = null;
@@ -202,13 +216,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final pending = _refreshFuture;
     if (pending != null) { return pending; }
     if (!mounted || !_active) { return Future<void>.value(); }
-    // Do not race a wallet/state read against an in-flight transaction.
-    if (_pendingFruit != null) {
-      _poll?.cancel();
-      _poll = null;
-      _ensureFallbackPoll();
-      return Future<void>.value();
-    }
     final operation = _runRefresh();
     _refreshFuture = operation;
     return operation.whenComplete(() {
@@ -257,14 +264,27 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     return age >= 0 && age < 8000 ? latest : null;
   }
 
+  int get _optimisticTotal =>
+      _optimisticBets.values.fold<int>(0, (sum, amount) => sum + amount);
+  int _optimisticFor(String key) => _optimisticBets[key] ?? 0;
+
   Future<void> _place(CasinoFruit fruit) async {
-    if (_pendingFruit != null || !widget.snapshot().bettingOpen) { return; }
+    final view = widget.snapshot();
+    if (!view.bettingOpen) { return; }
     final amount = _selected;
-    setState(() => _pendingFruit = fruit.key);
+    if ((view.minBet > 0 && amount < view.minBet) ||
+        (view.maxBet > 0 && amount > view.maxBet)) {
+      final limit = view.maxBet > 0 && amount > view.maxBet
+        ? 'Maximum bet is ${casinoAmount(view.maxBet)}.'
+        : 'Minimum bet is ${casinoAmount(view.minBet)}.';
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(limit)));
+      return;
+    }
+    setState(() {
+      _optimisticBets[fruit.key] = (_optimisticBets[fruit.key] ?? 0) + amount;
+      _pendingBets += 1;
+    });
     try {
-      // Submit immediately from the current server-backed board. A background
-      // refresh must never sit in front of a user's bet tap; the remote game
-      // service/server still validate the live round and reject locked bets.
       if (!mounted || !_active) { return; }
       final error = await widget.bet(fruit.key, amount);
       if (!mounted) { return; }
@@ -276,15 +296,31 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Bet response interrupted. Refresh your balance before retrying.')),
+          const SnackBar(content: Text('Bet response interrupted. The same request is retried safely; balance will reconcile automatically.')),
         );
       }
     } finally {
-      if (mounted) { setState(() => _pendingFruit = null); }
+      if (mounted) {
+        setState(() {
+          final remaining = (_optimisticBets[fruit.key] ?? 0) - amount;
+          if (remaining > 0) { _optimisticBets[fruit.key] = remaining; }
+          else { _optimisticBets.remove(fruit.key); }
+          if (_pendingBets > 0) { _pendingBets -= 1; }
+        });
+      }
     }
   }
 
-  void _history(CasinoSnapshot view) {
+  Map<String, dynamic>? _recentJackpotEvent(CasinoSnapshot view) {
+    final event = view.jackpotEvent;
+    if (event == null) return null;
+    final openedAt = (event['opened_at'] as num?)?.toInt() ?? 0;
+    if (openedAt <= 0) return null;
+    final age = DateTime.now().millisecondsSinceEpoch - openedAt;
+    return age >= 0 && age < 12000 ? event : null;
+  }
+
+  void _history  void _history(CasinoSnapshot view) {
     showModalBottomSheet<void>(
       context: context, showDragHandle: true, backgroundColor: const Color(0xFF19112A),
       builder: (_) => SafeArea(
@@ -302,7 +338,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
               style: TextStyle(color: _cream)),
             for (final result in view.history.take(20)) ListTile(
               leading: CasinoFruitArt(fruitKey: result.fruit, size: 36),
-              title: Text(result.lucky ? 'Lucky 11 • three bonus fruits' : result.fruit,
+              title: Text(result.lucky ? 'Lucky 11 • four HOT fruits' : result.fruit,
                 style: const TextStyle(color: _cream)),
               subtitle: Text('Round ' + result.round.toString(),
                 style: const TextStyle(color: Colors.white60)),
@@ -320,7 +356,13 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final result = _revealed(view);
     final seconds = _seconds(view.spinning ? view.spinRemaining : view.remaining);
     final disabledMotion = MediaQuery.disableAnimationsOf(context);
-    final status = _pendingFruit != null ? 'Submitting bet…'
+    final jackpotEvent = _recentJackpotEvent(view);
+    final remainingMs = view.remaining.inMilliseconds;
+    final resultLightRunning = view.bettingOpen && remainingMs > 0 && remainingMs <= 5000;
+    final resultLightKey = resultLightRunning
+      ? _spinOrder[(math.max(0, 5000 - remainingMs) ~/ 150) % _spinOrder.length]
+      : null;
+    final status = _pendingBets > 0 ? 'Submitting $_pendingBets bet${_pendingBets == 1 ? '' : 's'}…'
       : !view.connected ? (view.loading ? 'Connecting…' : view.error ?? 'Connection interrupted • Tap retry')
       : view.spinning ? 'RESULT SPIN'
       : view.bettingOpen ? 'BETTING OPEN' : 'NEXT ROUND';
@@ -414,12 +456,13 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                       }
                       final fruit = view.fruits.firstWhere((fruit) => fruit.key == key);
                       final bonus = result?.bonus.contains(key) == true;
+                      final shownFruit = CasinoFruit(key: fruit.key, label: fruit.label,
+                        multiplier: fruit.multiplier, bet: fruit.bet + _optimisticFor(key));
                       return _FruitTile(
-                        fruit: fruit, moving: false, bonus: bonus,
+                        fruit: shownFruit, moving: resultLightKey == key, bonus: bonus,
                         winner: result?.fruit == key && result?.lucky != true,
-                        pending: _pendingFruit == key, disableMotion: disabledMotion,
-                        onTap: view.bettingOpen && _pendingFruit == null
-                          ? () => unawaited(_place(fruit)) : null,
+                        pending: _optimisticFor(key) > 0, disableMotion: disabledMotion,
+                        onTap: view.bettingOpen ? () => unawaited(_place(fruit)) : null,
                       );
                     },
                   )),
@@ -434,8 +477,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                     label: casinoAmount(casinoBetAmounts[index]),
                     selected: _selected == casinoBetAmounts[index],
                     disableMotion: disabledMotion,
-                    onTap: _pendingFruit != null ? null
-                      : () => setState(() => _selected = casinoBetAmounts[index]))),
+                    onTap: ((view.minBet > 0 && casinoBetAmounts[index] < view.minBet) ||
+                            (view.maxBet > 0 && casinoBetAmounts[index] > view.maxBet))
+                      ? null : () => setState(() => _selected = casinoBetAmounts[index]))),
                   if (index < casinoBetAmounts.length - 1) const SizedBox(width: 4),
                 ],
               ])),
@@ -443,10 +487,10 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
               SizedBox(height: 26, child: Row(children: [
                 const Icon(Icons.toll_rounded, color: _gold, size: 15),
                 const SizedBox(width: 4),
-                Expanded(child: Text(casinoAmount(view.balance),
+                Expanded(child: Text(casinoAmount(math.max(0, view.balance - _optimisticTotal)),
                   key: Key(widget.gameId + '-balance'),
                   style: const TextStyle(color: _cream, fontSize: 11, fontWeight: FontWeight.w800))),
-                Text('Bet ' + casinoAmount(view.mine) + '  •  Win ' + casinoAmount(view.winnings),
+                Text('Bet ' + casinoAmount(view.mine + _optimisticTotal) + '  •  Win ' + casinoAmount(view.winnings),
                   style: const TextStyle(color: Color(0xFFD6C5D0), fontSize: 9)),
                 IconButton(key: Key(widget.gameId + '-history'), tooltip: 'Recent results',
                   padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 30, minHeight: 26),
@@ -460,9 +504,21 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
               : content;
             return Stack(clipBehavior: Clip.none, children: [
               body,
-              if (result != null)
+              if (jackpotEvent != null)
                 Positioned(
-                  top: 48, left: 24, right: 24,
+                  top: 92,
+                  left: math.max(8.0, (viewport.maxWidth - 174) / 2),
+                  width: 174, height: 174,
+                  child: IgnorePointer(child: _JackpotEventPanel(
+                    key: Key(widget.gameId + '-jackpot-event'),
+                    event: jackpotEvent,
+                  )),
+                )
+              else if (result != null)
+                Positioned(
+                  top: 92,
+                  left: math.max(8.0, (viewport.maxWidth - 174) / 2),
+                  width: 174, height: 174,
                   child: IgnorePointer(
                     child: _FloatingRoundResult(
                       key: Key(widget.gameId + '-floating-result'),
@@ -476,6 +532,38 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
         ),
       ),
     );
+  }
+}
+
+class _JackpotEventPanel extends StatelessWidget {
+  const _JackpotEventPanel({super.key, required this.event});
+  final Map<String, dynamic> event;
+  @override
+  Widget build(BuildContext context) {
+    final raw = event['winners'];
+    final winners = raw is List
+      ? [for (final item in raw) if (item is Map)
+          item.map((key, value) => MapEntry(key.toString(), value))]
+      : const <Map<String, dynamic>>[];
+    final pool = (event['pool_before'] as num?)?.toInt() ?? 0;
+    return Material(elevation: 14, color: Colors.transparent, borderRadius: BorderRadius.circular(18),
+      child: Container(width: 174, height: 174, padding: const EdgeInsets.all(9),
+        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18),
+          color: const Color(0xF51C0B18), border: Border.all(color: const Color(0xFFFF334E), width: 2),
+          boxShadow: const [BoxShadow(color: Color(0x99FF183F), blurRadius: 16)]),
+        child: Column(children: [
+          const Text('JACKPOT OPEN', style: TextStyle(color: Color(0xFFFFD580), fontSize: 12, fontWeight: FontWeight.w900)),
+          Text('POOL ${casinoAmount(pool)} • 10% / 5% / 3%',
+            style: const TextStyle(color: _cream, fontSize: 8, fontWeight: FontWeight.w700)),
+          const SizedBox(height: 5),
+          for (var i = 0; i < math.min(3, winners.length); i++) ...[
+            Expanded(child: _TopWinnerMini(rank: i + 1, data: winners[i])),
+            if (i < math.min(3, winners.length) - 1) const Divider(height: 2, color: Color(0x335F4A57)),
+          ],
+          if (winners.isEmpty) const Expanded(child: Center(child: Text('No eligible bettors',
+            style: TextStyle(color: Colors.white60, fontSize: 9)))),
+        ]),
+      ));
   }
 }
 
@@ -514,7 +602,8 @@ class _FloatingRoundResult extends StatelessWidget {
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(16),
       child: Container(
-        constraints: const BoxConstraints(maxHeight: 142),
+        width: 174, height: 174,
+        constraints: const BoxConstraints(maxHeight: 174),
         padding: const EdgeInsets.fromLTRB(10, 8, 10, 8),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(16),
@@ -727,7 +816,8 @@ class _FruitTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final active = moving || bonus || winner;
-    final accent = bonus ? _gold : winner ? const Color(0xFF71E5B0) : const Color(0xFFD8A2FF);
+    final accent = moving || bonus ? const Color(0xFFFF334E)
+      : winner ? const Color(0xFF71E5B0) : const Color(0xFFD8A2FF);
     return Semantics(
       button: true, enabled: onTap != null,
       label: fruit.label + ', ' + fruit.multiplier.toString() + ' times, bet ' + fruit.bet.toString(),
@@ -751,9 +841,16 @@ class _FruitTile extends StatelessWidget {
                 const SizedBox(width: 3),
                 Text(fruit.multiplier.toString() + '×',
                   style: const TextStyle(color: Color(0xFF8B481B), fontSize: 9, fontWeight: FontWeight.w900)),
+                if (bonus) ...[
+                  const SizedBox(width: 3),
+                  Container(padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+                    decoration: BoxDecoration(color: const Color(0xFFFF334E), borderRadius: BorderRadius.circular(5)),
+                    child: const Text('HOT', style: TextStyle(color: Colors.white, fontSize: 6, fontWeight: FontWeight.w900))),
+                ],
               ]),
-              SizedBox(height: 9, child: Text(pending ? 'Sending…'
-                : fruit.bet > 0 ? casinoAmount(fruit.bet) + ' coins' : '',
+              SizedBox(height: 9, child: Text(fruit.bet > 0
+                ? casinoAmount(fruit.bet) + ' coins' + (pending ? ' • pending' : '')
+                : pending ? 'pending' : '',
                 maxLines: 1, style: const TextStyle(color: Color(0xFF725848),
                   fontSize: 7, fontWeight: FontWeight.w700))),
             ])),
@@ -780,7 +877,7 @@ class _RoundTile extends StatelessWidget {
           Icon(lucky ? Icons.auto_awesome_rounded : Icons.casino_rounded, color: _gold, size: 21),
           Text(lucky ? 'LUCKY 11' : spinning ? 'RESULT' : party ? 'FRUIT PARTY' : 'JACKPOT',
             style: const TextStyle(color: _cream, fontSize: 9, fontWeight: FontWeight.w900)),
-          Text(lucky ? '3 bonus fruits' : round > 0 ? 'ROUND ' + round.toString() : 'LIVE ROUNDS',
+          Text(lucky ? '4 HOT fruits' : round > 0 ? 'ROUND ' + round.toString() : 'LIVE ROUNDS',
             style: const TextStyle(color: Color(0xFFE6C8A6), fontSize: 7)),
         ]),
       ),
