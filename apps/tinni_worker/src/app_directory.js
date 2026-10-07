@@ -313,9 +313,23 @@ function validateRoomThemePolicy(nameValue, assetValue) {
 export class AppDirectoryStore extends DurableObject {
   constructor(ctx, env) {
     super(ctx, env);
+    // A hot/read-only Durable Object must never write just because it was
+    // rehydrated. Cloudflare's free tier rejects further SQL writes after the
+    // daily row-write allowance is exhausted, but reads can continue.
+    let currentSchemaVersion = null;
+    try {
+      currentSchemaVersion = this.ctx.storage.sql.exec(
+        "SELECT version FROM app_schema_versions WHERE id=1"
+      ).toArray()[0]?.version || null;
+    } catch (_) {
+      // Fresh/legacy objects without the version table fall through to init.
+    }
+    if (currentSchemaVersion === APP_SCHEMA_VERSION) {
+      this._armStorageSweep();
+      return;
+    }
+
     this.ctx.storage.sql.exec("CREATE TABLE IF NOT EXISTS app_schema_versions(id INTEGER PRIMARY KEY,version TEXT NOT NULL)");
-    // Security tables must be created even when the application schema version
-    // is already current so older Durable Objects receive the hardening patch.
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS security_rate_limits (
         rate_key TEXT PRIMARY KEY,
@@ -333,11 +347,6 @@ export class AppDirectoryStore extends DurableObject {
         created_at INTEGER NOT NULL
       );
     `);
-    if(this.ctx.storage.sql.exec("SELECT version FROM app_schema_versions WHERE id=1").toArray()[0]?.version===APP_SCHEMA_VERSION) {
-      this._retireFruitJackpotRecords();
-      this._armStorageSweep();
-      return;
-    }
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS app_users (
         user_id TEXT PRIMARY KEY,
