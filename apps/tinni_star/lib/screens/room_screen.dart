@@ -32,6 +32,9 @@ import '../room/room_presence_service.dart';
 import '../room/seat_layout.dart';
 import '../ui/royal_theme.dart';
 import '../ui/room_emotion_backdrop.dart';
+import '../ui/animated_emoji.dart';
+import '../ui/animated_seat_emote.dart';
+import '../ui/seat_emote_catalog.dart';
 import '../ui/animated_avatar_frame.dart';
 import '../ui/rocket_rewards_panel.dart';
 import '../ui/rocket_personal_reward.dart';
@@ -1636,77 +1639,98 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
   }
 
   void _showEmojiPicker() {
-    const emojis = <String>[
-      '😀', '😁', '😂', '🤣', '😊', '😍', '😘', '🥰',
-      '😎', '🤩', '🥳', '😇', '🙂', '🙃', '😉', '😋',
-      '😜', '🤪', '🤗', '🤭', '🫣', '🤔', '🫡', '😴',
-      '😭', '🥺', '😢', '😡', '🤬', '😱', '😳', '🫠',
-      '❤️', '🩷', '💖', '💕', '💞', '💔', '🔥', '✨',
-      '🎉', '🎊', '🎁', '👑', '🌹', '🌟', '💯', '⚡',
-      '👍', '👎', '👏', '🙌', '🙏', '🤝', '💪', '✌️',
-      '👌', '🤟', '🤘', '👋', '💋', '🫶', '💃', '🕺',
-    ];
-
+    var enemyFilter = 'All';
     showModalBottomSheet<void>(
       context: context,
       showDragHandle: true,
       backgroundColor: RoyalPalette.nearBlack,
       builder: (sheetContext) => SafeArea(
-        child: SizedBox(
-          height: 300,
-          child: Column(
-            children: [
-              const Padding(
-                padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
-                child: Align(
-                  alignment: Alignment.centerLeft,
-                  child: Text(
-                    'Emoji & Emotes',
-                    style: TextStyle(
-                      color: FeaturePalette.games,
-                      fontSize: 17,
-                      fontWeight: FontWeight.w900,
-                    ),
+        child: DefaultTabController(
+          length: 3,
+          child: SizedBox(
+            height: 360,
+            child: Column(
+              children: [
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(16, 0, 16, 8),
+                  child: Align(
+                    alignment: Alignment.centerLeft,
+                    child: Text('Emoji & Emotes',
+                      style: TextStyle(color: FeaturePalette.games,
+                        fontSize: 17, fontWeight: FontWeight.w900)),
                   ),
                 ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 14),
-                  itemCount: emojis.length,
-                  gridDelegate:
-                      const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 8,
-                    mainAxisSpacing: 6,
-                    crossAxisSpacing: 6,
-                  ),
-                  itemBuilder: (_, index) {
-                    final emoji = emojis[index];
-                    return InkWell(
-                      borderRadius: BorderRadius.circular(10),
-                      onTap: () async {
-                        try {
-                          await widget.state.roomSession.setMySeatEmote(emoji);
-                          if (sheetContext.mounted) {
-                            Navigator.pop(sheetContext);
-                          }
-                        } catch (error) {
-                          _snack(
-                            error.toString().replaceFirst('Bad state: ', ''),
-                          );
-                        }
-                      },
-                      child: Center(
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 27),
+                const TabBar(
+                  labelColor: FeaturePalette.games,
+                  unselectedLabelColor: RoyalPalette.muted,
+                  tabs: [
+                    Tab(text: 'Normal (64)'),
+                    Tab(text: 'Panda (25)'),
+                    Tab(text: 'Enemy (25)'),
+                  ],
+                ),
+                Expanded(
+                  child: EmojiMotion(builder: (context, emojiMotion) {
+                    Widget grid(List<String> ids, {bool named = false}) =>
+                      GridView.builder(
+                        padding: const EdgeInsets.fromLTRB(12, 8, 12, 14),
+                        itemCount: ids.length,
+                        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: named ? 5 : 8,
+                          childAspectRatio: named ? .85 : 1,
+                          mainAxisSpacing: 6, crossAxisSpacing: 6,
                         ),
-                      ),
-                    );
-                  },
+                        itemBuilder: (_, index) {
+                          final emote = ids[index];
+                          final definition = seatEmoteFor(emote);
+                          return InkWell(
+                            key: ValueKey('emote-select-$emote'),
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () async {
+                              try {
+                                await widget.state.roomSession.setMySeatEmote(emote);
+                                if (sheetContext.mounted) Navigator.pop(sheetContext);
+                              } catch (error) {
+                                _snack(error.toString().replaceFirst('Bad state: ', ''));
+                              }
+                            },
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                AnimatedSeatEmote(emote: emote,
+                                  size: named ? 44 : 34, timeline: emojiMotion),
+                                if (named) Text(
+                                  definition?.name.replaceFirst('Panda ', '') ?? '',
+                                  maxLines: 1, overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 9, color: RoyalPalette.cream),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      );
+                    return TabBarView(children: [
+                      grid(roomEmojis),
+                      grid(pandaSeatEmotes.map((emote) => emote.id).toList(), named: true),
+                      StatefulBuilder(builder: (context, setEnemyFilter) {
+                        final filtered = enemySeatEmotes.where((emote) =>
+                          enemyFilter == 'All' || emote.enemyPersona == EnemyPersona.clash ||
+                          (enemyFilter == 'Male' && emote.enemyPersona == EnemyPersona.male) ||
+                          (enemyFilter == 'Female' && emote.enemyPersona == EnemyPersona.female));
+                        return Column(children: [
+                          Wrap(spacing: 8, children: [
+                            for (final filter in ['All', 'Male', 'Female'])
+                              ChoiceChip(label: Text(filter), selected: enemyFilter == filter,
+                                onSelected: (_) => setEnemyFilter(() => enemyFilter = filter)),
+                          ]),
+                          Expanded(child: grid(filtered.map((emote) => emote.id).toList(), named: true)),
+                        ]);
+                      }),
+                    ]);
+                  }),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
@@ -3184,16 +3208,15 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     final asset = gift.artworkAsset;
     if(gift.posterUrl?.startsWith('https://') == true) { return SizedBox(
       width:size,height:size,child:Image.network(gift.posterUrl!,fit:fit,
-        errorBuilder:(_,error,stackTrace)=>Center(child:Text(gift.emoji,style:TextStyle(fontSize:size*.62))))); }
+        errorBuilder:(_,error,stackTrace)=>Center(child:AnimatedEmoji(emoji:gift.emoji,size:size*.82,
+          effect:gift.resolvedCategory=='vs'?EmojiEffect.fire:null)))); }
     if (asset == null || asset.isEmpty) {
       return SizedBox(
         width: size,
         height: size,
         child: Center(
-          child: Text(
-            gift.emoji,
-            style: TextStyle(fontSize: size * 0.62),
-          ),
+          child: AnimatedEmoji(emoji: gift.emoji, size: size * .82,
+            effect: gift.resolvedCategory == 'vs' ? EmojiEffect.fire : null),
         ),
       );
     }
@@ -3205,10 +3228,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         fit: fit,
         filterQuality: FilterQuality.high,
         errorBuilder: (context, error, stackTrace) => Center(
-          child: Text(
-            gift.emoji,
-            style: TextStyle(fontSize: size * 0.62),
-          ),
+          child: AnimatedEmoji(emoji: gift.emoji, size: size * .82,
+            effect: gift.resolvedCategory == 'vs' ? EmojiEffect.fire : null),
         ),
       ),
     );
@@ -8704,13 +8725,10 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                     ),
                   if (seatEmote != null && seatEmote.isNotEmpty)
                     IgnorePointer(
-                      child: Text(
-                        seatEmote,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: seatDiameter * 0.82,
-                          height: 1,
-                        ),
+                      child: AnimatedSeatEmote(
+                        key: ValueKey('seat-emote-$index-$seatEmote-${emoteUntil?.millisecondsSinceEpoch ?? 0}'),
+                        emote: seatEmote,
+                        size: seatDiameter * 1.08,
                       ),
                     ),
                   if (showSeatGiftEffect &&

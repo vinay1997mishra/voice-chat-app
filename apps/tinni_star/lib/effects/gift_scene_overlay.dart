@@ -366,7 +366,12 @@ class _GiftScenePainter extends CustomPainter {
     else if(scene=='dragon') { _dragon(canvas,radius,size,fade); }
     else if(scene=='couple'||scene=='wedding') { _couple(canvas,radius,scene=='wedding'); }
     else {
+      canvas.save();
+      canvas.translate(0,math.sin(t*math.pi*4)*radius*.05);
+      canvas.rotate(math.sin(t*math.pi*2)*.04);
+      canvas.scale(1+math.sin(t*math.pi*4)*.06);
       _text(canvas,gift.emoji,Offset.zero,radius*.95);
+      canvas.restore();
       if(scene=='flag') {
         for(var i=0;i<8;i++) {
           final wave=math.sin(t*20+i)*6;

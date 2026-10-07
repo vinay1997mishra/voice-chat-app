@@ -1403,3 +1403,10 @@ Latest user specification: CP is a couple bond; VS is a rivalry. They coexist wi
 - Owner Panel has separate CP and VS sections with name, category, price, poster, MP4, order, preview and enable/disable. Videos upload only through the protected main-owner endpoint into managed R2 storage. Android never exposes upload/edit controls.
 - The app refreshes approved catalogs without an APK rebuild. Media metadata travels with confirmed gift events. A bounded player failure or reduced-motion mode uses an independent lightweight visual and never alters wallet/progress.
 - Premium cinematic assets are owner-provided; source work and automated tests cannot certify unuploaded videos or hardware decoding.
+
+
+### Animated room seat emotes
+
+The room Emoji & Emotes sheet has Normal (64), Panda (25) and Enemy (25) tabs. All 114 selections animate over the seated user's DP using the server-confirmed emote and expiry. Panda emotes have custom drawn panda faces, expressions and accessories; enemy emotes have dark smoke, flame, lightning, impact, clash, cracks or apocalypse effects. Enemy contains 12 male rivals, 12 female rivals and one combined male/female clash, with All/Male/Female filters and distinct custom face art. These are free seat reactions, independent of CP/VS gifts and progress.
+
+One shared animation clock drives the picker previews. Effects pause in the background, on hidden routes and when reduced motion is enabled. Existing Unicode seat emoji expire after three seconds; panda-01..25 and enemy-01..25 expire after five seconds. Reselecting an emote restarts its display, seat leave clears it, and clients do not send animation frames over the network. Generic gift emoji fallbacks also animate; VS gift fallbacks retain their rivalry theme.

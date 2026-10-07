@@ -984,6 +984,11 @@ export class RoomPresenceStore extends DurableObject {
     if (!emote || emote.length > 16) {
       throw new Error("emote is invalid");
     }
+    const customPack = /^(panda|enemy)-/.test(emote);
+    const customMatch = /^(panda|enemy)-(\d{2})$/.exec(emote);
+    if (customPack && (!customMatch || Number(customMatch[2]) < 1 || Number(customMatch[2]) > 25)) {
+      throw new Error("emote is invalid");
+    }
     if (!Number.isInteger(seatIndex) || seatIndex < 0) {
       throw new Error("seat_index is required");
     }
@@ -1002,7 +1007,7 @@ export class RoomPresenceStore extends DurableObject {
     this.ctx.storage.sql.exec(
       "UPDATE room_members SET seat_emote = ?, seat_emote_until = ?, last_seen = ? WHERE user_id = ?",
       emote,
-      now + 3000,
+      now + (customPack ? 5000 : 3000),
       now,
       userId,
     );

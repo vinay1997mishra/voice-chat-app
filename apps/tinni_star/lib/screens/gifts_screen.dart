@@ -10,6 +10,7 @@ import '../effects/gift_scene_overlay.dart';
 import '../infra/app_backend_service.dart';
 import 'store_screen.dart';
 import '../ui/royal_theme.dart';
+import '../ui/animated_emoji.dart';
 
 class GiftsScreen extends StatefulWidget {
   const GiftsScreen({
@@ -241,7 +242,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
             ),
           ),
           Expanded(
-            child: GridView.builder(
+            child: EmojiMotion(builder: (context, emojiMotion) => GridView.builder(
               padding: const EdgeInsets.all(12),
               itemCount: visibleGifts.length,
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -284,14 +285,16 @@ class _GiftsScreenState extends State<GiftsScreen> {
                           child: ClipOval(
                             child: gift.posterUrl?.startsWith('https://')==true ? Image.network(
                               gift.posterUrl!,fit:BoxFit.contain,cacheWidth:240,
-                              errorBuilder:(_,error,stackTrace)=>Center(child:Text(gift.emoji,style:const TextStyle(fontSize:36))),
+                              errorBuilder:(_,error,stackTrace)=>Center(child:AnimatedEmoji(emoji:gift.emoji,size:48,timeline:emojiMotion,
+                                effect:gift.resolvedCategory=='vs'?EmojiEffect.fire:null)),
                             ) : Image.asset(
                               gift.artworkAsset ?? CinematicAssets.posterFor(gift.id),
                               key: ValueKey('gift-art-${gift.id}'),
                               fit: BoxFit.contain,
                               cacheWidth: 240,
                               errorBuilder: (_, error, stackTrace) => Center(
-                                child: Text(gift.emoji, style: const TextStyle(fontSize: 36)),
+                                child: AnimatedEmoji(emoji:gift.emoji,size:48,timeline:emojiMotion,
+                                  effect:gift.resolvedCategory=='vs'?EmojiEffect.fire:null),
                               ),
                             ),
                           ),
@@ -320,7 +323,7 @@ class _GiftsScreenState extends State<GiftsScreen> {
                   ),
                 );
               },
-            ),
+            )),
           ),
           SafeArea(
             top: false,
