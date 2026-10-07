@@ -788,6 +788,12 @@ export class FruitGameStore extends DurableObject {
 
     const mainWallet = userId ? await mainDirectory(this).mainGameWallet(userId,"fruit_jackpot") : {coins:0,today_winnings:0};
     const wallet = {balance:mainWallet.coins,today_winnings:mainWallet.today_winnings};
+    const localLastBetResult = userId ? lastGameResult(this, "fruit", userId) : null;
+    const mainLastBetResult = mainWallet.last_bet_result || null;
+    const lastBetResult = !mainLastBetResult ? localLastBetResult
+      : !localLastBetResult ? mainLastBetResult
+      : Number(localLastBetResult.round_id || 0) >= Number(mainLastBetResult.round_id || 0)
+        ? localLastBetResult : mainLastBetResult;
 
     return {
       ok: true,
@@ -829,7 +835,7 @@ export class FruitGameStore extends DurableObject {
         next_open_at: (Math.floor(now / JACKPOT_WINDOW_MS) + 1) * JACKPOT_WINDOW_MS,
       },
       jackpot_event: this._latestJackpotEvent(),
-      last_bet_result: mainWallet.last_bet_result || lastGameResult(this, "fruit", userId),
+      last_bet_result: lastBetResult,
       wallet_balance: wallet.balance,
       today_winnings: wallet.today_winnings,
       my_bets: myBets,
