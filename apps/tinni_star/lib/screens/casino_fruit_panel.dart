@@ -534,7 +534,7 @@ class _FloatingRoundResult extends StatelessWidget {
             SizedBox(height: 28, child: ListView.separated(
               scrollDirection: Axis.horizontal,
               itemCount: bets.length,
-              separatorBuilder: (_, __) => const SizedBox(width: 5),
+              separatorBuilder: (_, _) => const SizedBox(width: 5),
               itemBuilder: (_, index) {
                 final bet = bets[index];
                 final fruit = bet['fruit_key']?.toString() ?? '';
