@@ -269,7 +269,7 @@ void main() {
     game.dispose();
   });
 
-  testWidgets('a cached board submits a bet immediately even while refresh is pending'  testWidgets('a cached board submits a bet immediately even while refresh is pending', (tester) async {
+  testWidgets('a cached board submits a bet immediately even while refresh is pending', (tester) async {
     tester.view.physicalSize = const Size(360, 800);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
