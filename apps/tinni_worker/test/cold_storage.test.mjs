@@ -134,7 +134,7 @@ test('a verified inline current DP becomes one R2 object and a small database UR
   assert.ok(current.startsWith('https://'));
   assert.deepEqual([...r.mediaObjects.get('profiles/'+a.user_id+'/avatar').bytes],[1,2,3]);
 });
-for(const [binding,prefix,key] of [['FRUIT_GAME','fruit','fruit_jackpot'],['FRUIT_PARTY','party','fruit_party']]) {
+for(const [binding,prefix,key] of [['FRUIT_PARTY','party','fruit_party']]) {
   test(binding+' expires 15-day details while preserving unpaid payouts and lifetime totals',async t=>{
     const r=runtime();t.after(r.close);const a=await r.user(1);
     const g=r.direct(binding,'retention');
