@@ -60,16 +60,35 @@ export async function flushGameResults(store, prefix) {
     'SELECT user_id,round_id,payload FROM ' + prefix + '_result_outbox LIMIT 500',
   ).toArray();
   if (!rows.length) return;
+  const directory = store.env.APP_DIRECTORY.get(store.env.APP_DIRECTORY.idFromName('tinni-app-directory'));
+  const parsed = rows.map(row => ({ row, payload: JSON.parse(row.payload) }));
+  const remove = (row) => store.ctx.storage.sql.exec(
+    'DELETE FROM ' + prefix + '_result_outbox WHERE user_id=? AND round_id=?',
+    row.user_id, row.round_id,
+  );
   try {
-    const directory = store.env.APP_DIRECTORY.get(store.env.APP_DIRECTORY.idFromName('tinni-app-directory'));
-    await directory.recordGameResults(rows.map(row => JSON.parse(row.payload)));
+    await directory.recordGameResults(parsed.map(item => item.payload));
     store.ctx.storage.transactionSync(() => {
-      for (const row of rows) store.ctx.storage.sql.exec(
-        'DELETE FROM ' + prefix + '_result_outbox WHERE user_id=? AND round_id=?',
-        row.user_id, row.round_id,
-      );
+      for (const item of parsed) remove(item.row);
     });
-  } catch (error) { console.error('Game result delivery will retry', String(error?.message || error)); }
+    return;
+  } catch (error) {
+    // One malformed/stale receipt must never block every later player's payout.
+    // The main-wallet RPC is idempotent, so safely isolate failures one receipt
+    // at a time while retaining only the specific receipt that still fails.
+    console.error('Game result batch delivery failed; isolating receipts', String(error?.message || error));
+  }
+  for (const item of parsed) {
+    try {
+      await directory.recordGameResults([item.payload]);
+      remove(item.row);
+    } catch (error) {
+      console.error(
+        'Game result delivery will retry',
+        prefix, item.row.user_id, item.row.round_id, String(error?.message || error),
+      );
+    }
+  }
 }
 
 export function fruitMultiplier(gameKey, key) {
