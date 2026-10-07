@@ -40,7 +40,7 @@ class FruitJackpotPanel extends StatelessWidget {
         history: [for (final result in game.history) CasinoResult(
           round: result.roundId, fruit: result.fruit.name,
           lucky: result.isLucky11, bonus: result.bonusFruits.map((fruit) => fruit.name).toList(), jackpot: result.jackpotHit,
-          settledAt: result.settledAt,
+          settledAt: result.settledAt, topWinners: result.topWinners,
         )],
       ),
       refresh: () async {
