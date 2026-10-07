@@ -39,13 +39,12 @@ class CasinoFruit {
 
 class CasinoResult {
   const CasinoResult({required this.round, required this.fruit, this.lucky = false,
-    this.bonus = const [], this.jackpot = false, required this.settledAt,
+    this.bonus = const [], required this.settledAt,
     this.topWinners = const <Map<String, dynamic>>[]});
   final int round;
   final String fruit;
   final bool lucky;
   final List<String> bonus;
-  final bool jackpot;
   final DateTime settledAt;
   final List<Map<String, dynamic>> topWinners;
 }
@@ -62,8 +61,8 @@ class CasinoSnapshot {
     required this.bettingOpen, required this.spinning, required this.remaining,
     required this.spinRemaining, required this.roundDuration, required this.round,
     required this.balance, required this.mine, required this.winnings,
-    required this.fruits, required this.history, this.jackpot, this.error, this.lastBetResult,
-    this.minBet = 0, this.maxBet = 0, this.jackpotEvent});
+    required this.fruits, required this.history, this.error, this.lastBetResult,
+    this.minBet = 0, this.maxBet = 0});
   final bool connected;
   final bool loading;
   final bool bettingOpen;
@@ -77,11 +76,9 @@ class CasinoSnapshot {
   final int winnings;
   final List<CasinoFruit> fruits;
   final List<CasinoResult> history;
-  final int? jackpot;
   final String? error;
   final Map<String, dynamic>? lastBetResult;
   final int minBet, maxBet;
-  final Map<String, dynamic>? jackpotEvent;
 }
 
 /// Shared bottom-half placement for room and standalone game routes.
@@ -98,7 +95,7 @@ class CasinoGameDock extends StatelessWidget {
 class CasinoFruitPanel extends StatefulWidget {
   const CasinoFruitPanel({super.key, required this.title, required this.gameId,
     required this.source, required this.snapshot, required this.refresh,
-    required this.bet, this.onClose, this.party = false,
+    required this.bet, this.onClose,
     this.liveConnected, this.connectLive, this.disconnectLive});
   final String title;
   final String gameId;
@@ -107,7 +104,6 @@ class CasinoFruitPanel extends StatefulWidget {
   final Future<void> Function() refresh;
   final Future<String?> Function(String fruit, int amount) bet;
   final VoidCallback? onClose;
-  final bool party;
   final bool Function()? liveConnected;
   final Future<void> Function()? connectLive;
   final VoidCallback? disconnectLive;
@@ -344,15 +340,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     }
   }
 
-  Map<String, dynamic>? _recentJackpotEvent(CasinoSnapshot view) {
-    final event = view.jackpotEvent;
-    if (event == null) return null;
-    final openedAt = (event['opened_at'] as num?)?.toInt() ?? 0;
-    if (openedAt <= 0) return null;
-    final age = DateTime.now().millisecondsSinceEpoch - openedAt;
-    return age >= 0 && age < 12000 ? event : null;
-  }
-
   void _history(CasinoSnapshot view) {
     showModalBottomSheet<void>(
       context: context, showDragHandle: true, backgroundColor: const Color(0xFF19112A),
@@ -375,7 +362,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                 style: const TextStyle(color: _cream)),
               subtitle: Text('Round ' + result.round.toString(),
                 style: const TextStyle(color: Colors.white60)),
-              trailing: result.jackpot ? const Icon(Icons.stars_rounded, color: _gold) : null,
             ),
           ],
         ),
@@ -389,7 +375,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     final result = _revealed(view);
     final seconds = _seconds(view.spinning ? view.spinRemaining : view.remaining);
     final disabledMotion = MediaQuery.disableAnimationsOf(context);
-    final jackpotEvent = _recentJackpotEvent(view);
     final remainingMs = view.remaining.inMilliseconds;
     final resultLightRunning = view.bettingOpen && remainingMs > 0 && remainingMs <= 5000;
     final resultLightKey = resultLightRunning
@@ -407,10 +392,8 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
           padding: const EdgeInsets.fromLTRB(8, 6, 8, 8),
           decoration: BoxDecoration(
             borderRadius: const BorderRadius.vertical(top: Radius.circular(22)),
-            gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
-              colors: widget.party
-                ? const [Color(0xFF143833), Color(0xFF0B1D29), Color(0xFF251039)]
-                : const [Color(0xFF341735), Color(0xFF171129), Color(0xFF290F20)]),
+            gradient: const LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFF143833), Color(0xFF0B1D29), Color(0xFF251039)]),
             border: Border.all(color: const Color(0xFFB79251), width: 1.5),
             boxShadow: const [BoxShadow(color: Color(0x50260739), blurRadius: 18,
               offset: Offset(0, -5))],
@@ -423,7 +406,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                   Container(width: 34, height: 34,
                     decoration: BoxDecoration(shape: BoxShape.circle,
                       color: const Color(0xFF513647), border: Border.all(color: _gold)),
-                    child: Icon(widget.party ? Icons.casino_rounded : Icons.diamond_rounded,
+                    child: const Icon(Icons.casino_rounded,
                       color: _gold, size: 21)),
                   const SizedBox(width: 8),
                   Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start,
@@ -432,8 +415,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: _cream, fontSize: 14,
                           fontWeight: FontWeight.w900, letterSpacing: .7)),
-                      Text(view.jackpot == null ? 'Pick your fruit • choose your chip'
-                        : 'JACKPOT  ' + casinoAmount(view.jackpot!),
+                      const Text('Pick your fruit • choose your chip',
                         maxLines: 1, overflow: TextOverflow.ellipsis,
                         style: const TextStyle(color: _gold, fontSize: 10,
                           fontWeight: FontWeight.w700)),
@@ -457,8 +439,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                 Expanded(child: Text(status, maxLines: 1, overflow: TextOverflow.ellipsis,
                   style: const TextStyle(color: _cream, fontSize: 9,
                     fontWeight: FontWeight.w700, letterSpacing: .4))),
-                if (result?.jackpot == true) const Text('JACKPOT WIN!',
-                  style: TextStyle(color: _gold, fontSize: 9, fontWeight: FontWeight.w900)),
                 IconButton(key: Key(widget.gameId + '-refresh'), tooltip: 'Refresh game',
                   padding: EdgeInsets.zero, constraints: const BoxConstraints(minWidth: 28, minHeight: 22),
                   onPressed: _waiting ? null : () => unawaited(_refresh()),
@@ -485,7 +465,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
                       if (key == null) {
                         return _RoundTile(
                           spinning: view.spinning, lucky: result?.lucky == true,
-                          round: view.round, seconds: seconds, party: widget.party);
+                          round: view.round, seconds: seconds);
                       }
                       final fruit = view.fruits.firstWhere((fruit) => fruit.key == key);
                       final bonus = result?.bonus.contains(key) == true;
@@ -555,17 +535,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
               : const <Map<String, dynamic>>[];
             return Stack(clipBehavior: Clip.none, children: [
               body,
-              if (jackpotEvent != null)
-                Positioned(
-                  top: 92,
-                  left: math.max(8.0, (viewport.maxWidth - 174) / 2),
-                  width: 174, height: 174,
-                  child: IgnorePointer(child: _JackpotEventPanel(
-                    key: Key(widget.gameId + '-jackpot-event'),
-                    event: jackpotEvent,
-                  )),
-                )
-              else if (result != null)
+              if (result != null)
                 Positioned(
                   top: 92,
                   left: math.max(8.0, (viewport.maxWidth - 174) / 2),
@@ -584,38 +554,6 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
         ),
       ),
     );
-  }
-}
-
-class _JackpotEventPanel extends StatelessWidget {
-  const _JackpotEventPanel({super.key, required this.event});
-  final Map<String, dynamic> event;
-  @override
-  Widget build(BuildContext context) {
-    final raw = event['winners'];
-    final winners = raw is List
-      ? [for (final item in raw) if (item is Map)
-          item.map((key, value) => MapEntry(key.toString(), value))]
-      : const <Map<String, dynamic>>[];
-    final pool = (event['pool_before'] as num?)?.toInt() ?? 0;
-    return Material(elevation: 14, color: Colors.transparent, borderRadius: BorderRadius.circular(18),
-      child: Container(width: 174, height: 174, padding: const EdgeInsets.all(9),
-        decoration: BoxDecoration(borderRadius: BorderRadius.circular(18),
-          color: const Color(0xF51C0B18), border: Border.all(color: const Color(0xFF8E2034), width: 2),
-          boxShadow: const [BoxShadow(color: Color(0x668E2034), blurRadius: 16)]),
-        child: Column(children: [
-          const Text('JACKPOT OPEN', style: TextStyle(color: Color(0xFFFFD580), fontSize: 12, fontWeight: FontWeight.w900)),
-          Text('POOL ${casinoAmount(pool)} • 10% / 5% / 3%',
-            style: const TextStyle(color: _cream, fontSize: 8, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 5),
-          for (var i = 0; i < math.min(3, winners.length); i++) ...[
-            Expanded(child: _TopWinnerMini(rank: i + 1, data: winners[i])),
-            if (i < math.min(3, winners.length) - 1) const Divider(height: 2, color: Color(0x335F4A57)),
-          ],
-          if (winners.isEmpty) const Expanded(child: Center(child: Text('No eligible bettors',
-            style: TextStyle(color: Colors.white60, fontSize: 9)))),
-        ]),
-      ));
   }
 }
 
@@ -1235,8 +1173,8 @@ class _FruitSurfacePainter extends CustomPainter {
 
 class _RoundTile extends StatelessWidget {
   const _RoundTile({required this.spinning, required this.lucky, required this.round,
-    required this.seconds, required this.party});
-  final bool spinning, lucky, party;
+    required this.seconds});
+  final bool spinning, lucky;
   final int round, seconds;
   @override
   Widget build(BuildContext context) => Container(
@@ -1247,7 +1185,7 @@ class _RoundTile extends StatelessWidget {
       fit: BoxFit.scaleDown, child: Padding(padding: const EdgeInsets.all(4),
         child: Column(mainAxisSize: MainAxisSize.min, children: [
           Icon(lucky ? Icons.auto_awesome_rounded : Icons.casino_rounded, color: _gold, size: 21),
-          Text(lucky ? 'LUCKY 11' : spinning ? 'RESULT' : party ? 'FRUIT PARTY' : 'JACKPOT',
+          Text(lucky ? 'LUCKY 11' : spinning ? 'RESULT' : 'FRUIT PARTY',
             style: const TextStyle(color: _cream, fontSize: 9, fontWeight: FontWeight.w900)),
           Text(lucky ? '4 HOT fruits' : round > 0 ? 'ROUND ' + round.toString() : 'LIVE ROUNDS',
             style: const TextStyle(color: Color(0xFFE6C8A6), fontSize: 7)),
