@@ -26,3 +26,15 @@ assert.match(index, /owner-panel\/.*themes/, "Theme uploads must use R2 media st
 assert.match(index, /owner-panel\/.*banners/, "Banner uploads must use R2 media storage");
 
 console.log("Owner dashboard drill-down wiring passed");
+
+
+assert.match(app, /100% fit target: 1080 × 1920 px \(9:16\)/, "Theme upload must show exact fit size");
+assert.match(app, /100% fit target: 1080 × 508 px \(~2\.13:1\)/, "Banner upload must show exact fit size");
+assert.match(app, /Crop \/ Fit Image/, "Theme and banner import must expose crop controls");
+assert.match(app, /data-owner-crop-zoom/, "Crop editor must support zoom");
+assert.match(app, /data-owner-crop-x/, "Crop editor must support horizontal positioning");
+assert.match(app, /data-owner-crop-y/, "Crop editor must support vertical positioning");
+assert.match(app, /Delete Theme/, "Existing themes must expose delete");
+assert.match(app, /Delete Banner/, "Existing banners must expose delete");
+assert.match(directory, /deletePanelRoomTheme\(themeIdValue\)/, "Theme deletion must be server-backed");
+assert.match(directory, /UPDATE app_rooms SET theme_id='royal-dark'/, "Deleting an active theme must reset linked rooms");

@@ -6668,6 +6668,18 @@ export default {
       }
       try {
         const result = await getAppDirectoryStore(env).ownerAction(body.action, body.data);
+        if (
+          actionName === "catalog-remove" &&
+          String(result?.kind || "") === "banner" &&
+          env.EFFECT_MEDIA &&
+          String(result?.asset_url || "").includes("/media/")
+        ) {
+          try {
+            const mediaPath = new URL(String(result.asset_url)).pathname;
+            const key = decodeURIComponent(mediaPath.slice("/media/".length));
+            if (key.startsWith("owner-panel/banners/")) await env.EFFECT_MEDIA.delete(key);
+          } catch {}
+        }
         await writeAudit(
           env,
           session,
@@ -6866,8 +6878,18 @@ export default {
       }
       try {
         const themeId = decodeURIComponent(roomThemeMatch[1]);
-        const result = await getAppDirectoryStore(env).disableRoomTheme(themeId);
-        await writeAudit(env, session, "room.theme.remove", "room_theme", themeId, {});
+        const result = await getAppDirectoryStore(env).deletePanelRoomTheme(themeId);
+        const assetUrl = String(result.asset || "");
+        if (env.EFFECT_MEDIA && assetUrl.includes("/media/")) {
+          try {
+            const mediaPath = new URL(assetUrl).pathname;
+            const key = decodeURIComponent(mediaPath.slice("/media/".length));
+            if (key.startsWith("owner-panel/themes/")) await env.EFFECT_MEDIA.delete(key);
+          } catch {}
+        }
+        await writeAudit(env, session, "room.theme.delete", "room_theme", themeId, {
+          reset_rooms: Number(result.reset_rooms || 0),
+        });
         return json(result);
       } catch (error) {
         return json({

@@ -92,6 +92,7 @@ let ownerHierarchyRange = "15d";
 let ownerHierarchyCustomFrom = "";
 let ownerHierarchyCustomTo = "";
 let ownerHierarchyPortal = null;
+let pendingOwnerImageCrop = null;
 let ownerAllUsersCursor = null;
 let ownerAllRoomsCursor = null;
 
@@ -585,7 +586,7 @@ async function loadRoomThemes() {
           </div>
           ${theme.asset ? `<img src="${escapeHtml(theme.asset)}" alt="${escapeHtml(theme.name)} preview" style="width:100%;max-width:360px;max-height:180px;object-fit:cover;border-radius:12px;margin:8px 0">` : ""}
           <div class="button-row">
-            <button type="button" class="btn secondary" data-room-theme-remove="${escapeHtml(theme.id)}">Remove Theme</button>
+            <button type="button" class="btn secondary" data-room-theme-remove="${escapeHtml(theme.id)}">Delete Theme</button>
           </div>
         </div>
       `;
@@ -2435,13 +2436,14 @@ function renderCatalogList(rootId, kind, emptyText) {
         </div>
         <span class="badge ${item.enabled ? "gold" : ""}">${item.enabled ? "Active" : "Off"}</span>
       </div>
+      ${kind === "banner" && item.data?.asset_url ? `<img src="${escapeHtml(item.data.asset_url)}" alt="${escapeHtml(item.name)} banner preview" style="width:100%;max-width:420px;max-height:190px;object-fit:cover;border-radius:12px;margin:8px 0">` : ""}
       <div class="button-row">
         ${sessionCan(catalogPermission(item, "edit")) ? `<button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>` : ""}
         ${sessionCan(catalogPermission(item, "toggle")) ? `
           <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
             ${item.enabled ? "Disable" : "Enable"}
           </button>` : ""}
-        ${sessionCan(catalogPermission(item, "remove")) ? `<button type="button" data-catalog-remove="${escapeHtml(item.id)}">Remove</button>` : ""}
+        ${sessionCan(catalogPermission(item, "remove")) ? `<button type="button" data-catalog-remove="${escapeHtml(item.id)}">${kind === "banner" ? "Delete Banner" : "Remove"}</button>` : ""}
       </div>
     </div>
   `).join("");
@@ -2600,8 +2602,126 @@ function selectField(name, label, options) {
   return `<label><span>${label}</span><select name="${name}">${options.map(o => `<option value="${o[0]}">${o[1]}</option>`).join("")}</select></label>`;
 }
 
-function imageFileField(name, label) {
-  return `<label><span>${label}</span><input name="${name}" type="file" accept="image/png,image/jpeg,image/webp"></label>`;
+function imageFileField(name, label, hint = "") {
+  return `<label><span>${label}</span><input name="${name}" type="file" accept="image/png,image/jpeg,image/webp">${hint ? `<small class="muted" style="display:block;margin-top:6px">${hint}</small>` : ""}</label>`;
+}
+
+function ownerCropSpec(action) {
+  if (action === "room-theme-new") {
+    return { width: 1080, height: 1920, label: "1080 × 1920 px (9:16)" };
+  }
+  if (action === "banner-new") {
+    return { width: 1080, height: 508, label: "1080 × 508 px (~2.13:1)" };
+  }
+  return null;
+}
+
+function ownerCropEditorHtml(action) {
+  const spec = ownerCropSpec(action);
+  if (!spec) return "";
+  return `
+    <div data-owner-crop-editor hidden class="panel" style="margin:8px 0;padding:10px">
+      <div class="panel-head">
+        <div>
+          <strong>Crop / Fit Image</strong>
+          <p class="muted">Final output: ${spec.label}</p>
+        </div>
+        <button type="button" class="btn secondary" data-owner-crop-reset>Reset Crop</button>
+      </div>
+      <canvas data-owner-crop-canvas width="${spec.width}" height="${spec.height}"
+        style="display:block;width:100%;max-height:${action === "room-theme-new" ? "320px" : "190px"};object-fit:contain;background:#080b14;border-radius:12px"></canvas>
+      <label><span>Zoom</span><input data-owner-crop-zoom type="range" min="100" max="300" value="100" step="1"></label>
+      <label><span>Left / Right</span><input data-owner-crop-x type="range" min="0" max="100" value="50" step="1"></label>
+      <label><span>Up / Down</span><input data-owner-crop-y type="range" min="0" max="100" value="50" step="1"></label>
+    </div>
+  `;
+}
+
+function attachOwnerCropEditor(action) {
+  const spec = ownerCropSpec(action);
+  if (!spec) return;
+  const fileInput = dialogFields.querySelector('[name="image_file"]');
+  const editor = dialogFields.querySelector("[data-owner-crop-editor]");
+  const canvas = dialogFields.querySelector("[data-owner-crop-canvas]");
+  const zoom = dialogFields.querySelector("[data-owner-crop-zoom]");
+  const posX = dialogFields.querySelector("[data-owner-crop-x]");
+  const posY = dialogFields.querySelector("[data-owner-crop-y]");
+  const reset = dialogFields.querySelector("[data-owner-crop-reset]");
+  if (!fileInput || !editor || !canvas || !zoom || !posX || !posY) return;
+
+  let image = null;
+  let objectUrl = "";
+
+  const render = () => {
+    if (!image) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const baseScale = Math.max(spec.width / image.naturalWidth, spec.height / image.naturalHeight);
+    const scale = baseScale * (Number(zoom.value || 100) / 100);
+    const drawW = image.naturalWidth * scale;
+    const drawH = image.naturalHeight * scale;
+    const overflowX = Math.max(0, drawW - spec.width);
+    const overflowY = Math.max(0, drawH - spec.height);
+    const dx = -(overflowX * (Number(posX.value || 50) / 100));
+    const dy = -(overflowY * (Number(posY.value || 50) / 100));
+    ctx.clearRect(0, 0, spec.width, spec.height);
+    ctx.drawImage(image, dx, dy, drawW, drawH);
+  };
+
+  const resetCrop = () => {
+    zoom.value = "100";
+    posX.value = "50";
+    posY.value = "50";
+    render();
+  };
+
+  for (const input of [zoom, posX, posY]) {
+    input.addEventListener("input", render);
+  }
+  reset?.addEventListener("click", resetCrop);
+
+  fileInput.addEventListener("change", () => {
+    const file = fileInput.files?.[0] || null;
+    pendingOwnerImageCrop = null;
+    if (objectUrl) {
+      URL.revokeObjectURL(objectUrl);
+      objectUrl = "";
+    }
+    if (!file) {
+      editor.hidden = true;
+      return;
+    }
+    objectUrl = URL.createObjectURL(file);
+    image = new Image();
+    image.onload = () => {
+      editor.hidden = false;
+      resetCrop();
+      pendingOwnerImageCrop = { action, canvas, sourceName: file.name || "image" };
+    };
+    image.onerror = () => {
+      editor.hidden = true;
+      toast("Unable to read this image.");
+    };
+    image.src = objectUrl;
+  });
+
+  dialog.addEventListener("close", () => {
+    if (objectUrl) URL.revokeObjectURL(objectUrl);
+    if (pendingOwnerImageCrop?.action === action) pendingOwnerImageCrop = null;
+  }, { once: true });
+}
+
+async function ownerCroppedImageForAction(action, fallbackFile) {
+  if (!pendingOwnerImageCrop || pendingOwnerImageCrop.action !== action) return fallbackFile;
+  const canvas = pendingOwnerImageCrop.canvas;
+  const blob = await new Promise((resolve, reject) => {
+    canvas.toBlob(
+      (value) => value ? resolve(value) : reject(new Error("Unable to create cropped image")),
+      "image/webp",
+      0.92,
+    );
+  });
+  return new File([blob], "cropped-" + Date.now() + ".webp", { type: "image/webp" });
 }
 
 async function uploadOwnerPanelImage(file, purpose) {
@@ -2664,6 +2784,7 @@ function staffPanelFields() {
 
 function openAction(action, preset = {}) {
   pendingAction = action;
+  pendingOwnerImageCrop = null;
   dialogFields.innerHTML = "";
   dialogTitle.textContent = "Owner Action";
   dialogHelp.textContent = "This action is sent to the protected Tinni Owner backend and is audit logged.";
@@ -2699,9 +2820,10 @@ function openAction(action, preset = {}) {
     "room-bg": ["Room Background", field("room_id","Room ID") + field("asset_url","Background asset URL")],
     "room-theme-new": ["Add Room Theme",
       field("name","Theme name") +
-      imageFileField("image_file","Choose theme image from phone") +
+      imageFileField("image_file","Choose theme image from phone","100% fit target: 1080 × 1920 px (9:16). Crop controls appear after choosing an image.") +
+      ownerCropEditorHtml("room-theme-new") +
       field("asset","Or paste theme image HTTPS URL","text","",false) +
-      '<img data-owner-image-preview alt="Theme preview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px" hidden>' +
+      '<img data-owner-image-preview alt="Theme URL preview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px" hidden>' +
       field("price_coins","Coin price (0 = free)","number","0") +
       selectField("duration_mode","Duration",[["scheduled","Set Date & Time"],["permanent","Permanent"]]) +
       field("starts_at","Start date/time (blank = now)","datetime-local") +
@@ -2780,9 +2902,10 @@ function openAction(action, preset = {}) {
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "banner-new": ["Schedule Banner",
       field("title","Banner title") +
-      imageFileField("image_file","Choose banner image from phone") +
+      imageFileField("image_file","Choose banner image from phone","100% fit target: 1080 × 508 px (~2.13:1). Crop controls appear after choosing an image.") +
+      ownerCropEditorHtml("banner-new") +
       field("asset_url","Or paste banner image HTTPS URL","text","",false) +
-      '<img data-owner-image-preview alt="Banner preview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px" hidden>' +
+      '<img data-owner-image-preview alt="Banner URL preview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px" hidden>' +
       field("order","Display order","number","0") +
       field("countries","Country codes (comma separated, blank = all)","text","",false) +
       field("starts_at","Start date/time","datetime-local") +
@@ -2852,34 +2975,26 @@ function openAction(action, preset = {}) {
   dialogFields.innerHTML = item[1];
 
   if (action === "room-theme-new" || action === "banner-new") {
+    attachOwnerCropEditor(action);
     const fileInput = dialogFields.querySelector('[name="image_file"]');
     const urlInput = dialogFields.querySelector(
       action === "room-theme-new" ? '[name="asset"]' : '[name="asset_url"]',
     );
     const preview = dialogFields.querySelector("[data-owner-image-preview]");
-    let localPreviewUrl = "";
-    const showPreview = (url, local = false) => {
+    const updateUrlPreview = () => {
       if (!preview) return;
-      if (localPreviewUrl) {
-        URL.revokeObjectURL(localPreviewUrl);
-        localPreviewUrl = "";
+      if (fileInput?.files?.length) {
+        preview.hidden = true;
+        preview.removeAttribute("src");
+        return;
       }
-      if (local) localPreviewUrl = url;
-      preview.hidden = !url;
-      if (url) preview.src = url;
+      const value = String(urlInput?.value || "").trim();
+      preview.hidden = !value;
+      if (value) preview.src = value;
       else preview.removeAttribute("src");
     };
-    fileInput?.addEventListener("change", () => {
-      const file = fileInput.files?.[0];
-      showPreview(file ? URL.createObjectURL(file) : "", Boolean(file));
-    });
-    urlInput?.addEventListener("input", () => {
-      if (fileInput?.files?.length) return;
-      showPreview(String(urlInput.value || "").trim(), false);
-    });
-    dialog.addEventListener("close", () => {
-      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
-    }, { once: true });
+    fileInput?.addEventListener("change", updateUrlPreview);
+    urlInput?.addEventListener("input", updateUrlPreview);
   }
 
   Object.entries(preset).forEach(([k,v]) => {
@@ -3220,7 +3335,7 @@ async function handleAction(action, data) {
 
   if (action === "room-theme-new") {
     const name = String(data.name || "").trim();
-    const selectedFile = data.image_file;
+    const selectedFile = await ownerCroppedImageForAction("room-theme-new", data.image_file);
     let asset = String(data.asset || "").trim();
     if (selectedFile && typeof selectedFile.arrayBuffer === "function" && selectedFile.size) {
       asset = await uploadOwnerPanelImage(selectedFile, "room-theme");
@@ -3298,7 +3413,7 @@ async function handleAction(action, data) {
 
   const payload = { ...data };
   if (action === "banner-new") {
-    const selectedFile = data.image_file;
+    const selectedFile = await ownerCroppedImageForAction("banner-new", data.image_file);
     let assetUrl = String(data.asset_url || "").trim();
     if (selectedFile && typeof selectedFile.arrayBuffer === "function" && selectedFile.size) {
       assetUrl = await uploadOwnerPanelImage(selectedFile, "banner");
@@ -4418,10 +4533,10 @@ document.body.addEventListener("click", async e => {
 
   const roomThemeRemove = e.target.closest('[data-room-theme-remove]')?.dataset.roomThemeRemove;
   if (roomThemeRemove) {
-    if (!confirm('Remove this room theme from the app?')) return;
+    if (!confirm('Permanently delete this room theme? Rooms using it will return to the default theme.')) return;
     try {
       await api('/api/room-themes/' + encodeURIComponent(roomThemeRemove), { method: 'DELETE' });
-      toast('Room theme removed.');
+      toast('Room theme deleted.');
       await loadRoomThemes();
     } catch (error) {
       toast(error.message);

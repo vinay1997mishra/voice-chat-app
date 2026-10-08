@@ -4824,10 +4824,17 @@ export class AppDirectoryStore extends DurableObject {
       case "catalog-edit": return this.ownerCatalogPatch(data.id, data.patch || {});
       case "catalog-remove": {
         const id = String(data.id || "").trim();
-        const row = this.ctx.storage.sql.exec("SELECT id, kind FROM owner_catalog WHERE id = ? LIMIT 1", id).toArray()[0];
+        const row = this.ctx.storage.sql.exec("SELECT id, kind, data_json FROM owner_catalog WHERE id = ? LIMIT 1", id).toArray()[0];
         if (!row) throw new Error("Catalog item not found");
+        let data = {};
+        try { data = JSON.parse(String(row.data_json || "{}")); } catch {}
         this.ctx.storage.sql.exec("DELETE FROM owner_catalog WHERE id = ?", id);
-        return { ok: true, id, kind: String(row.kind) };
+        return {
+          ok: true,
+          id,
+          kind: String(row.kind),
+          asset_url: data.asset_url ? String(data.asset_url) : null,
+        };
       }
       default: throw new Error("Unsupported Owner action: " + action);
     }
@@ -12398,14 +12405,40 @@ export class AppDirectoryStore extends DurableObject {
     );
   }
 
-  disableRoomTheme(themeIdValue) {
+  deletePanelRoomTheme(themeIdValue) {
     const themeId = String(themeIdValue || "").trim();
     if (!themeId) throw new Error("Theme ID is required");
-    this.ctx.storage.sql.exec(
-      "UPDATE room_themes SET enabled = 0 WHERE id = ?",
+    const theme = this.ctx.storage.sql.exec(
+      "SELECT id,asset,source FROM room_themes WHERE id = ? LIMIT 1",
       themeId,
-    );
-    return { ok: true, id: themeId };
+    ).toArray()[0];
+    if (!theme) throw new Error("Room theme not found");
+    if (String(theme.source || "") !== "panel") {
+      throw new Error("Only Owner Panel themes can be deleted here");
+    }
+    const linkedRooms = this.ctx.storage.sql.exec(
+      "SELECT id FROM app_rooms WHERE theme_id = ?",
+      themeId,
+    ).toArray();
+    const now = Date.now();
+    this.ctx.storage.transactionSync(() => {
+      this.ctx.storage.sql.exec(
+        "UPDATE app_rooms SET theme_id='royal-dark',theme_asset=NULL,updated_at=? WHERE theme_id=?",
+        now, themeId,
+      );
+      this.ctx.storage.sql.exec(
+        "DELETE FROM room_themes WHERE id = ?",
+        themeId,
+      );
+    });
+    for (const row of linkedRooms) this._notifyRoomChanged(String(row.id));
+    return {
+      ok: true,
+      id: themeId,
+      deleted: true,
+      reset_rooms: linkedRooms.length,
+      asset: theme.asset ? String(theme.asset) : null,
+    };
   }
 
     setRoomTheme(ownerIdValue, roomIdValue, input) {
