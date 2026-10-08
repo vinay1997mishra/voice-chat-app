@@ -1688,6 +1688,7 @@ async function openOwnerFullDashboard(userId) {
     const currentRoom = detail.current_room || null;
     const ownedRoom = detail.owned_room || null;
     const room = currentRoom || ownedRoom || null;
+    const ownerRoomLock = detail.owner_room_lock || null;
     const recentRooms = Array.isArray(detail.recent_rooms) ? detail.recent_rooms : [];
     const messages = Array.isArray(detail.messages) ? detail.messages : [];
     const calls = Array.isArray(detail.calls) ? detail.calls : [];
@@ -1741,11 +1742,39 @@ async function openOwnerFullDashboard(userId) {
 
     const sellerWallet = wallet.coin_seller_wallet || null;
     const merchantWallet = wallet.merchant_wallet || null;
+    const ownerRoomPasswordHtml =
+      currentSession?.role === "owner" && room
+        ? `
+          <div class="rule-grid" style="margin-bottom:10px">
+            <div class="rule">
+              <strong>Locked Room Password</strong>
+              <span>${
+                ownerRoomLock?.locked
+                  ? (ownerRoomLock.room_password
+                      ? escapeHtml(ownerRoomLock.room_password)
+                      : "Password unavailable")
+                  : "Room unlocked"
+              }</span>
+            </div>
+            <div class="rule">
+              <strong>Room</strong>
+              <span>${escapeHtml(
+                ownerRoomLock?.room_name ||
+                  roomName ||
+                  ownerRoomLock?.public_id ||
+                  ownerFullDashboardRoomId ||
+                  "—",
+              )}</span>
+            </div>
+          </div>
+        `
+        : "";
+
     const profilePanel = ownerDrillPanel(
       "profile",
       "Profile / ID Control",
       "Tap to open name, DP, public ID and account restriction controls.",
-      `<div class="owner-full-action-grid">${profileButtons || '<span class="muted">No profile-control permission active.</span>'}</div>`,
+      `${ownerRoomPasswordHtml}<div class="owner-full-action-grid">${profileButtons || '<span class="muted">No profile-control permission active.</span>'}</div>`,
     );
     const walletPanel = ownerDrillPanel(
       "wallet",

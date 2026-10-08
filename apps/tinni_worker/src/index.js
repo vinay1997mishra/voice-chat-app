@@ -6296,7 +6296,20 @@ export default {
         };
       }
 
-      return json({ ok: true, detail: { ...detail, current_room } });
+      let owner_room_lock = null;
+      if (ownerOnly(session)) {
+        const linkedRoomId = String(
+          current_room?.room_id || detail.owned_room?.id || "",
+        ).trim();
+        if (linkedRoomId) {
+          owner_room_lock = await directory.ownerRoomLockDetails(linkedRoomId);
+        }
+      }
+
+      return json({
+        ok: true,
+        detail: { ...detail, current_room, owner_room_lock },
+      });
     }
 
     if (url.pathname === "/api/owner/inbox-threads" && request.method === "GET") {

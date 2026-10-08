@@ -2009,6 +2009,24 @@ export class AppDirectoryStore extends DurableObject {
     }));
   }
 
+  ownerRoomLockDetails(roomIdValue) {
+    const room = this._roomRow(roomIdValue);
+    if (!room) return null;
+    const locked = Number(room.locked || 0) === 1;
+    const lock = locked ? this._roomLockRow(room.id) : null;
+    return {
+      room_id: String(room.id),
+      public_id: room.public_id ? String(room.public_id) : String(room.id),
+      room_name: String(room.title || room.id),
+      locked,
+      room_password:
+        locked && lock?.display_password
+          ? String(lock.display_password)
+          : null,
+      updated_at: Number(lock?.updated_at || room.updated_at || 0),
+    };
+  }
+
   ownerUserDetail(userIdValue) {
     const userId = this._resolveOwnerUserId(userIdValue);
     if (!userId) return null;
