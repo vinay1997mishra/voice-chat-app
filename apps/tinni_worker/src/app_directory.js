@@ -4826,14 +4826,14 @@ export class AppDirectoryStore extends DurableObject {
         const id = String(data.id || "").trim();
         const row = this.ctx.storage.sql.exec("SELECT id, kind, data_json FROM owner_catalog WHERE id = ? LIMIT 1", id).toArray()[0];
         if (!row) throw new Error("Catalog item not found");
-        let data = {};
-        try { data = JSON.parse(String(row.data_json || "{}")); } catch {}
+        let itemData = {};
+        try { itemData = JSON.parse(String(row.data_json || "{}")); } catch {}
         this.ctx.storage.sql.exec("DELETE FROM owner_catalog WHERE id = ?", id);
         return {
           ok: true,
           id,
           kind: String(row.kind),
-          asset_url: data.asset_url ? String(data.asset_url) : null,
+          asset_url: itemData.asset_url ? String(itemData.asset_url) : null,
         };
       }
       default: throw new Error("Unsupported Owner action: " + action);

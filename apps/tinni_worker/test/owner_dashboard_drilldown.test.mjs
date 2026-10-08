@@ -20,7 +20,7 @@ assert.match(index, /getRoomPresenceStore\(env, String\(room\.id\)\)/, "Live roo
 assert.match(app, /Choose theme image from phone/, "Room themes must support phone image import");
 assert.match(app, /Choose banner image from phone/, "Banners must support phone image import");
 assert.match(app, /uploadOwnerPanelImage/, "Owner panel must upload phone images");
-assert.match(app, /Remove Theme/, "Room Theme Manager must expose an explicit remove button");
+assert.match(app, /Delete Theme/, "Room Theme Manager must expose an explicit delete button");
 assert.match(index, /\/api\/owner\/panel-media/, "Worker must expose owner panel image upload");
 assert.match(index, /owner-panel\/.*themes/, "Theme uploads must use R2 media storage");
 assert.match(index, /owner-panel\/.*banners/, "Banner uploads must use R2 media storage");
