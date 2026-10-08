@@ -6212,7 +6212,7 @@ export default {
       if (!sessionHasPermission(session, "users.full_dashboard")) {
         return json({ ok: false, error: "Full ID Dashboard permission required" }, 403);
       }
-      const result = getAppDirectoryStore(env).ownerListUsersPage(
+      const result = await getAppDirectoryStore(env).ownerListUsersPage(
         url.searchParams.get("limit") || 100,
         url.searchParams.get("before_created_at") || Number.MAX_SAFE_INTEGER,
         url.searchParams.get("before_id") || "",
@@ -6224,7 +6224,7 @@ export default {
       if (!sessionHasPermission(session, "rooms.search")) {
         return json({ ok: false, error: "Room search permission required" }, 403);
       }
-      const result = getAppDirectoryStore(env).ownerListRoomsPage(
+      const result = await getAppDirectoryStore(env).ownerListRoomsPage(
         url.searchParams.get("limit") || 100,
         url.searchParams.get("before_created_at") || Number.MAX_SAFE_INTEGER,
         url.searchParams.get("before_id") || "",
