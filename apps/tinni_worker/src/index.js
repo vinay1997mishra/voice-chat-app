@@ -6208,6 +6208,30 @@ export default {
       return json({ ok: true, ...filtered });
     }
 
+    if (url.pathname === "/api/owner/users/all" && request.method === "GET") {
+      if (!sessionHasPermission(session, "users.full_dashboard")) {
+        return json({ ok: false, error: "Full ID Dashboard permission required" }, 403);
+      }
+      const result = getAppDirectoryStore(env).ownerListUsersPage(
+        url.searchParams.get("limit") || 100,
+        url.searchParams.get("before_created_at") || Number.MAX_SAFE_INTEGER,
+        url.searchParams.get("before_id") || "",
+      );
+      return json({ ok: true, ...result });
+    }
+
+    if (url.pathname === "/api/owner/rooms/all" && request.method === "GET") {
+      if (!sessionHasPermission(session, "rooms.search")) {
+        return json({ ok: false, error: "Room search permission required" }, 403);
+      }
+      const result = getAppDirectoryStore(env).ownerListRoomsPage(
+        url.searchParams.get("limit") || 100,
+        url.searchParams.get("before_created_at") || Number.MAX_SAFE_INTEGER,
+        url.searchParams.get("before_id") || "",
+      );
+      return json({ ok: true, ...result });
+    }
+
     if (url.pathname === "/api/owner/users/search" && request.method === "GET") {
       if (!sessionHasAnyPermission(session, [
         "users.search",
@@ -6499,7 +6523,7 @@ export default {
       if (!roomId) return json({ ok: false, error: "room_id is required" }, 400);
       const room = await getAppDirectoryStore(env).findRoomByExactId(roomId);
       if (!room) return json({ ok: false, error: "Room not found" }, 404);
-      const presence = await getRoomPresenceStore(env, roomId).state();
+      const presence = await getRoomPresenceStore(env, String(room.id)).state();
       return json({ ok: true, room, presence });
     }
 

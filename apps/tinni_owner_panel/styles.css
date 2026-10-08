@@ -39,6 +39,7 @@ button{cursor:pointer}
 .stats-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin-bottom:12px}
 .stat-card,.panel{border:1px solid #352d1b;background:linear-gradient(180deg,#17140f,#11100d);border-radius:15px;box-shadow:var(--shadow)}
 .stat-card{padding:16px;display:flex;flex-direction:column;gap:4px}.stat-card span{color:var(--muted);font-size:12px}.stat-card strong{font-size:24px;color:var(--cream)}.stat-card small{color:#7d7561}
+.stat-card[data-dashboard-list]{cursor:pointer;touch-action:manipulation}.stat-card[data-dashboard-list]:focus-visible{outline:2px solid var(--gold);outline-offset:2px}.stat-card[data-dashboard-list]:active{transform:translateY(1px)}
 .panel{padding:16px;margin-bottom:12px}.panel h2{margin:0;color:var(--cream);font-size:17px}.panel p{margin:4px 0}.muted{color:var(--muted)}
 .panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:12px}
 .grid{display:grid;gap:12px}.grid.two{grid-template-columns:repeat(2,minmax(0,1fr))}.grid.three{grid-template-columns:repeat(3,minmax(0,1fr))}

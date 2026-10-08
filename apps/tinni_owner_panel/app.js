@@ -92,6 +92,8 @@ let ownerHierarchyRange = "15d";
 let ownerHierarchyCustomFrom = "";
 let ownerHierarchyCustomTo = "";
 let ownerHierarchyPortal = null;
+let ownerAllUsersCursor = null;
+let ownerAllRoomsCursor = null;
 
 function pretty(key) {
   return key.split("_").map(x => x.charAt(0).toUpperCase() + x.slice(1)).join(" ");
@@ -2807,6 +2809,127 @@ function openAction(action, preset = {}) {
   dialog.showModal();
 }
 
+async function loadAllOwnerUsers({ reset = true } = {}) {
+  const root = document.getElementById("allUsersResult");
+  const more = document.querySelector("[data-all-users-more]");
+  if (!root || !more) return;
+  if (!sessionCan("users.full_dashboard")) return;
+
+  if (reset) {
+    ownerAllUsersCursor = null;
+    root.className = "empty-state";
+    root.textContent = "Loading registered IDs…";
+    root.dataset.loaded = "";
+  }
+
+  const query = new URLSearchParams({ limit: "100" });
+  if (ownerAllUsersCursor) {
+    query.set("before_created_at", String(ownerAllUsersCursor.before_created_at));
+    query.set("before_id", String(ownerAllUsersCursor.before_id || ""));
+  }
+
+  try {
+    const data = await api("/api/owner/users/all?" + query.toString());
+    const users = Array.isArray(data.users) ? data.users : [];
+    const rows = users.map((user) => `
+      <div class="policy-row">
+        <div>
+          <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
+          <small>ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.email || "—")} • ${escapeHtml(user.country_name || user.country_code || "—")}</small>
+          <small>${user.call_verified ? "Verified" : "Unverified"} • Joined ${escapeHtml(formatFullTimestamp(user.created_at))}</small>
+        </div>
+        <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>
+      </div>
+    `).join("");
+
+    if (reset) {
+      root.innerHTML = rows || '<div class="empty-state">No registered IDs found.</div>';
+      root.dataset.loaded = "1";
+    } else if (rows) {
+      root.insertAdjacentHTML("beforeend", rows);
+    }
+    root.className = "action-list";
+    ownerAllUsersCursor = data.next_cursor || null;
+    more.hidden = !ownerAllUsersCursor;
+  } catch (error) {
+    if (reset) {
+      root.className = "empty-state";
+      root.textContent = error.message || "Unable to load registered IDs.";
+    }
+    more.hidden = true;
+    toast(error.message || "Unable to load registered IDs.");
+  }
+}
+
+async function loadAllOwnerRooms({ reset = true } = {}) {
+  const root = document.getElementById("allRoomsResult");
+  const more = document.querySelector("[data-all-rooms-more]");
+  if (!root || !more) return;
+  if (!sessionCan("rooms.search")) return;
+
+  if (reset) {
+    ownerAllRoomsCursor = null;
+    root.className = "empty-state";
+    root.textContent = "Loading created rooms…";
+    root.dataset.loaded = "";
+  }
+
+  const query = new URLSearchParams({ limit: "100" });
+  if (ownerAllRoomsCursor) {
+    query.set("before_created_at", String(ownerAllRoomsCursor.before_created_at));
+    query.set("before_id", String(ownerAllRoomsCursor.before_id || ""));
+  }
+
+  try {
+    const data = await api("/api/owner/rooms/all?" + query.toString());
+    const rooms = Array.isArray(data.rooms) ? data.rooms : [];
+    const rows = rooms.map((room) => `
+      <div class="panel" style="margin-bottom:10px">
+        <div class="panel-head">
+          <div>
+            <strong>${escapeHtml(room.title || room.public_id || room.id)}</strong>
+            <p>Public Room ID ${escapeHtml(room.public_id || room.id)}${room.public_id && room.public_id !== room.id ? " • Internal " + escapeHtml(room.id) : ""}</p>
+          </div>
+          <span class="badge ${room.closed ? "" : "gold"}">${room.closed ? "Closed" : (room.locked ? "Locked" : "Open")}</span>
+        </div>
+        <div class="rule-grid">
+          <div class="rule"><strong>Owner</strong><span>${escapeHtml(room.owner_name || room.owner_id)} • ID ${escapeHtml(room.owner_id)}</span></div>
+          <div class="rule"><strong>Owner Email</strong><span>${escapeHtml(room.owner_email || "—")}</span></div>
+          <div class="rule"><strong>Country</strong><span>${escapeHtml(room.country_name || room.country_code || "—")}</span></div>
+          <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count)}</span></div>
+          <div class="rule"><strong>Mode</strong><span>${escapeHtml(room.party_mode || "—")}</span></div>
+          <div class="rule"><strong>Theme</strong><span>${escapeHtml(room.theme_id || "royal-dark")}</span></div>
+          <div class="rule"><strong>Room Level</strong><span>${fmt(room.room_level || 1)}</span></div>
+          <div class="rule"><strong>Locked</strong><span>${room.locked ? "Yes" : "No"}</span></div>
+          <div class="rule"><strong>Created</strong><span>${escapeHtml(formatFullTimestamp(room.created_at))}</span></div>
+          <div class="rule"><strong>Updated</strong><span>${escapeHtml(formatFullTimestamp(room.updated_at))}</span></div>
+        </div>
+        ${room.announcement ? '<p class="muted" style="margin-top:8px">Notice: ' + escapeHtml(room.announcement) + '</p>' : ""}
+        <div class="button-row" style="margin-top:10px">
+          ${sessionCan("rooms.live_seats") ? '<button type="button" class="btn primary" data-owner-room-live="' + escapeHtml(room.id) + '">Live Users / Seats</button>' : ""}
+        </div>
+      </div>
+    `).join("");
+
+    if (reset) {
+      root.innerHTML = rows || '<div class="empty-state">No created rooms found.</div>';
+      root.dataset.loaded = "1";
+    } else if (rows) {
+      root.insertAdjacentHTML("beforeend", rows);
+    }
+    root.className = "action-list";
+    ownerAllRoomsCursor = data.next_cursor || null;
+    more.hidden = !ownerAllRoomsCursor;
+  } catch (error) {
+    if (reset) {
+      root.className = "empty-state";
+      root.textContent = error.message || "Unable to load rooms.";
+    }
+    more.hidden = true;
+    toast(error.message || "Unable to load rooms.");
+  }
+}
+
 async function renderUserInvestigation(users) {
   const root = document.getElementById("userDetails");
   if (!root) return;
@@ -3181,6 +3304,15 @@ document.getElementById("nav").addEventListener("click", e => {
   if (btn) setView(btn.dataset.view);
 });
 
+document.querySelectorAll("[data-dashboard-list]").forEach((card) => {
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      event.preventDefault();
+      card.click();
+    }
+  });
+});
+
 document.getElementById("menuBtn").addEventListener("click", () => {
   document.getElementById("sidebar").classList.toggle("open");
 });
@@ -3335,6 +3467,53 @@ document.body.addEventListener("change", async (event) => {
 });
 
 document.body.addEventListener("click", async e => {
+  const dashboardList = e.target.closest("[data-dashboard-list]");
+  if (dashboardList) {
+    const target = String(dashboardList.dataset.dashboardList || "");
+    if (target === "users") {
+      setView("users");
+      await loadAllOwnerUsers({ reset: true });
+    } else if (target === "rooms") {
+      setView("rooms");
+      await loadAllOwnerRooms({ reset: true });
+    }
+    return;
+  }
+
+  const allUsersRefresh = e.target.closest("[data-all-users-refresh]");
+  if (allUsersRefresh) {
+    await loadAllOwnerUsers({ reset: true });
+    return;
+  }
+  const allUsersMore = e.target.closest("[data-all-users-more]");
+  if (allUsersMore) {
+    await loadAllOwnerUsers({ reset: false });
+    return;
+  }
+  const allRoomsRefresh = e.target.closest("[data-all-rooms-refresh]");
+  if (allRoomsRefresh) {
+    await loadAllOwnerRooms({ reset: true });
+    return;
+  }
+  const allRoomsMore = e.target.closest("[data-all-rooms-more]");
+  if (allRoomsMore) {
+    await loadAllOwnerRooms({ reset: false });
+    return;
+  }
+
+  const ownerRoomLive = e.target.closest("[data-owner-room-live]");
+  if (ownerRoomLive) {
+    try {
+      const roomId = String(ownerRoomLive.dataset.ownerRoomLive || "");
+      const result = await api("/api/owner/room-live?room_id=" + encodeURIComponent(roomId));
+      renderRoomInvestigation(result);
+      document.getElementById("roomSearchResult")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    } catch (error) {
+      toast(error.message || "Unable to load room live details.");
+    }
+    return;
+  }
+
   const profileClose = e.target.closest("[data-owner-profile-close]");
   if (profileClose) {
     document.getElementById("ownerProfileDialog")?.close();

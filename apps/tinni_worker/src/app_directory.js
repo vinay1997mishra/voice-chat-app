@@ -2513,6 +2513,65 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  ownerListUsersPage(limitValue = 100, beforeCreatedAtValue = Number.MAX_SAFE_INTEGER, beforeUserIdValue = "") {
+    const limit = Math.max(1, Math.min(100, Number(limitValue) || 100));
+    const beforeCreatedAt = Math.max(0, Number(beforeCreatedAtValue) || Number.MAX_SAFE_INTEGER);
+    const beforeUserId = String(beforeUserIdValue || "");
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT *
+         FROM app_users
+        WHERE created_at < ?
+           OR (created_at = ? AND (? = '' OR user_id < ?))
+        ORDER BY created_at DESC, user_id DESC
+        LIMIT ?`,
+      beforeCreatedAt, beforeCreatedAt, beforeUserId, beforeUserId, limit + 1,
+    ).toArray();
+    const hasMore = rows.length > limit;
+    const visible = rows.slice(0, limit);
+    const users = visible.map(rowToUser);
+    const last = visible[visible.length - 1];
+    return {
+      users,
+      next_cursor: hasMore && last ? {
+        before_created_at: Number(last.created_at),
+        before_id: String(last.user_id),
+      } : null,
+    };
+  }
+
+  ownerListRoomsPage(limitValue = 100, beforeCreatedAtValue = Number.MAX_SAFE_INTEGER, beforeRoomIdValue = "") {
+    const limit = Math.max(1, Math.min(100, Number(limitValue) || 100));
+    const beforeCreatedAt = Math.max(0, Number(beforeCreatedAtValue) || Number.MAX_SAFE_INTEGER);
+    const beforeRoomId = String(beforeRoomIdValue || "");
+    const rows = this.ctx.storage.sql.exec(
+      `SELECT r.*, u.display_name AS owner_name,
+              u.email AS owner_email,
+              u.avatar_data_url AS owner_avatar_data_url,
+              u.flag_emoji AS owner_flag_emoji
+         FROM app_rooms r
+         LEFT JOIN app_users u ON u.user_id = r.owner_id
+        WHERE r.created_at < ?
+           OR (r.created_at = ? AND (? = '' OR r.id < ?))
+        ORDER BY r.created_at DESC, r.id DESC
+        LIMIT ?`,
+      beforeCreatedAt, beforeCreatedAt, beforeRoomId, beforeRoomId, limit + 1,
+    ).toArray();
+    const hasMore = rows.length > limit;
+    const visible = rows.slice(0, limit);
+    const rooms = visible.map((row) => ({
+      ...rowToRoom(row),
+      owner_email: row.owner_email ? String(row.owner_email) : "",
+    }));
+    const last = visible[visible.length - 1];
+    return {
+      rooms,
+      next_cursor: hasMore && last ? {
+        before_created_at: Number(last.created_at),
+        before_id: String(last.id),
+      } : null,
+    };
+  }
+
   sendOwnerMessages(textValue, userIdsValue = [], allUsersValue = false) {
     const text = cleanText(textValue, 2000);
     if (!text) throw new Error("Message cannot be empty");

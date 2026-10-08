@@ -72,8 +72,8 @@
 
         <section class="view active" id="view-dashboard">
           <div class="stats-grid">
-            <article class="stat-card"><span>Total Users</span><strong id="statOnline">—</strong><small>Registered IDs</small></article>
-            <article class="stat-card"><span>Total Rooms</span><strong id="statRooms">—</strong><small>Created rooms</small></article>
+            <article class="stat-card" role="button" tabindex="0" data-dashboard-list="users"><span>Total IDs</span><strong id="statOnline">—</strong><small>Touch to view registered IDs</small></article>
+            <article class="stat-card" role="button" tabindex="0" data-dashboard-list="rooms"><span>Total Rooms</span><strong id="statRooms">—</strong><small>Touch to view all created rooms</small></article>
             <article class="stat-card"><span>Sending Today</span><strong id="statSending">—</strong><small>Coins received</small></article>
             <article class="stat-card"><span>Owner Treasury</span><strong id="statTreasury">0</strong><small>Tinni coins</small></article>
           </div>
@@ -127,6 +127,16 @@
         </section>
 
         <section class="view" id="view-users">
+          <article class="panel" data-requires-permission="users.full_dashboard">
+            <div class="panel-head">
+              <div><h2>All Registered IDs</h2><p>Registered accounts in newest-first order. Open an ID for its complete live dashboard.</p></div>
+              <button class="btn secondary" type="button" data-all-users-refresh>Refresh IDs</button>
+            </div>
+            <div id="allUsersResult" class="empty-state">Touch Total IDs on Dashboard or Refresh IDs.</div>
+            <div class="button-row" style="margin-top:10px">
+              <button class="btn secondary" type="button" data-all-users-more hidden>Load More IDs</button>
+            </div>
+          </article>
           <article class="panel" data-requires-permission="users.search">
             <div class="panel-head"><div><h2>User Search & Investigation</h2><p>Current ID + old ID lookup with live account data.</p></div><button class="btn primary" data-action="user-search">Search</button></div>
             <div class="form-grid two">
@@ -290,6 +300,16 @@
         </section>
 
         <section class="view" id="view-rooms">
+          <article class="panel" data-requires-permission="rooms.search">
+            <div class="panel-head">
+              <div><h2>All Created Rooms</h2><p>Includes locked and closed rooms. Live seats are read only when you open one room.</p></div>
+              <button class="btn secondary" type="button" data-all-rooms-refresh>Refresh Rooms</button>
+            </div>
+            <div id="allRoomsResult" class="empty-state">Touch Total Rooms on Dashboard or Refresh Rooms.</div>
+            <div class="button-row" style="margin-top:10px">
+              <button class="btn secondary" type="button" data-all-rooms-more hidden>Load More Rooms</button>
+            </div>
+          </article>
           <div class="grid two">
             <article class="panel"><div class="panel-head"><h2>Room Control</h2></div><div class="action-list">
               <button data-action="room-ban">Room Ban / Unban</button>
