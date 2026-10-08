@@ -575,10 +575,19 @@ async function loadRoomThemes() {
         ? start + ' → ' + formatThemeTime(theme.expires_at)
         : start + ' → Permanent';
       return `
-        <button type="button" data-room-theme-remove="${escapeHtml(theme.id)}">
-          <strong>${escapeHtml(theme.name)}</strong>
-          <span>${Number(theme.price_coins || 0) > 0 ? fmt(theme.price_coins) + " coins" : "Free"} global theme • ${escapeHtml(timing)} • tap to remove</span>
-        </button>
+        <div class="panel" style="margin-top:10px">
+          <div class="panel-head">
+            <div>
+              <strong>${escapeHtml(theme.name)}</strong>
+              <p class="muted">${Number(theme.price_coins || 0) > 0 ? fmt(theme.price_coins) + " coins" : "Free"} global theme • ${escapeHtml(timing)}</p>
+            </div>
+            <span class="badge gold">Active</span>
+          </div>
+          ${theme.asset ? `<img src="${escapeHtml(theme.asset)}" alt="${escapeHtml(theme.name)} preview" style="width:100%;max-width:360px;max-height:180px;object-fit:cover;border-radius:12px;margin:8px 0">` : ""}
+          <div class="button-row">
+            <button type="button" class="btn secondary" data-room-theme-remove="${escapeHtml(theme.id)}">Remove Theme</button>
+          </div>
+        </div>
       `;
     }).join('');
   } catch (error) {
@@ -2591,6 +2600,24 @@ function selectField(name, label, options) {
   return `<label><span>${label}</span><select name="${name}">${options.map(o => `<option value="${o[0]}">${o[1]}</option>`).join("")}</select></label>`;
 }
 
+function imageFileField(name, label) {
+  return `<label><span>${label}</span><input name="${name}" type="file" accept="image/png,image/jpeg,image/webp"></label>`;
+}
+
+async function uploadOwnerPanelImage(file, purpose) {
+  if (!file || typeof file.arrayBuffer !== "function" || !file.size) return "";
+  const form = new FormData();
+  form.append("purpose", purpose);
+  form.append("file", file);
+  const response = await fetch(API_BASE + "/api/owner/panel-media", {
+    method: "POST",
+    body: form,
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.error || "Image upload failed");
+  return String(result.url || "");
+}
+
 function checkboxField(name, label, checked = false) {
   return `<label class="checkbox-field"><input name="${name}" type="checkbox" value="true" ${checked ? "checked" : ""}><span>${label}</span></label>`;
 }
@@ -2672,7 +2699,9 @@ function openAction(action, preset = {}) {
     "room-bg": ["Room Background", field("room_id","Room ID") + field("asset_url","Background asset URL")],
     "room-theme-new": ["Add Room Theme",
       field("name","Theme name") +
-      field("asset","Theme image HTTPS URL") +
+      imageFileField("image_file","Choose theme image from phone") +
+      field("asset","Or paste theme image HTTPS URL","text","",false) +
+      '<img data-owner-image-preview alt="Theme preview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px" hidden>' +
       field("price_coins","Coin price (0 = free)","number","0") +
       selectField("duration_mode","Duration",[["scheduled","Set Date & Time"],["permanent","Permanent"]]) +
       field("starts_at","Start date/time (blank = now)","datetime-local") +
@@ -2749,7 +2778,16 @@ function openAction(action, preset = {}) {
     "bubble-new": ["Add Chat Bubble", field("name","Bubble name") + field("asset_url","Bubble asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "profile-background-new": ["Add Profile Background", field("name","Background name") + field("asset_url","Profile background asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
     "frame-new": ["Add Frame", field("name","Frame name") + field("asset_url","Frame asset URL") + field("price","Coin price","number","0") + field("duration_days","Validity days (0 = permanent)","number","0") + field("vip_level","Assign VIP level","number") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Effective from","datetime-local","",false) + field("ends_at","Effective until","datetime-local","",false)],
-    "banner-new": ["Schedule Banner", field("title","Banner title") + field("asset_url","Banner image URL") + field("order","Display order","number","0") + field("countries","Country codes (comma separated, blank = all)","text","",false) + field("starts_at","Start date/time","datetime-local") + field("ends_at","Auto-remove date/time","datetime-local")],
+    "banner-new": ["Schedule Banner",
+      field("title","Banner title") +
+      imageFileField("image_file","Choose banner image from phone") +
+      field("asset_url","Or paste banner image HTTPS URL","text","",false) +
+      '<img data-owner-image-preview alt="Banner preview" style="width:100%;max-height:220px;object-fit:cover;border-radius:12px" hidden>' +
+      field("order","Display order","number","0") +
+      field("countries","Country codes (comma separated, blank = all)","text","",false) +
+      field("starts_at","Start date/time","datetime-local") +
+      field("ends_at","Auto-remove date/time","datetime-local")
+    ],
     "panel-new": ["Create Custom Panel + Staff Login", staffPanelFields()],
     "role-new": ["Create Role / Post", field("name","Name") + selectField("type","Type",[["role","Role"],["post","Post"]])],
     "vip-new": ["Create New VIP",
@@ -2812,6 +2850,38 @@ function openAction(action, preset = {}) {
   const item = maps[action] || [pretty(action), field("target_id","Target user / room ID") + field("reason","Reason / details")];
   dialogTitle.textContent = item[0];
   dialogFields.innerHTML = item[1];
+
+  if (action === "room-theme-new" || action === "banner-new") {
+    const fileInput = dialogFields.querySelector('[name="image_file"]');
+    const urlInput = dialogFields.querySelector(
+      action === "room-theme-new" ? '[name="asset"]' : '[name="asset_url"]',
+    );
+    const preview = dialogFields.querySelector("[data-owner-image-preview]");
+    let localPreviewUrl = "";
+    const showPreview = (url, local = false) => {
+      if (!preview) return;
+      if (localPreviewUrl) {
+        URL.revokeObjectURL(localPreviewUrl);
+        localPreviewUrl = "";
+      }
+      if (local) localPreviewUrl = url;
+      preview.hidden = !url;
+      if (url) preview.src = url;
+      else preview.removeAttribute("src");
+    };
+    fileInput?.addEventListener("change", () => {
+      const file = fileInput.files?.[0];
+      showPreview(file ? URL.createObjectURL(file) : "", Boolean(file));
+    });
+    urlInput?.addEventListener("input", () => {
+      if (fileInput?.files?.length) return;
+      showPreview(String(urlInput.value || "").trim(), false);
+    });
+    dialog.addEventListener("close", () => {
+      if (localPreviewUrl) URL.revokeObjectURL(localPreviewUrl);
+    }, { once: true });
+  }
+
   Object.entries(preset).forEach(([k,v]) => {
     const el = dialogFields.querySelector(`[name="${k}"]`);
     if (!el) return;
@@ -3150,11 +3220,15 @@ async function handleAction(action, data) {
 
   if (action === "room-theme-new") {
     const name = String(data.name || "").trim();
-    const asset = String(data.asset || "").trim();
+    const selectedFile = data.image_file;
+    let asset = String(data.asset || "").trim();
+    if (selectedFile && typeof selectedFile.arrayBuffer === "function" && selectedFile.size) {
+      asset = await uploadOwnerPanelImage(selectedFile, "room-theme");
+    }
     const permanent = String(data.duration_mode || "scheduled") === "permanent";
     if (name.length < 2) throw new Error("Enter a theme name.");
     if (!asset.startsWith("https://") && !asset.startsWith("data:image/")) {
-      throw new Error("Use an HTTPS image URL or image data URL.");
+      throw new Error("Choose a phone image or use an HTTPS image URL.");
     }
     let startsAt = Date.now();
     if (data.starts_at) {
@@ -3223,6 +3297,18 @@ async function handleAction(action, data) {
   }
 
   const payload = { ...data };
+  if (action === "banner-new") {
+    const selectedFile = data.image_file;
+    let assetUrl = String(data.asset_url || "").trim();
+    if (selectedFile && typeof selectedFile.arrayBuffer === "function" && selectedFile.size) {
+      assetUrl = await uploadOwnerPanelImage(selectedFile, "banner");
+    }
+    if (!assetUrl || (!assetUrl.startsWith("https://") && !assetUrl.startsWith("data:image/"))) {
+      throw new Error("Choose a phone image or use an HTTPS banner image URL.");
+    }
+    payload.asset_url = assetUrl;
+    delete payload.image_file;
+  }
   if (action === "wallet-all-users") {
     if (String(data.confirm_all || "") !== "true") {
       throw new Error("Confirm the all-users wallet change first.");
@@ -4332,7 +4418,7 @@ document.body.addEventListener("click", async e => {
 
   const roomThemeRemove = e.target.closest('[data-room-theme-remove]')?.dataset.roomThemeRemove;
   if (roomThemeRemove) {
-    if (!confirm('Remove this global room theme?')) return;
+    if (!confirm('Remove this room theme from the app?')) return;
     try {
       await api('/api/room-themes/' + encodeURIComponent(roomThemeRemove), { method: 'DELETE' });
       toast('Room theme removed.');

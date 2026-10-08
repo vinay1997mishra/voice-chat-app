@@ -5909,6 +5909,60 @@ export default {
       return Response.redirect(new URL("/login", env.PUBLIC_API_ORIGIN || request.url), 302);
     }
 
+    if (url.pathname === "/api/owner/panel-media" && request.method === "POST") {
+      if (!env.EFFECT_MEDIA) {
+        return json({ ok: false, error: "Panel media storage is not configured" }, 503);
+      }
+      const maxBytes = 8 * 1024 * 1024;
+      if (Number(request.headers.get("content-length") || 0) > maxBytes + 65536) {
+        return json({ ok: false, error: "Maximum image upload size is 8 MB" }, 413);
+      }
+      const form = await request.formData();
+      const purpose = String(form.get("purpose") || "").trim().toLowerCase();
+      const file = form.get("file");
+      const permission =
+        purpose === "room-theme" ? "rooms.theme_create" :
+        purpose === "banner" ? "banners.create" : "";
+      if (!permission || !sessionHasPermission(session, permission)) {
+        return json({ ok: false, error: "Owner or assigned media permission required" }, 403);
+      }
+      if (!file || typeof file.arrayBuffer !== "function") {
+        return json({ ok: false, error: "Choose an image from your phone first" }, 400);
+      }
+      const allowed = new Set(["image/png", "image/jpeg", "image/webp"]);
+      if (!allowed.has(String(file.type || "")) || file.size < 12 || file.size > maxBytes) {
+        return json({ ok: false, error: "Use PNG, JPG or WebP image up to 8 MB" }, 400);
+      }
+      const bytes = new Uint8Array(await file.arrayBuffer());
+      const ext =
+        file.type === "image/png" ? "png" :
+        file.type === "image/webp" ? "webp" : "jpg";
+      const folder = purpose === "room-theme" ? "themes" : "banners";
+      const key = "owner-panel/" + folder + "/" + crypto.randomUUID() + "." + ext;
+      await coldStorage.managedMediaPut(env, key, bytes, {
+        httpMetadata: { contentType: file.type },
+        customMetadata: {
+          purpose,
+          uploaded_by: String(session.email || ""),
+          original_name: String(file.name || ""),
+        },
+      });
+      await writeAudit(
+        env,
+        session,
+        "owner.panel_media.upload",
+        purpose,
+        key,
+        { purpose, bytes: Number(file.size || 0), content_type: String(file.type || "") },
+      );
+      return json({
+        ok: true,
+        purpose,
+        key,
+        url: new URL("/media/" + key, env.PUBLIC_API_ORIGIN || request.url).toString(),
+      }, 201);
+    }
+
     if (url.pathname === "/api/owner/gift-media" && request.method === "POST") {
       if (!ownerOnly(session)) return json({ ok: false, error: "Owner access required" }, 403);
       if (!env.EFFECT_MEDIA) return json({ ok: false, error: "Gift media storage is not configured" }, 503);

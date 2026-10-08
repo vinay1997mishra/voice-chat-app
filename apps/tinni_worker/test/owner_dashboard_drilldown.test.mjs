@@ -17,5 +17,12 @@ assert.match(index, /\/api\/owner\/rooms\/all/, "Worker must expose paginated ow
 assert.match(directory, /ownerListUsersPage/, "Directory must page registered IDs safely");
 assert.match(directory, /ownerListRoomsPage/, "Directory must page rooms safely");
 assert.match(index, /getRoomPresenceStore\(env, String\(room\.id\)\)/, "Live room lookup must use stable internal room ID");
+assert.match(app, /Choose theme image from phone/, "Room themes must support phone image import");
+assert.match(app, /Choose banner image from phone/, "Banners must support phone image import");
+assert.match(app, /uploadOwnerPanelImage/, "Owner panel must upload phone images");
+assert.match(app, /Remove Theme/, "Room Theme Manager must expose an explicit remove button");
+assert.match(index, /\/api\/owner\/panel-media/, "Worker must expose owner panel image upload");
+assert.match(index, /owner-panel\/.*themes/, "Theme uploads must use R2 media storage");
+assert.match(index, /owner-panel\/.*banners/, "Banner uploads must use R2 media storage");
 
 console.log("Owner dashboard drill-down wiring passed");
