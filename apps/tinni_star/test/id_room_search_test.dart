@@ -13,6 +13,7 @@ void main() {
     expect(screen, contains('searchUserById('));
     expect(screen, contains("Key('discover-user-result')"));
     expect(screen, contains('ChatUserProfileScreen('));
+    expect(screen, contains('No matching user or room found.'));
     expect(discovery, contains("path: '/rooms/search'"));
   });
 }
