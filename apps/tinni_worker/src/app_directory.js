@@ -8543,15 +8543,6 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row)=>({provider:String(row.provider),subject:String(row.subject),created_at:Number(row.created_at)}));
   }
 
-  async walletTransactions(userIdValue,limitValue=200,beforeValue=Number.MAX_SAFE_INTEGER) {
-    const userId=this._resolveOwnerUserId(userIdValue);
-    return (await coldStorage.walletHistory(this,userId,limitValue,beforeValue)).map(row=>({
-      id:String(row.id),kind:String(row.kind),coins_delta:Number(row.coins_delta||0),
-      diamonds_delta:Number(row.diamonds_delta||0),reference_id:row.reference_id?String(row.reference_id):null,
-      note:String(row.note||""),created_at:Number(row.created_at)
-    }));
-  }
-
   coinsHistory(userIdValue, limitValue = 200) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));

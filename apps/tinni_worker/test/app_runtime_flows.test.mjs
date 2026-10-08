@@ -9,7 +9,7 @@ test('authenticated app entry, core catalogs and social/profile reads use real S
   const paths = ['/app/me', '/wallet', '/account/preferences', '/profile-media',
     '/profile/trends', '/notifications', '/account/stats', '/tasks', '/account/identities', '/feedback',
     '/social/following', '/social/friends', '/social/blocked', '/social/blocked/details',
-    '/messages/inbox', '/calls/incoming', '/wallet/transactions',
+    '/messages/inbox', '/calls/incoming',
     '/wallet/coins/history', '/wallet/diamonds/history', 
     '/hierarchy/invites', '/vip/me', '/frames/catalog', '/cp', '/cp/ranking', '/family/list',
     '/store/catalog', '/inventory', '/vip/catalog', '/unique-ids/catalog',

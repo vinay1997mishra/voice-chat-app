@@ -1040,12 +1040,6 @@ class AppBackendService {
     return _map(data['wallet']);
   }
 
-  Future<List<Map<String, dynamic>>> walletTransactions(String token) async {
-    final data = await _request('GET', '/wallet/transactions', token);
-    final raw = data['transactions'];
-    if (raw is! List) return const [];
-    return raw.map(_map).toList(growable: false);
-  }
 
   Future<Map<String, List<SettlementRecipient>>> settlementRecipients(
     String token, {

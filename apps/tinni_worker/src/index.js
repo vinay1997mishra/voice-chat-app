@@ -3338,12 +3338,6 @@ export default {
       }
     }
 
-    if (url.pathname === "/wallet/transactions" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json({ ok: true, transactions: await getAppDirectoryStore(env).walletTransactions(appSession.user.user_id,url.searchParams.get("limit")||200,url.searchParams.get("before")||Number.MAX_SAFE_INTEGER) });
-    }
-
     if (url.pathname === "/wallet/settlement/recipients" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
