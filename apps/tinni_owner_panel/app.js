@@ -1186,6 +1186,10 @@ async function openOwnerUserProfile(userId) {
 
       <div class="button-row" style="margin-top:12px">
         <button type="button" class="btn primary" data-owner-full-view="${escapeHtml(user.user_id || userId)}">Full View</button>
+        ${sessionCan("wallets.normal") ? `
+          <button type="button" class="btn secondary" data-owner-profile-coins="credit" data-owner-profile-user="${escapeHtml(user.user_id || userId)}">Add Coins</button>
+          <button type="button" class="btn secondary" data-owner-profile-coins="debit" data-owner-profile-user="${escapeHtml(user.user_id || userId)}">Deduct Coins</button>
+        ` : ""}
         ${room && currentSession?.role === "owner" ? `
           <button type="button" class="btn secondary" data-owner-listen-room="${escapeHtml(room.room_id)}">Listen to Room — no mic</button>
           <button type="button" class="btn secondary" data-owner-stop-listen>Stop Listening</button>
@@ -3768,6 +3772,20 @@ document.body.addEventListener("click", async e => {
     document.getElementById("ownerHierarchyDialog")?.close();
     document.getElementById("ownerIdentityDialog")?.close();
     await openOwnerUserProfile(targetId);
+    return;
+  }
+
+  const profileCoinsButton = e.target.closest("[data-owner-profile-coins]");
+  if (profileCoinsButton) {
+    const userId = String(profileCoinsButton.dataset.ownerProfileUser || "").trim();
+    const operation = String(profileCoinsButton.dataset.ownerProfileCoins || "").trim();
+    if (!userId || !["credit", "debit"].includes(operation)) return;
+    document.getElementById("ownerProfileDialog")?.close();
+    openAction("wallet-normal", {
+      user_id: userId,
+      asset: "coins",
+      operation,
+    });
     return;
   }
 

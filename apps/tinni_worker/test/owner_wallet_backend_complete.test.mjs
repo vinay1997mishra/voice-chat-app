@@ -53,6 +53,9 @@ assert.match(ownerApp, /companyDollars: \{ usd_cents: 0, ledger: \[\] \}/);
 assert.match(ownerApp, /function renderCompanyDollars\(\)/);
 assert.match(ownerApp, /"company-dollar-deduct": "__owner_only__"/);
 assert.match(ownerApp, /selectField\("asset","Balance",\[\["coins","Coins"\],\["diamonds","Diamonds"\]\]\)/);
+assert.match(ownerApp, /data-owner-profile-coins="credit"/);
+assert.match(ownerApp, /data-owner-profile-coins="debit"/);
+assert.match(ownerApp, /openAction\("wallet-normal",\s*\{[\s\S]*asset:\s*"coins",[\s\S]*operation,/);
 
 for (const method of [
   "coinsHistory",
