@@ -4,6 +4,7 @@ import '../app/tinni_state.dart';
 import '../discovery/discovery_service.dart';
 import '../ui/room_dp.dart';
 import '../ui/royal_theme.dart';
+import 'chat_user_profile_screen.dart';
 import 'room_screen.dart';
 
 enum _DiscoverMode { all, recent, favorites }
@@ -19,6 +20,10 @@ class DiscoverScreen extends StatefulWidget {
 class _DiscoverScreenState extends State<DiscoverScreen> {
   final search = TextEditingController();
   List<RoomSummary>? results;
+  Map<String, dynamic>? userResult;
+  bool searching = false;
+  String? searchError;
+  int _searchGeneration = 0;
   _DiscoverMode mode = _DiscoverMode.all;
 
   @override
@@ -30,11 +35,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   }
   void _onPageEntered() { if (widget.state.pageEntries.value == 1) _refresh(); }
   void _onLiveChanged() {
-    if (mounted) {
-      setState(() {
-        if (search.text.trim().isNotEmpty) results = widget.state.discovery.search(search.text.trim());
-      });
-    }
+    if (!mounted) return;
+    final value = search.text.trim();
+    if (value.isEmpty || results == null) return;
+    setState(() => results = widget.state.discovery.search(value));
   }
 
   @override
@@ -51,14 +55,94 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
     try {
       await widget.state.discovery.syncRooms(account.authToken);
       if (!mounted) return;
-      setState(() {
-        if (search.text.trim().isNotEmpty) {
-          results = widget.state.discovery.search(search.text.trim());
-        }
-      });
+      final value = search.text.trim();
+      if (value.isNotEmpty) {
+        await _runSearch(value);
+      } else {
+        setState(() {});
+      }
     } catch (_) {
       // Keep the last loaded room list until the next manual refresh/re-entry.
     }
+  }
+
+  Future<void> _runSearch(String rawQuery) async {
+    final value = rawQuery.trim();
+    final generation = ++_searchGeneration;
+    if (value.isEmpty) {
+      if (!mounted) return;
+      setState(() {
+        results = null;
+        userResult = null;
+        searching = false;
+        searchError = null;
+      });
+      return;
+    }
+
+    final account = widget.state.auth.current;
+    final localRooms = widget.state.discovery.search(value);
+    if (mounted) {
+      setState(() {
+        results = localRooms;
+        userResult = null;
+        searching = account != null;
+        searchError = null;
+      });
+    }
+    if (account == null) return;
+
+    try {
+      final responses = await Future.wait<dynamic>([
+        widget.state.discovery.searchRoomRemote(
+          authToken: account.authToken,
+          query: value,
+        ),
+        widget.state.backend.searchUserById(account.authToken, value),
+      ]);
+      if (!mounted || generation != _searchGeneration) return;
+
+      final byId = <String, RoomSummary>{
+        for (final room in widget.state.discovery.search(value)) room.id: room,
+      };
+      final remoteRoom = responses[0];
+      if (remoteRoom is RoomSummary) {
+        byId[remoteRoom.id] = remoteRoom;
+      }
+      final rawUser = responses[1];
+      setState(() {
+        results = byId.values.toList(growable: false);
+        userResult = rawUser is Map
+            ? Map<String, dynamic>.from(rawUser)
+            : null;
+        searching = false;
+        searchError = null;
+      });
+    } catch (error) {
+      if (!mounted || generation != _searchGeneration) return;
+      setState(() {
+        searching = false;
+        searchError = error.toString().replaceFirst('Bad state: ', '');
+      });
+    }
+  }
+
+  void _openUser() {
+    final user = userResult;
+    if (user == null) return;
+    final userId = user['user_id']?.toString() ?? '';
+    if (userId.isEmpty) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => ChatUserProfileScreen(
+          state: widget.state,
+          userId: userId,
+          displayName: user['display_name']?.toString() ?? userId,
+          avatarDataUrl: user['avatar_data_url']?.toString(),
+        ),
+      ),
+    );
   }
 
   List<RoomSummary> _roomsForMode() {
@@ -103,9 +187,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           padding: const EdgeInsets.all(14),
         children: [
           TextField(
+            key: const Key('discover-search-field'),
             controller: search,
             decoration: InputDecoration(
-              hintText: 'Search room ID or name',
+              hintText: 'Search user ID, room ID or room name',
               prefixIcon: const ShiningIcon(
                 icon: Icons.search_rounded,
                 color: FeaturePalette.discover,
@@ -116,13 +201,77 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
               suffixIcon: IconButton(
                 onPressed: () {
                   search.clear();
-                  setState(() => results = null);
+                  _searchGeneration += 1;
+                  setState(() {
+                    results = null;
+                    userResult = null;
+                    searching = false;
+                    searchError = null;
+                  });
                 },
                 icon: const Icon(Icons.clear_rounded),
               ),
             ),
-            onSubmitted: (value) => setState(() => results = widget.state.discovery.search(value)),
+            onSubmitted: _runSearch,
+            textInputAction: TextInputAction.search,
           ),
+          if (searching) ...[
+            const SizedBox(height: 8),
+            const LinearProgressIndicator(),
+          ],
+          if (searchError != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              searchError!,
+              key: const Key('discover-search-error'),
+              style: const TextStyle(color: Colors.redAccent),
+            ),
+          ],
+          if (userResult != null) ...[
+            const SizedBox(height: 10),
+            RoyalPanel(
+              key: const Key('discover-user-result'),
+              padding: const EdgeInsets.all(10),
+              accentColor: FeaturePalette.discover,
+              onTap: _openUser,
+              child: Row(
+                children: [
+                  const CircleAvatar(
+                    radius: 24,
+                    child: Icon(Icons.person_rounded),
+                  ),
+                  const SizedBox(width: 11),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userResult!['display_name']?.toString() ??
+                              userResult!['user_id']?.toString() ??
+                              'User',
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
+                        Text(
+                          'ID ' + (userResult!['user_id']?.toString() ?? ''),
+                          style: const TextStyle(
+                            color: RoyalPalette.muted,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const Icon(
+                    Icons.chevron_right_rounded,
+                    color: FeaturePalette.discover,
+                  ),
+                ],
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           SegmentedButton<_DiscoverMode>(
             segments: const [
@@ -133,36 +282,46 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
             selected: {mode},
             onSelectionChanged: (selection) {
               search.clear();
+              _searchGeneration += 1;
               setState(() {
                 results = null;
+                userResult = null;
+                searching = false;
+                searchError = null;
                 mode = selection.first;
               });
             },
           ),
           const SizedBox(height: 16),
-          const Text(
-            'Royal Rooms',
-            style: TextStyle(
+          Text(
+            results == null ? 'Royal Rooms' : 'Rooms',
+            style: const TextStyle(
               color: FeaturePalette.discover,
               fontSize: 17,
               fontWeight: FontWeight.w900,
             ),
           ),
           const SizedBox(height: 10),
-          if (rooms.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 42),
+          if (rooms.isEmpty &&
+              (results == null || (userResult == null && !searching)))
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 42),
               child: Column(
                 children: [
-                  ShiningIcon(
+                  const ShiningIcon(
                     icon: Icons.travel_explore_rounded,
                     size: 34,
                     boxSize: 58,
                     color: FeaturePalette.discover,
                     glow: 0.42,
                   ),
-                  SizedBox(height: 10),
-                  Text('No rooms in this list yet.'),
+                  const SizedBox(height: 10),
+                  Text(
+                    results == null
+                        ? 'No rooms in this list yet.'
+                        : 'No matching user or room found.',
+                    key: const Key('discover-search-empty'),
+                  ),
                 ],
               ),
             ),

@@ -910,6 +910,55 @@ class DiscoveryService {
     return values;
   }
 
+  Future<RoomSummary?> searchRoomRemote({
+    required String authToken,
+    required String query,
+  }) async {
+    final value = query.trim();
+    if (value.isEmpty) return null;
+    if (authToken.trim().isEmpty) {
+      throw StateError('Login session is required');
+    }
+
+    final request = await openBackendRequest(
+      _httpClient,
+      'GET',
+      apiBase.replace(
+        path: '/rooms/search',
+        queryParameters: <String, String>{'id': value},
+      ),
+    );
+    request.headers.set(
+      HttpHeaders.authorizationHeader,
+      'Bearer $authToken',
+    );
+    request.headers.set(HttpHeaders.cacheControlHeader, 'no-store');
+
+    final response = await closeBackendRequest(request);
+    final data = await _readJson(response);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw StateError(data['error']?.toString() ?? 'Unable to search room');
+    }
+
+    final raw = data['room'];
+    if (raw is! Map) return null;
+    final room = _roomFromServer(raw);
+    if (room == null) return null;
+
+    final index = rooms.indexWhere((item) => item.id == room.id);
+    if (index >= 0) {
+      final current = rooms[index];
+      rooms[index] = room.copyWith(
+        rocketLaunchLevel: current.rocketLaunchLevel,
+        rocketLaunchedAt: current.rocketLaunchedAt,
+        rocketPriorityUntil: current.rocketPriorityUntil,
+      );
+    } else {
+      rooms.add(room);
+    }
+    return rooms.firstWhere((item) => item.id == room.id);
+  }
+
   List<RoomSummary> search(String query) {
     final value = query.trim();
     if (value.isEmpty) return const [];

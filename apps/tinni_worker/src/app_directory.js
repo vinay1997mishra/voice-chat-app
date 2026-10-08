@@ -5303,9 +5303,10 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   findRoomByExactId(roomIdValue) {
-    const roomId = String(roomIdValue || "").trim();
-    if (!roomId) return null;
-    const row = this.ctx.storage.sql.exec(
+    const requested = String(roomIdValue || "").trim();
+    if (!requested) return null;
+
+    const findDirect = (candidate) => this.ctx.storage.sql.exec(
       `SELECT r.*, u.display_name AS owner_name,
               u.avatar_data_url AS owner_avatar_data_url,
               u.flag_emoji AS owner_flag_emoji,
@@ -5313,11 +5314,34 @@ export class AppDirectoryStore extends DurableObject {
          FROM app_rooms r
          JOIN app_users u ON u.user_id = r.owner_id
          LEFT JOIN app_room_presence_counts pc ON pc.room_id = r.id
-        WHERE r.id = ?
+        WHERE (
+              LOWER(r.id) = LOWER(?)
+           OR LOWER(COALESCE(r.public_id, r.id)) = LOWER(?)
+           OR LOWER(r.owner_id) = LOWER(?)
+        )
           AND COALESCE(r.closed, 0) = 0
         LIMIT 1`,
-      roomId,
+      candidate, candidate, candidate,
     ).toArray()[0];
+
+    let row = findDirect(requested);
+    if (!row) {
+      let current = requested;
+      const seen = new Set([current.toLowerCase()]);
+      for (let depth = 0; depth < 12; depth += 1) {
+        const history = this.ctx.storage.sql.exec(
+          "SELECT new_user_id FROM user_id_history WHERE LOWER(old_user_id) = LOWER(?) LIMIT 1",
+          current,
+        ).toArray()[0];
+        if (!history?.new_user_id) break;
+        current = String(history.new_user_id).trim();
+        const normalized = current.toLowerCase();
+        if (!current || seen.has(normalized)) break;
+        seen.add(normalized);
+        row = findDirect(current);
+        if (row) break;
+      }
+    }
     return row ? rowToRoom(this._roomDailyExperience(row)) : null;
   }
 
@@ -5353,39 +5377,37 @@ export class AppDirectoryStore extends DurableObject {
   findUserByExactPublicId(publicIdValue) {
     const raw = String(publicIdValue || "").trim();
     if (!raw) return null;
-    const direct = this.ctx.storage.sql.exec(
-      `SELECT u.user_id, u.display_name, u.signature, u.country_code,
-              u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
-              p.room_id AS active_room_id, p.last_seen,
-              p.room_socket_connected AS room_socket_connected
-         FROM app_users u
-         LEFT JOIN app_user_presence p ON p.user_id = u.user_id
-        WHERE LOWER(u.user_id) = LOWER(?)
-        LIMIT 1`,
-      raw,
-    ).toArray()[0];
 
-    let row = direct;
-    if (!row) {
+    let current = raw;
+    const seen = new Set();
+    let row = null;
+    for (let depth = 0; depth < 12; depth += 1) {
+      const normalized = current.toLowerCase();
+      if (!current || seen.has(normalized)) break;
+      seen.add(normalized);
+
+      row = this.ctx.storage.sql.exec(
+        `SELECT u.user_id, u.display_name, u.signature, u.country_code,
+                u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
+                p.room_id AS active_room_id, p.last_seen,
+                p.room_socket_connected AS room_socket_connected
+           FROM app_users u
+           LEFT JOIN app_user_presence p ON p.user_id = u.user_id
+          WHERE LOWER(u.user_id) = LOWER(?)
+          LIMIT 1`,
+        current,
+      ).toArray()[0];
+      if (row) break;
+
       const history = this.ctx.storage.sql.exec(
         "SELECT new_user_id FROM user_id_history WHERE LOWER(old_user_id) = LOWER(?) LIMIT 1",
-        raw,
+        current,
       ).toArray()[0];
-      if (history) {
-        row = this.ctx.storage.sql.exec(
-          `SELECT u.user_id, u.display_name, u.signature, u.country_code,
-                  u.country_name, u.flag_emoji, u.gender, u.avatar_data_url,
-                  p.room_id AS active_room_id, p.last_seen,
-                  p.room_socket_connected AS room_socket_connected
-             FROM app_users u
-             LEFT JOIN app_user_presence p ON p.user_id = u.user_id
-            WHERE u.user_id = ?
-            LIMIT 1`,
-          String(history.new_user_id),
-        ).toArray()[0];
-      }
+      if (!history?.new_user_id) break;
+      current = String(history.new_user_id).trim();
     }
     if (!row) return null;
+
     const now = Date.now();
     const onlineCutoff = now - 90000;
     return {
@@ -5415,7 +5437,8 @@ export class AppDirectoryStore extends DurableObject {
     const query = cleanText(queryValue, 80);
     if (!query) return [];
     const limit = Math.max(1, Math.min(50, Number(limitValue) || 30));
-    const exact = this._resolveOwnerUserId(query);
+    const exactProfile = this.findUserByExactPublicId(query);
+    const exact = exactProfile?.user_id || this._resolveOwnerUserId(query);
     const like = "%" + query.replaceAll("%", "\\%").replaceAll("_", "\\_") + "%";
     const now = Date.now();
     const onlineCutoff = now - 90000;
