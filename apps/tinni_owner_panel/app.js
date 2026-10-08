@@ -376,6 +376,7 @@ const actionPermission = {
   "room-live": "rooms.live_seats",
   "room-theme-new": "rooms.theme_create",
   "wallet-normal": "wallets.normal",
+  "wallet-all-users": "__owner_only__",
   "wallet-seller": "wallets.seller",
   "wallet-merchant": "wallets.merchant",
   "treasury-send": "wallets.treasury_send",
@@ -2677,6 +2678,16 @@ function openAction(action, preset = {}) {
       field("starts_at","Start date/time (blank = now)","datetime-local") +
       field("ends_at","End date/time","datetime-local")
     ],
+    "wallet-all-users": ["All Users Wallet",
+      selectField("operation","Operation",[
+        ["add_coins","Add coins to every user"],
+        ["deduct_coins","Deduct coins from every user"],
+        ["deduct_diamonds","Deduct diamonds from every user"]
+      ]) +
+      field("amount","Amount per user","number","1000") +
+      field("reason","Reason / note","text","Owner bulk wallet adjustment",false) +
+      checkboxField("confirm_all","I confirm this will change every registered user's wallet",false)
+    ],
     "wallet-normal": ["Manage Normal Wallet", field("user_id","User ID") + selectField("asset","Balance",[["coins","Coins"],["diamonds","Diamonds"]]) + field("amount","Amount","number") + selectField("operation","Operation",[["credit","Add"],["debit","Remove"],["ban","Ban wallet (coins wallet)"],["unban","Unban wallet (coins wallet)"]])],
     "wallet-seller": ["Manage Coin Seller Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
     "wallet-merchant": ["Manage Merchant Wallet", field("user_id","User ID") + field("amount","Coin amount","number") + selectField("operation","Operation",[["create","Create/activate"],["credit","Add coins"],["debit","Remove coins"],["ban","Ban"],["unban","Unban"]])],
@@ -3212,6 +3223,17 @@ async function handleAction(action, data) {
   }
 
   const payload = { ...data };
+  if (action === "wallet-all-users") {
+    if (String(data.confirm_all || "") !== "true") {
+      throw new Error("Confirm the all-users wallet change first.");
+    }
+    const amount = Math.floor(Number(data.amount || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new Error("Enter a valid per-user amount.");
+    }
+    payload.amount = amount;
+    delete payload.confirm_all;
+  }
   if (action === "company-dollar-deduct") {
     const amount = Number(data.usd_amount || 0);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -3317,6 +3339,16 @@ async function handleAction(action, data) {
   if (action === "lucky-gift-config") {
     await loadOwnerState();
     toast("Lucky Gift settings updated.");
+    return;
+  }
+
+  if (action === "wallet-all-users") {
+    toast(
+      "All Users Wallet: " +
+      fmt(result?.affected || 0) + "/" + fmt(result?.total_users || 0) +
+      " updated • " + fmt(result?.skipped_security_frozen || 0) +
+      " frozen skipped • " + fmt(result?.failed || 0) + " failed"
+    );
     return;
   }
 

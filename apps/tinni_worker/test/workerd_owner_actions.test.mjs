@@ -120,6 +120,36 @@ test('owner actions persist through real SQLite/RPC and require the owner sessio
     hierarchyUsers.push((await response.json()).user.user_id);
   }
   const [bd,agency,host]=hierarchyUsers;
+
+  for (const userId of hierarchyUsers) {
+    await action('wallet-normal',{user_id:userId,asset:'diamonds',operation:'credit',amount:100});
+  }
+  const deniedBulk = await request('/api/owner/action', {
+    action:'wallet-all-users',data:{operation:'add_coins',amount:500},
+  }, 'tinni_owner_session='+token('user'));
+  assert.ok(deniedBulk.status===401 || deniedBulk.status===403, JSON.stringify(deniedBulk));
+
+  const bulkAdd = await action('wallet-all-users',{
+    operation:'add_coins',amount:500,reason:'integration bulk credit',
+  });
+  assert.equal(bulkAdd.result.total_users,4);
+  assert.equal(bulkAdd.result.affected,4);
+  const bulkCoinDebit = await action('wallet-all-users',{
+    operation:'deduct_coins',amount:200,reason:'integration bulk coin debit',
+  });
+  assert.equal(bulkCoinDebit.result.affected,4);
+  const bulkDiamondDebit = await action('wallet-all-users',{
+    operation:'deduct_diamonds',amount:50,reason:'integration bulk diamond debit',
+  });
+  assert.equal(bulkDiamondDebit.result.affected,4);
+
+  for (const userId of hierarchyUsers) {
+    const detail = await request('/api/owner/user-detail?user_id='+encodeURIComponent(userId));
+    assert.equal(detail.status,200,JSON.stringify(detail.data));
+    assert.equal(detail.data.detail.wallet.coins,300);
+    assert.equal(detail.data.detail.wallet.diamonds,50);
+  }
+
   await action('bd-activate',{user_id:bd,operation:'activate'});
   await action('agency-activate',{user_id:agency,operation:'activate'});
   await action('agency-to-bd',{agency_owner_id:agency,bd_user_id:bd});

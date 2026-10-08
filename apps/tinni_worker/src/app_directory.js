@@ -3118,6 +3118,157 @@ export class AppDirectoryStore extends DurableObject {
     return this._privilegedWalletGuard(userId, walletType);
   }
 
+  _ownerBulkWalletAdjust(operationValue, amountValue, reasonValue = "") {
+    const operation = String(operationValue || "").trim().toLowerCase();
+    const allowed = new Set(["add_coins", "deduct_coins", "deduct_diamonds"]);
+    if (!allowed.has(operation)) {
+      throw new Error("Unsupported all-user wallet operation");
+    }
+    const amount = Math.floor(Number(amountValue || 0));
+    if (!Number.isSafeInteger(amount) || amount <= 0) {
+      throw new Error("Enter a valid per-user amount");
+    }
+    const reason = cleanText(reasonValue || "Owner bulk wallet adjustment", 160);
+    const users = this.ctx.storage.sql.exec(
+      "SELECT user_id FROM app_users ORDER BY created_at ASC, user_id ASC LIMIT 20000",
+    ).toArray();
+    if (users.length >= 20000) {
+      const count = this.ctx.storage.sql.exec(
+        "SELECT COUNT(*) AS count FROM app_users",
+      ).toArray()[0];
+      if (Number(count?.count || 0) > 20000) {
+        throw new Error("Bulk wallet action is limited to 20,000 registered IDs per run");
+      }
+    }
+
+    const batchId = crypto.randomUUID();
+    const now = Date.now();
+    let affected = 0;
+    let unchanged = 0;
+    let skippedSecurityFrozen = 0;
+    let failed = 0;
+    let totalApplied = 0;
+    const errors = [];
+
+    for (const row of users) {
+      const userId = String(row.user_id || "");
+      if (!userId) continue;
+      try {
+        let before = 0;
+        let after = 0;
+        let applied = 0;
+        let coinsDelta = 0;
+        let diamondsDelta = 0;
+        let kind = "";
+
+        if (operation === "add_coins" || operation === "deduct_coins") {
+          const guard = this._normalWalletGuard(userId);
+          if (guard.security_frozen) {
+            skippedSecurityFrozen += 1;
+            continue;
+          }
+          before = Math.max(0, Number(guard.coins || 0));
+          applied = operation === "add_coins"
+            ? amount
+            : Math.min(amount, before);
+          if (applied <= 0) {
+            unchanged += 1;
+            continue;
+          }
+          after = operation === "add_coins"
+            ? before + applied
+            : before - applied;
+          coinsDelta = operation === "add_coins" ? applied : -applied;
+          kind = operation === "add_coins"
+            ? "owner_bulk_coin_credit"
+            : "owner_bulk_coin_debit";
+
+          this.ctx.storage.transactionSync(() => {
+            this.ctx.storage.sql.exec(
+              "UPDATE app_wallets SET coins=?,updated_at=? WHERE user_id=?",
+              after, now, userId,
+            );
+            this.ctx.storage.sql.exec(
+              "UPDATE wallet_coin_guards SET expected_coins=?,updated_at=? WHERE user_id=?",
+              after, now, userId,
+            );
+            this.ctx.storage.sql.exec(
+              "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,?,0,?,?,?)",
+              crypto.randomUUID(),
+              userId,
+              kind,
+              coinsDelta,
+              "owner-bulk:" + batchId,
+              "Owner bulk wallet adjustment; before=" + before +
+                "; after=" + after + "; reason=" + reason,
+              now,
+            );
+          });
+        } else {
+          this.getWallet(userId);
+          const wallet = this.ctx.storage.sql.exec(
+            "SELECT diamonds FROM app_wallets WHERE user_id=? LIMIT 1",
+            userId,
+          ).toArray()[0];
+          before = Math.max(0, Number(wallet?.diamonds || 0));
+          applied = Math.min(amount, before);
+          if (applied <= 0) {
+            unchanged += 1;
+            continue;
+          }
+          after = before - applied;
+          diamondsDelta = -applied;
+          kind = "owner_bulk_diamond_debit";
+
+          this.ctx.storage.transactionSync(() => {
+            this.ctx.storage.sql.exec(
+              "UPDATE app_wallets SET diamonds=?,updated_at=? WHERE user_id=?",
+              after, now, userId,
+            );
+            this.ctx.storage.sql.exec(
+              "INSERT INTO wallet_transactions (id,user_id,kind,coins_delta,diamonds_delta,reference_id,note,created_at) VALUES (?,?,?,0,?,?,?,?)",
+              crypto.randomUUID(),
+              userId,
+              kind,
+              diamondsDelta,
+              "owner-bulk:" + batchId,
+              "Owner bulk wallet adjustment; before=" + before +
+                "; after=" + after + "; reason=" + reason,
+              now,
+            );
+          });
+        }
+
+        affected += 1;
+        totalApplied += applied;
+        this._notifyAccountChanged(userId);
+      } catch (error) {
+        failed += 1;
+        if (errors.length < 20) {
+          errors.push({
+            user_id: userId,
+            error: String(error?.message || "Wallet update failed"),
+          });
+        }
+      }
+    }
+
+    return {
+      ok: failed === 0,
+      batch_id: batchId,
+      operation,
+      requested_amount_per_user: amount,
+      total_users: users.length,
+      affected,
+      unchanged,
+      skipped_security_frozen: skippedSecurityFrozen,
+      failed,
+      total_amount_applied: totalApplied,
+      reason,
+      errors,
+    };
+  }
+
   _manageWallet(userIdValue, walletTypeValue, operationValue, amountValue, assetValue = "coins") {
     const userId = this._resolveOwnerUserId(userIdValue);
     const walletType = String(walletTypeValue || "normal").trim().toLowerCase();
@@ -4442,6 +4593,7 @@ export class AppDirectoryStore extends DurableObject {
         if (!row) throw new Error("Room not found");
         return { room: rowToRoom(this._roomDailyExperience(row)) };
       }
+      case "wallet-all-users": return this._ownerBulkWalletAdjust(data.operation, data.amount, data.reason);
       case "wallet-normal": return this._manageWallet(data.user_id, "normal", data.operation, data.amount, data.asset || "coins");
       case "wallet-seller": return this._manageWallet(data.user_id, "coin_seller", data.operation, data.amount);
       case "wallet-merchant": return this._manageWallet(data.user_id, "merchant", data.operation, data.amount);
