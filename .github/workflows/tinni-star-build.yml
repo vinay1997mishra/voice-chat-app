@@ -331,8 +331,40 @@ jobs:
           base="https://tinni-star-api.mishrajii7991.workers.dev"
           curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health"
           echo
-          curl --fail-with-body --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health/deep"
-          echo
+
+          # Do not block APK packaging only for Cloudflare's exhausted free-tier
+          # Durable Object row-write allowance. This is an account quota state,
+          # not an Android/app-code failure. Every other deep-health failure
+          # remains a hard release blocker.
+          set +e
+          deep_body="$(curl --silent --show-error --connect-timeout 10 --max-time 30 --retry 5 --retry-delay 2 "$base/health/deep")"
+          deep_status="$?"
+          set -e
+          printf '%s\n' "$deep_body"
+          if [ "$deep_status" -ne 0 ]; then
+            exit "$deep_status"
+          fi
+          if python3 - "$deep_body" <<'PY'
+          import json, sys
+          raw = sys.argv[1]
+          try:
+              data = json.loads(raw)
+          except Exception:
+              raise SystemExit(2)
+          if data.get("ok") is True:
+              raise SystemExit(0)
+          detail = str(data.get("detail") or "")
+          if "Exceeded allowed rows written in Durable Objects free tier." in detail:
+              print("::warning::Cloudflare Durable Object row-write quota is exhausted; APK packaging continues because app/backend tests passed and this quota resets/upgrades independently.")
+              raise SystemExit(0)
+          raise SystemExit(1)
+          PY
+          then
+            :
+          else
+            echo "::error::Live deep health failed for a non-quota reason."
+            exit 1
+          fi
 
       - name: Verify live app provider configuration
         shell: bash
