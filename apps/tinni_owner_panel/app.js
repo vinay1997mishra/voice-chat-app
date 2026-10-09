@@ -538,8 +538,16 @@ function ownerDetailValueHtml(key, value) {
   return escapeHtml(ownerReadableValue(value, key));
 }
 
+function ownerDetailHiddenKey(key) {
+  const value = String(key || "").toLowerCase();
+  return /(^|_)(api|url|uri|endpoint|host|origin|worker|token|secret|password|passcode|authorization|auth|cookie|header|email|phone|mobile|device_id|device_fingerprint|ip|ip_address|client_secret|private_key|public_key|access_key|account_id|zone_id)(_|$)/.test(value);
+}
+
 function renderOwnerDetailGrid(data) {
-  const source = data && typeof data === "object" ? data : {};
+  const source = Object.fromEntries(
+    Object.entries(data && typeof data === "object" ? data : {})
+      .filter(([key]) => !ownerDetailHiddenKey(key))
+  );
   const priority = [
     "coin_price", "price", "duration_days", "vip_level", "level", "category",
     "countries", "country", "starts_at", "ends_at", "order",
@@ -591,7 +599,6 @@ async function loadStaffPanels() {
           <div class="staff-panel-head">
             <div class="staff-panel-identity">
               <strong>${escapeHtml(panel.name)}</strong>
-              <small>${escapeHtml(panel.email)}</small>
               ${panel.assigned_user_id ? `<small>User ID: ${escapeHtml(panel.assigned_user_id)}</small>` : ""}
             </div>
             <div class="staff-panel-actions">
@@ -609,7 +616,6 @@ async function loadStaffPanels() {
                 class="staff-credentials-btn"
                 data-staff-credentials
                 data-panel-id="${panelId}"
-                data-staff-email="${escapeHtml(panel.email)}"
               >Change Gmail / Password</button>
             </div>
           </div>
@@ -722,6 +728,7 @@ function formatFullTimestamp(value) {
 function auditDetailsText(details) {
   if (!details || typeof details !== "object") return "";
   return Object.entries(details)
+    .filter(([key]) => !ownerDetailHiddenKey(key))
     .map(([key, value]) => `${ownerDetailLabel(key)}: ${ownerReadableValue(value, key)}`)
     .join(" • ");
 }
@@ -1290,8 +1297,7 @@ async function openOwnerUserProfile(userId) {
       </div>
 
       <div class="rule-grid owner-profile-grid">
-        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
-        <div class="rule"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
+                <div class="rule"><strong>Coins</strong><span>${fmt(detail.wallet?.coins || 0)}</span></div>
         <div class="rule"><strong>Diamonds</strong><span>${fmt(detail.wallet?.diamonds || 0)}</span></div>
         <div class="rule"><strong>VIP</strong><span>${Number(detail.controls?.vip_level || 0) || "None"}</span></div>
         <div class="rule"><strong>Roles</strong><span>${ownerDetailRoleHtml(detail.hierarchy, user.user_id || userId)}</span></div>
@@ -2064,8 +2070,7 @@ async function openOwnerFullDashboard(userId) {
       </div>
 
       <div class="rule-grid owner-profile-grid">
-        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
-        <div class="rule"><strong>Coins</strong><span>${fmt(wallet.coins || 0)}</span></div>
+                <div class="rule"><strong>Coins</strong><span>${fmt(wallet.coins || 0)}</span></div>
         <div class="rule"><strong>Diamonds</strong><span>${fmt(wallet.diamonds || 0)}</span></div>
         <div class="rule"><strong>VIP</strong><span>${Number(controls.vip_level || 0) || "None"}</span></div>
         <div class="rule"><strong>ID</strong><span>${controls.banned ? "Banned" : "Active"}</span></div>
@@ -2213,7 +2218,6 @@ async function loadAuditLog() {
         <td>${escapeHtml(formatFullTimestamp(record.created_at))}</td>
         <td>
           <strong>${escapeHtml(record.panel_name || record.panel_id || "Panel")}</strong>
-          <br><small>${escapeHtml(record.actor_email || "")}</small>
         </td>
         <td>${escapeHtml(pretty(String(record.action || "").replaceAll(".", "_")))}</td>
         <td>${escapeHtml(record.target_type || "—")}${record.target_id ? `<br><small>${escapeHtml(record.target_id)}</small>` : ""}</td>
@@ -2279,7 +2283,7 @@ function applySession(session) {
   if (ownerChip) {
     ownerChip.innerHTML = owner
       ? "<strong>Platform Owner</strong><small>Full owner access</small>"
-      : `<strong>${escapeHtml(session.panelName || "Staff")}</strong><small>${escapeHtml(session.email || "")}</small>`;
+      : `<strong>${escapeHtml(session.panelName || "Staff")}</strong><small>Authorized staff access</small>`;
   }
 
   const quickAction = document.getElementById("quickActionBtn");
@@ -2848,7 +2852,7 @@ function checkboxField(name, label, checked = false) {
   return `<label class="checkbox-field"><input name="${name}" type="checkbox" value="true" ${checked ? "checked" : ""}><span>${label}</span></label>`;
 }
 
-function openStaffCredentials(panelId, currentEmail) {
+function openStaffCredentials(panelId) {
   pendingAction = "staff-credentials";
   dialogTitle.textContent = "Change Staff Gmail / Password";
   dialogHelp.textContent = "Change the staff login email, reset the password, or both. Leave the new password blank to keep the current password.";
@@ -2859,7 +2863,7 @@ function openStaffCredentials(panelId, currentEmail) {
     field("confirm_password", "Confirm new password", "password", "Enter new password again", false);
 
   const emailInput = dialogFields.querySelector('[name="staff_email"]');
-  if (emailInput) emailInput.value = currentEmail || "";
+  if (emailInput) emailInput.value = "";
   dialog.showModal();
 }
 
@@ -3170,7 +3174,7 @@ async function loadAllOwnerUsers({ reset = true } = {}) {
       <div class="policy-row">
         <div>
           <strong>${escapeHtml(user.display_name || user.user_id)}</strong>
-          <small>ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.email || "—")} • ${escapeHtml(user.country_name || user.country_code || "—")}</small>
+          <small>ID ${escapeHtml(user.user_id)} • ${escapeHtml(user.country_name || user.country_code || "—")}</small>
           <small>${user.call_verified ? "Verified" : "Unverified"} • Joined ${escapeHtml(formatFullTimestamp(user.created_at))}</small>
         </div>
         <button type="button" class="btn primary" data-owner-open-profile="${escapeHtml(user.user_id)}">Open ID / Full Profile</button>
@@ -3229,8 +3233,7 @@ async function loadAllOwnerRooms({ reset = true } = {}) {
         </div>
         <div class="rule-grid">
           <div class="rule"><strong>Owner</strong><span>${escapeHtml(room.owner_name || room.owner_id)} • ID ${escapeHtml(room.owner_id)}</span></div>
-          <div class="rule"><strong>Owner Email</strong><span>${escapeHtml(room.owner_email || "—")}</span></div>
-          <div class="rule"><strong>Country</strong><span>${escapeHtml(room.country_name || room.country_code || "—")}</span></div>
+                    <div class="rule"><strong>Country</strong><span>${escapeHtml(room.country_name || room.country_code || "—")}</span></div>
           <div class="rule"><strong>Seats</strong><span>${fmt(room.seat_count)}</span></div>
           <div class="rule"><strong>Mode</strong><span>${escapeHtml(room.party_mode || "—")}</span></div>
           <div class="rule"><strong>Theme</strong><span>${escapeHtml(room.theme_id || "royal-dark")}</span></div>
@@ -3293,8 +3296,7 @@ async function renderUserInvestigation(users) {
         <div class="rule"><strong>Invisible</strong><span>${user.controls?.invisible ? "ON" : "OFF"}</span></div>
         <div class="rule"><strong>Locked Bypass</strong><span>${user.controls?.locked_bypass ? "ON" : "OFF"}</span></div>
         <div class="rule"><strong>VIP</strong><span>${Number(user.controls?.vip_level || 0) || "None"}</span></div>
-        <div class="rule"><strong>Email</strong><span>${escapeHtml(user.email || "—")}</span></div>
-      </div>
+              </div>
       <div style="margin-top:8px">${userTagHtml(user.identity_tags || user.tags)}</div>
       <div class="button-row" style="margin-top:10px">
 ${sessionCan("users.full_dashboard")
@@ -4652,8 +4654,7 @@ document.body.addEventListener("click", async e => {
   const credentialsButton = e.target.closest("[data-staff-credentials]");
   if (credentialsButton) {
     return openStaffCredentials(
-      credentialsButton.dataset.panelId,
-      credentialsButton.dataset.staffEmail
+      credentialsButton.dataset.panelId
     );
   }
 
@@ -4788,10 +4789,10 @@ document.body.addEventListener("click", async e => {
     } else if (item.kind === "gift") {
       const price = prompt("Coin price", String(data.coin_price || 0));
       if (price === null) return;
-      const asset = prompt("Animation / asset URL", String(data.asset_url || ""));
+      const asset = prompt("Replace animation / media source (leave blank = keep current)", "");
       if (asset === null) return;
       data.coin_price = Math.max(0, Number(price || 0));
-      data.asset_url = asset.trim();
+      if (asset.trim()) data.asset_url = asset.trim();
 
       const lucky = confirm(
         "Enable Lucky / Rebate behavior for this gift?\n\nOK = Lucky gift\nCancel = Normal gift"
@@ -4822,13 +4823,13 @@ document.body.addEventListener("click", async e => {
         data.prize_pool_percent = Math.max(0, Math.min(100, Number(poolPercent || 2)));
       }
     } else if (["entry","vehicle","frame","profile_card","ring","bubble","profile_background"].includes(item.kind)) {
-      const asset = prompt("Asset URL", String(data.asset_url || ""));
+      const asset = prompt("Replace media source (leave blank = keep current)", "");
       if (asset === null) return;
       const price = prompt("Coin price", String(data.price ?? data.coin_price ?? 0));
       if (price === null) return;
       const durationDays = prompt("Validity days (0 = permanent)", String(data.duration_days || 0));
       if (durationDays === null) return;
-      data.asset_url = asset.trim();
+      if (asset.trim()) data.asset_url = asset.trim();
       data.price = Math.max(0, Number(price || 0));
       data.duration_days = Math.max(0, Number(durationDays || 0));
       if (item.kind === "entry" || item.kind === "vehicle" || item.kind === "frame") {
@@ -4837,9 +4838,9 @@ document.body.addEventListener("click", async e => {
         data.vip_level = Math.max(0, Math.floor(Number(vipLevel || 0)));
       }
     } else if (item.kind === "banner") {
-      const asset = prompt("Banner image URL", String(data.asset_url || ""));
+      const asset = prompt("Replace banner media source (leave blank = keep current)", "");
       if (asset === null) return;
-      data.asset_url = asset.trim();
+      if (asset.trim()) data.asset_url = asset.trim();
     }
 
     if (["gift","entry","vehicle","frame","profile_card","ring","bubble","profile_background","banner"].includes(item.kind)) {
