@@ -453,6 +453,116 @@ function escapeHtml(value) {
     .replaceAll("'", "&#039;");
 }
 
+const ownerDetailLabels = {
+  coin_price: "Coin price",
+  price: "Price",
+  duration_days: "Validity (days)",
+  vip_level: "VIP level",
+  vip_required: "VIP required",
+  asset_url: "Asset URL",
+  preview_url: "Preview URL",
+  poster_url: "Poster URL",
+  animation_url: "Animation URL",
+  audio_url: "Audio URL",
+  effect_version: "Effect version",
+  effect_kind: "Effect type",
+  effect_tier: "Effect tier",
+  preview_mode: "Preview mode",
+  test_release: "Test release",
+  countries: "Countries",
+  country: "Country",
+  starts_at: "Starts at",
+  ends_at: "Ends at",
+  created_at: "Created at",
+  updated_at: "Updated at",
+  order: "Display order",
+  level: "Level",
+  category: "Category",
+  enabled: "Enabled",
+  lucky: "Lucky",
+  rebate: "Rebate",
+  animation_duration_ms: "Animation duration",
+  frame: "Frame",
+  entry: "Entry",
+  badge: "Badge",
+  profile_frame: "Profile frame",
+  seat_frame: "Seat frame",
+  profile_background: "Profile background",
+  requirements: "Requirements",
+  privileges: "Privileges",
+  permissions: "Permissions",
+  special_effects: "Special effects",
+};
+
+function ownerDetailLabel(key) {
+  const raw = String(key || "");
+  if (ownerDetailLabels[raw]) return ownerDetailLabels[raw];
+  return pretty(raw.replaceAll(".", "_"))
+    .replace(/\bUrl\b/g, "URL")
+    .replace(/\bId\b/g, "ID")
+    .replace(/\bVip\b/g, "VIP")
+    .replace(/\bUsd\b/g, "USD")
+    .replace(/\bDp\b/g, "DP");
+}
+
+function ownerReadableValue(value, key = "") {
+  if (value === null || value === undefined || value === "") return "Not set";
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) return String(value);
+    if (String(key).endsWith("_ms")) return (value / 1000).toFixed(value % 1000 === 0 ? 0 : 1) + " sec";
+    return fmt(value);
+  }
+  if (Array.isArray(value)) {
+    if (value.length === 0) return "None";
+    return value.map((item) => ownerReadableValue(item, key)).join(", ");
+  }
+  if (typeof value === "object") {
+    const entries = Object.entries(value);
+    if (entries.length === 0) return "None";
+    return entries
+      .map(([childKey, childValue]) => ownerDetailLabel(childKey) + ": " + ownerReadableValue(childValue, childKey))
+      .join(" • ");
+  }
+  return String(value);
+}
+
+function ownerDetailValueHtml(key, value) {
+  if (typeof value === "string" && /^https?:\/\//i.test(value)) {
+    const label = ownerDetailLabel(key).replace(/\s*URL$/i, "").trim() || "Link";
+    return `<a class="owner-detail-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">Open ${escapeHtml(label)}</a><small class="owner-detail-url">${escapeHtml(value)}</small>`;
+  }
+  if (typeof value === "boolean") {
+    return `<span class="owner-detail-boolean ${value ? "yes" : "no"}">${value ? "Yes" : "No"}</span>`;
+  }
+  return escapeHtml(ownerReadableValue(value, key));
+}
+
+function renderOwnerDetailGrid(data) {
+  const source = data && typeof data === "object" ? data : {};
+  const priority = [
+    "coin_price", "price", "duration_days", "vip_level", "level", "category",
+    "countries", "country", "starts_at", "ends_at", "order",
+    "effect_kind", "effect_tier", "effect_version", "preview_mode",
+    "asset_url", "preview_url", "poster_url", "animation_url", "audio_url",
+    "test_release",
+  ];
+  const rank = new Map(priority.map((key, index) => [key, index]));
+  const entries = Object.entries(source).sort(([a], [b]) => {
+    const aRank = rank.has(a) ? rank.get(a) : priority.length;
+    const bRank = rank.has(b) ? rank.get(b) : priority.length;
+    if (aRank !== bRank) return aRank - bRank;
+    return ownerDetailLabel(a).localeCompare(ownerDetailLabel(b));
+  });
+  if (entries.length === 0) {
+    return '<div class="owner-detail-empty">No extra details saved.</div>';
+  }
+  return `<dl class="owner-detail-grid">${entries.map(([key, value]) => `
+    <dt>${escapeHtml(ownerDetailLabel(key))}</dt>
+    <dd>${ownerDetailValueHtml(key, value)}</dd>
+  `).join("")}</dl>`;
+}
+
 async function updateStaffPanelPower(panelId, patch) {
   return api("/api/staff/panels/" + encodeURIComponent(panelId), {
     method: "PATCH",
@@ -612,12 +722,7 @@ function formatFullTimestamp(value) {
 function auditDetailsText(details) {
   if (!details || typeof details !== "object") return "";
   return Object.entries(details)
-    .map(([key, value]) => {
-      const rendered = typeof value === "object" && value !== null
-        ? JSON.stringify(value)
-        : String(value);
-      return `${pretty(key.replaceAll(".", "_"))}: ${rendered}`;
-    })
+    .map(([key, value]) => `${ownerDetailLabel(key)}: ${ownerReadableValue(value, key)}`)
     .join(" • ");
 }
 
@@ -2368,7 +2473,7 @@ function renderPolicies() {
   if (!root) return;
   root.innerHTML = Object.entries(state.policies).map(([key, value]) => `
     <div class="policy-row">
-      <div><strong>${escapeHtml(pretty(key))}</strong><small>Current value: ${escapeHtml(value)}</small></div>
+      <div><strong>${escapeHtml(ownerDetailLabel(key))}</strong><small>Current value: ${escapeHtml(ownerReadableValue(value, key))}</small></div>
       ${sessionCan("policies.edit") ? `<button data-policy-edit="${escapeHtml(key)}">Edit</button>` : ""}
     </div>
   `).join("");
@@ -2426,18 +2531,19 @@ function renderCatalogList(rootId, kind, emptyText) {
     root.textContent = emptyText;
     return;
   }
-  root.className = "action-list";
+  root.className = "action-list catalog-list";
   root.innerHTML = items.map((item) => `
-    <div class="panel" style="margin-top:10px">
-      <div class="panel-head">
+    <article class="panel catalog-detail-card">
+      <div class="panel-head catalog-detail-head">
         <div>
-          <strong>${escapeHtml(item.name)}</strong>
-          <p class="muted">${escapeHtml(JSON.stringify(item.data || {}))}</p>
+          <strong class="catalog-detail-title">${escapeHtml(item.name)}</strong>
+          <small class="catalog-detail-kind">${escapeHtml(ownerDetailLabel(kind))}</small>
         </div>
         <span class="badge ${item.enabled ? "gold" : ""}">${item.enabled ? "Active" : "Off"}</span>
       </div>
-      ${kind === "banner" && item.data?.asset_url ? `<img src="${escapeHtml(item.data.asset_url)}" alt="${escapeHtml(item.name)} banner preview" style="width:100%;max-width:420px;max-height:190px;object-fit:cover;border-radius:12px;margin:8px 0">` : ""}
-      <div class="button-row">
+      ${renderOwnerDetailGrid(item.data || {})}
+      ${kind === "banner" && item.data?.asset_url ? `<img src="${escapeHtml(item.data.asset_url)}" alt="${escapeHtml(item.name)} banner preview" class="catalog-banner-preview">` : ""}
+      <div class="button-row catalog-detail-actions">
         ${sessionCan(catalogPermission(item, "edit")) ? `<button type="button" data-catalog-edit="${escapeHtml(item.id)}">Edit</button>` : ""}
         ${sessionCan(catalogPermission(item, "toggle")) ? `
           <button type="button" data-catalog-toggle="${escapeHtml(item.id)}" data-next-enabled="${item.enabled ? "false" : "true"}">
@@ -2445,7 +2551,7 @@ function renderCatalogList(rootId, kind, emptyText) {
           </button>` : ""}
         ${sessionCan(catalogPermission(item, "remove")) ? `<button type="button" data-catalog-remove="${escapeHtml(item.id)}">${kind === "banner" ? "Delete Banner" : "Remove"}</button>` : ""}
       </div>
-    </div>
+    </article>
   `).join("");
 }
 
