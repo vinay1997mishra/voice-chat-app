@@ -505,8 +505,16 @@ function ownerDetailLabel(key) {
     .replace(/\bDp\b/g, "DP");
 }
 
+function ownerSafeText(value) {
+  return String(value ?? "")
+    .replace(/https?:\/\/\S+/gi, "[hidden]")
+    .replace(/\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi, "[hidden]")
+    .replace(/\b(?:\d{1,3}\.){3}\d{1,3}\b/g, "[hidden]");
+}
+
 function ownerReadableValue(value, key = "") {
   if (value === null || value === undefined || value === "") return "Not set";
+  if (ownerDetailHiddenKey(key)) return "Hidden";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") {
     if (!Number.isFinite(value)) return String(value);
@@ -518,19 +526,19 @@ function ownerReadableValue(value, key = "") {
     return value.map((item) => ownerReadableValue(item, key)).join(", ");
   }
   if (typeof value === "object") {
-    const entries = Object.entries(value);
-    if (entries.length === 0) return "None";
+    const entries = Object.entries(value).filter(([childKey]) => !ownerDetailHiddenKey(childKey));
+    if (entries.length === 0) return "Hidden";
     return entries
       .map(([childKey, childValue]) => ownerDetailLabel(childKey) + ": " + ownerReadableValue(childValue, childKey))
       .join(" • ");
   }
-  return String(value);
+  return ownerSafeText(value);
 }
 
 function ownerDetailValueHtml(key, value) {
+  if (ownerDetailHiddenKey(key)) return '<span class="muted">Hidden</span>';
   if (typeof value === "string" && /^https?:\/\//i.test(value)) {
-    const label = ownerDetailLabel(key).replace(/\s*URL$/i, "").trim() || "Link";
-    return `<a class="owner-detail-link" href="${escapeHtml(value)}" target="_blank" rel="noopener">Open ${escapeHtml(label)}</a><small class="owner-detail-url">${escapeHtml(value)}</small>`;
+    return '<span class="muted">Media attached</span>';
   }
   if (typeof value === "boolean") {
     return `<span class="owner-detail-boolean ${value ? "yes" : "no"}">${value ? "Yes" : "No"}</span>`;
