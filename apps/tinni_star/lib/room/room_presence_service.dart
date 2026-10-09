@@ -4,6 +4,7 @@ import 'dart:math' as math;
 import 'dart:io';
 
 import '../infra/backend_http.dart';
+import '../infra/request_budget.dart';
 
 import 'package:flutter/foundation.dart';
 
@@ -236,7 +237,7 @@ class RoomPresenceService extends ChangeNotifier {
   String? _liveAuthToken;
   bool _liveWanted = false;
   bool _liveConnecting = false;
-  int _liveReconnectDelaySeconds = 2;
+  int _liveReconnectFailures = 0;
   bool liveReconnecting = false;
   void Function(String name, Map<String, Object?> properties)? diagnosticSink;
 
@@ -347,7 +348,7 @@ class RoomPresenceService extends ChangeNotifier {
     _lastServerNowMs = 0;
     _liveReconnectTimer?.cancel();
     _liveReconnectTimer = null;
-    _liveReconnectDelaySeconds = 2;
+    _liveReconnectFailures = 0;
     liveReconnecting = false;
     final subscription = _liveSocketSubscription;
     _liveSocketSubscription = null;
@@ -401,7 +402,7 @@ class RoomPresenceService extends ChangeNotifier {
       _liveReconnectTimer?.cancel();
       _liveReconnectTimer = null;
       _liveSocket = socket;
-      _liveReconnectDelaySeconds = 2;
+      _liveReconnectFailures = 0;
       liveReconnecting = false;
       lastError = null;
       _diagnostic('room_transport_recovered', <String, Object?>{
@@ -570,15 +571,11 @@ class RoomPresenceService extends ChangeNotifier {
 
   void _scheduleLiveReconnect() {
     if (_disposed || !_liveWanted || _liveReconnectTimer != null) return;
-    final delaySeconds = _liveReconnectDelaySeconds;
-    // Keep recovery responsive while spreading reconnects across clients.
-    // A 120-second cap made a brief carrier/Cloudflare hiccup feel like the
-    // room server was dead long after it had recovered.
-    _liveReconnectDelaySeconds =
-        (_liveReconnectDelaySeconds * 2).clamp(2, 30).toInt();
-    final jitterMs = math.Random().nextInt(1200);
+    final delay = RequestBudget.reconnectDelay(_liveReconnectFailures);
+    _liveReconnectFailures = (_liveReconnectFailures + 1).clamp(0, 4).toInt();
+    final jitterMs = math.Random().nextInt(800);
     _liveReconnectTimer = Timer(
-      Duration(milliseconds: delaySeconds * 1000 + jitterMs),
+      delay + Duration(milliseconds: jitterMs),
       () {
         _liveReconnectTimer = null;
         _openLiveSocket();

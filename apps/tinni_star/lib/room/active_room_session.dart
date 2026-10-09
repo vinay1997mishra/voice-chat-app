@@ -69,7 +69,7 @@ class ActiveRoomSession extends ChangeNotifier {
   bool _fallbackRefreshRunning = false;
   DateTime? _nextFallbackPoll;
   int _fallbackFailures = 0;
-  int _presenceRecoveryDelaySeconds = 2;
+  int _presenceRecoveryFailures = 0;
   String? _activeAuthToken;
   String? _activeUserId;
   bool _liveSyncInitialized = false;
@@ -297,21 +297,44 @@ class ActiveRoomSession extends ChangeNotifier {
           (_nextVoiceAttempt?.isAfter(nowProvider()) ?? false)) { return; }
       await retryVoice(requestPermission: false);
     });
-    _fallbackStateTimer = Timer.periodic(const Duration(seconds: 5), (_) async {
-      if (_disposed || presence.liveConnected || _presenceRecoveryRunning || _fallbackRefreshRunning) return;
+    _fallbackStateTimer = Timer.periodic(const Duration(seconds: 1), (_) async {
+      if (_disposed) return;
+      if (presence.liveConnected) {
+        _fallbackFailures = 0;
+        _nextFallbackPoll = null;
+        return;
+      }
+      if (_presenceRecoveryRunning || _fallbackRefreshRunning) return;
       final roomId = room?.id;
       final token = _activeAuthToken;
-      if (roomId == null || token == null ||
-          (_nextFallbackPoll?.isAfter(nowProvider()) ?? false)) { return; }
+      if (roomId == null || token == null) return;
+
+      final now = nowProvider();
+      if (_nextFallbackPoll == null) {
+        _nextFallbackPoll = now.add(RequestBudget.presenceFallback(
+          seated: controller?.mySeat != null,
+          failures: _fallbackFailures,
+        ));
+        return;
+      }
+      if (_nextFallbackPoll!.isAfter(now)) return;
+
       _fallbackRefreshRunning = true;
       try {
         await presence.refresh(roomId: roomId, authToken: token);
-        _fallbackFailures = presence.lastError == null ? 0 : _fallbackFailures + 1;
       } catch (_) {
-        _fallbackFailures++;
+        // Keep backing off while realtime is unavailable.
       } finally {
-        _nextFallbackPoll = nowProvider().add(RequestBudget.presenceFallback(
-          seated: controller?.mySeat != null, failures: _fallbackFailures));
+        if (presence.liveConnected) {
+          _fallbackFailures = 0;
+          _nextFallbackPoll = null;
+        } else {
+          _fallbackFailures = (_fallbackFailures + 1).clamp(0, 4).toInt();
+          _nextFallbackPoll = nowProvider().add(RequestBudget.presenceFallback(
+            seated: controller?.mySeat != null,
+            failures: _fallbackFailures,
+          ));
+        }
         _fallbackRefreshRunning = false;
       }
     });
@@ -771,7 +794,7 @@ class ActiveRoomSession extends ChangeNotifier {
     _presenceRecoveryTimer?.cancel();
     _presenceRecoveryTimer = null;
     if (resetBackoff) {
-      _presenceRecoveryDelaySeconds = 2;
+      _presenceRecoveryFailures = 0;
     }
   }
 
@@ -785,13 +808,12 @@ class ActiveRoomSession extends ChangeNotifier {
       return;
     }
 
-    final delaySeconds = immediate ? 0 : _presenceRecoveryDelaySeconds;
-    if (!immediate) {
-      _presenceRecoveryDelaySeconds =
-          (_presenceRecoveryDelaySeconds * 2).clamp(2, 30).toInt();
-    }
+    if (immediate) _presenceRecoveryFailures = 0;
+    final delay = RequestBudget.reconnectDelay(_presenceRecoveryFailures);
+    _presenceRecoveryFailures =
+        (_presenceRecoveryFailures + 1).clamp(0, 4).toInt();
 
-    _presenceRecoveryTimer = Timer(Duration(seconds: delaySeconds), () {
+    _presenceRecoveryTimer = Timer(delay, () {
       _presenceRecoveryTimer = null;
       unawaited(_recoverPresence());
     });
@@ -806,26 +828,28 @@ class ActiveRoomSession extends ChangeNotifier {
     _presenceRecoveryRunning = true;
     var retry = false;
     try {
-      await presence.join(
-        roomId: roomId,
-        authToken: authToken,
-        seatIndex: controller?.mySeat,
-        micEnabled: _micEnabledForPresence,
-        familyTag: _familyTag,
-        hostTag: _hostTag,
-        agencyName: _agencyName,
-        equippedFrameId: _equippedFrameId,
-        equippedEntryId: _equippedEntryId,
-        equippedProfileCardId: _equippedProfileCardId,
-      );
+      if (!presence.connected) {
+        await presence.join(
+          roomId: roomId,
+          authToken: authToken,
+          seatIndex: controller?.mySeat,
+          micEnabled: _micEnabledForPresence,
+          familyTag: _familyTag,
+          hostTag: _hostTag,
+          agencyName: _agencyName,
+          equippedFrameId: _equippedFrameId,
+          equippedEntryId: _equippedEntryId,
+          equippedProfileCardId: _equippedProfileCardId,
+        );
+      }
       await presence.connectLive(
         roomId: roomId,
         authToken: authToken,
       );
-      if (!presence.connected) {
+      if (!presence.liveConnected) {
         throw StateError('Room presence reconnect pending');
       }
-      _presenceRecoveryDelaySeconds = 2;
+      _presenceRecoveryFailures = 0;
       _syncLiveState(force: true);
       await _applyForcedSeatChange();
       await _enforceModerationMute();
@@ -875,7 +899,11 @@ class ActiveRoomSession extends ChangeNotifier {
         roomId: roomId,
         authToken: authToken,
       );
-      _cancelPresenceRecovery(resetBackoff: true);
+      if (presence.liveConnected) {
+        _cancelPresenceRecovery(resetBackoff: true);
+      } else {
+        _schedulePresenceRecovery(immediate: true);
+      }
       _syncLiveState(force: true);
       await _applyForcedSeatChange();
       await _enforceModerationMute();
@@ -1011,16 +1039,20 @@ class ActiveRoomSession extends ChangeNotifier {
 
     _activeAuthToken = null;
     _activeUserId = null;
+    _fallbackFailures = 0;
+    _nextFallbackPoll = null;
     _liveSyncInitialized = false;
     _lastSyncedSeatIndex = null;
     _lastSyncedMicEnabled = null;
   }
 
   void _onPresenceChanged() {
-    if (presence.connected) {
+    if (presence.liveConnected) {
       _cancelPresenceRecovery(resetBackoff: true);
+      _fallbackFailures = 0;
+      _nextFallbackPoll = null;
     } else if (room != null && _activeAuthToken != null) {
-      _schedulePresenceRecovery(immediate: true);
+      _schedulePresenceRecovery();
     }
 
     final roomController = controller;
