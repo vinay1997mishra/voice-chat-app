@@ -4678,7 +4678,7 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const state = await getFruitPartyStore(env).state(appSession.user.user_id);
-      const gameConfig = (await getAppDirectoryStore(env).ownerState()).game_config || {};
+      const gameConfig = await getAppDirectoryStore(env).gameConfig();
       return json({ ...state, owner_limits: {
         min_bet: Number(gameConfig.min_bet || 0),
         max_bet: Number(gameConfig.max_bet || 0),
@@ -4689,8 +4689,7 @@ export default {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
-      const ownerState = await getAppDirectoryStore(env).ownerState();
-      const gameConfig = ownerState.game_config || {};
+      const gameConfig = await getAppDirectoryStore(env).gameConfig();
       if (ownerState.features?.games === false || gameConfig.enabled === false) {
         return json({ ok: false, error: "Games are disabled by Owner" }, 403);
       }

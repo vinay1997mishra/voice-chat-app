@@ -2456,6 +2456,14 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
+  gameConfig() {
+    return this._ownerSetting("game_config", {
+      enabled: true,
+      min_bet: 1,
+      max_bet: 1000000,
+    });
+  }
+
   ownerState() {
     this._ensureEconomyMigrations();
     const defaultFeatures = {
@@ -2495,9 +2503,7 @@ export class AppDirectoryStore extends DurableObject {
         agency_bd_minimum_transfer_usd: AGENCY_BD_SETTLEMENT_MIN_USD_CENTS / 100,
         automatic_dollar_to_coin_conversion: false,
       },
-      game_config: this._ownerSetting("game_config", {
-        enabled: true, min_bet: 1, max_bet: 1000000,
-      }),
+      game_config: this.gameConfig(),
       lucky_gift_config: this._luckyGiftConfig(),
       treasury: {
         balance: Number(treasury.balance || 0),
