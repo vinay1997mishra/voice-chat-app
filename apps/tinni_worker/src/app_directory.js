@@ -2457,11 +2457,16 @@ export class AppDirectoryStore extends DurableObject {
   }
 
   gameConfig() {
-    return this._ownerSetting("game_config", {
+    const config = this._ownerSetting("game_config", {
       enabled: true,
       min_bet: 1,
       max_bet: 1000000,
     });
+    const features = this._ownerSetting("features", {});
+    return {
+      ...config,
+      platform_enabled: features?.games !== false,
+    };
   }
 
   ownerState() {

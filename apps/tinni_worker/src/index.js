@@ -4690,7 +4690,7 @@ export default {
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
       const gameConfig = await getAppDirectoryStore(env).gameConfig();
-      if (ownerState.features?.games === false || gameConfig.enabled === false) {
+      if (gameConfig.platform_enabled === false || gameConfig.enabled === false) {
         return json({ ok: false, error: "Games are disabled by Owner" }, 403);
       }
       const amount = Number(body.amount || 0);
