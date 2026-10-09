@@ -77,12 +77,31 @@ void main() {
         File('lib/room/active_room_session.dart').readAsStringSync();
     final presence =
         File('lib/room/room_presence_service.dart').readAsStringSync();
+    final budget = File('lib/infra/request_budget.dart').readAsStringSync();
     expect(session, contains('_presenceRecoveryTimer'));
-    expect(session, contains('int _presenceRecoveryDelaySeconds = 2;'));
+    expect(session, contains('int _presenceRecoveryFailures = 0;'));
     expect(session, contains('_schedulePresenceRecovery(immediate: true)'));
-    expect(session, contains('(_presenceRecoveryDelaySeconds * 2).clamp(2, 30)'));
-    expect(presence, contains('(_liveReconnectDelaySeconds * 2).clamp(2, 30)'));
-    expect(presence, contains('math.Random().nextInt(1200)'));
+    expect(
+      session,
+      contains('RequestBudget.reconnectDelay(_presenceRecoveryFailures)'),
+    );
+    expect(
+      session,
+      contains('(_presenceRecoveryFailures + 1).clamp(0, 4).toInt()'),
+    );
+    expect(
+      presence,
+      contains('RequestBudget.reconnectDelay(_liveReconnectFailures)'),
+    );
+    expect(
+      presence,
+      contains('(_liveReconnectFailures + 1).clamp(0, 4).toInt()'),
+    );
+    expect(presence, contains('math.Random().nextInt(800)'));
+    expect(
+      budget,
+      contains('List<int> _socketFallbackSeconds = <int>[3, 5, 10, 20, 30]'),
+    );
     expect(session, contains('await presence.join('));
     expect(session, contains("throw StateError('Room presence reconnect pending')"));
   });
