@@ -64,10 +64,10 @@ void main() {
     expect([
       for (var failures = 0; failures < 5; failures++)
         RequestBudget.reconnectDelay(failures).inSeconds,
-    ], [3, 5, 10, 20, 30]);
-    expect(RequestBudget.reconnectDelay(20).inSeconds, 30);
+    ], [3, 5, 8, 10, 10]);
+    expect(RequestBudget.reconnectDelay(20).inSeconds, 10);
     expect(RequestBudget.presenceFallback(seated: false, failures: 0).inSeconds, 3);
     expect(RequestBudget.presenceFallback(seated: true, failures: 1).inSeconds, 5);
-    expect(RequestBudget.presenceFallback(seated: true, failures: 10).inSeconds, 30);
+    expect(RequestBudget.presenceFallback(seated: true, failures: 10).inSeconds, 10);
   });
 }
