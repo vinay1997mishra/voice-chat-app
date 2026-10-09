@@ -100,7 +100,7 @@ void main() {
     expect(presence, contains('math.Random().nextInt(800)'));
     expect(
       budget,
-      contains('List<int> _socketFallbackSeconds = <int>[3, 5, 10, 20, 30]'),
+      contains('List<int> _socketFallbackSeconds = <int>[3, 5, 8, 10]'),
     );
     expect(session, contains('await presence.join('));
     expect(session, contains("throw StateError('Room presence reconnect pending')"));
