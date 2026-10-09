@@ -2,7 +2,7 @@
 abstract final class RequestBudget {
   static const homeRefresh = Duration(minutes: 2);
   static const ribbonFallback = Duration(minutes: 1);
-  static const List<int> _socketFallbackSeconds = <int>[3, 5, 10, 20, 30];
+  static const List<int> _socketFallbackSeconds = <int>[3, 5, 8, 10];
 
   static Duration reconnectDelay(int failures) {
     final index = failures.clamp(0, _socketFallbackSeconds.length - 1).toInt();
