@@ -50,6 +50,21 @@ assert.match(
 );
 assert.match(
   index,
+  /\/fruit-party\/state[\s\S]{0,700}\.gameConfig\(\)/,
+  "Fruit Party fallback state must read only lightweight game config",
+);
+assert.doesNotMatch(
+  index,
+  /\/fruit-party\/state[\s\S]{0,700}ownerState\(\)/,
+  "Fruit Party fallback state must not load the full Owner state",
+);
+assert.match(
+  roomPresence,
+  /const sharedState = this\._presenceState\(now\)[\s\S]{0,260}_sendSocketState\(socket, type, now, sharedState\)/,
+  "Room presence broadcasts must reuse one common room snapshot across sockets",
+);
+assert.match(
+  index,
   /effect_media_configured:\s*Boolean\(env\.EFFECT_MEDIA\)/,
   "App config must report R2 media binding availability",
 );

@@ -1742,7 +1742,7 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
-  _presenceStateFor(userIdValue, now = Date.now()) {
+  _presenceStateFor(userIdValue, now = Date.now(), sharedState = null) {
     const userId = String(userIdValue || "").trim();
     const member = userId
       ? this.ctx.storage.sql.exec(
@@ -1768,7 +1768,7 @@ export class RoomPresenceStore extends DurableObject {
       : null;
 
     return {
-      ...this._presenceState(now),
+      ...(sharedState || this._presenceState(now)),
       chat_messages: member ? this.chatMessages(Number(member.joined_at)) : [],
       self_mic_muted: userId ? this.muteStatus(userId, seatIndex) : false,
       self_chat_banned: userId ? this.chatBanStatus(userId) : false,
@@ -1778,20 +1778,26 @@ export class RoomPresenceStore extends DurableObject {
     };
   }
 
-  _sendSocketState(socket, type = "presence_state", now = Date.now()) {
+  _sendSocketState(
+    socket,
+    type = "presence_state",
+    now = Date.now(),
+    sharedState = null,
+  ) {
     if (!socket) return;
     const attachment = socket.deserializeAttachment?.() || {};
     try {
       socket.send(JSON.stringify({
         type,
-        ...this._presenceStateFor(attachment.userId, now),
+        ...this._presenceStateFor(attachment.userId, now, sharedState),
       }));
     } catch (_) {}
   }
 
   _broadcastPresence(type = "presence_state", now = Date.now()) {
+    const sharedState = this._presenceState(now);
     for (const socket of this.ctx.getWebSockets("room-presence")) {
-      this._sendSocketState(socket, type, now);
+      this._sendSocketState(socket, type, now, sharedState);
     }
   }
 
