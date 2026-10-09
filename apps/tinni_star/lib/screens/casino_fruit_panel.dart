@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../ui/casino_fruit_art.dart';
+import '../infra/request_budget.dart';
 import '../ui/stable_image_provider.dart';
 
 const casinoBetAmounts = <int>[5000, 25000, 100000, 500000, 2000000, 10000000];
@@ -121,7 +122,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
   int _pendingBets = 0;
   String _frame = '';
   bool _active = true;
-  int _failures = 0;
+  int _fallbackAttempts = 0;
   String _boundaryRefreshKey = '';
   int _boundaryRefreshAttempts = 0;
   DateTime? _lastBoundaryRefreshAt;
@@ -216,7 +217,7 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
 
   void _ensureFallbackPoll([Duration? delay]) {
     if (!mounted || !_active || _liveReady || _poll != null) { return; }
-    _poll = Timer(delay ?? const Duration(seconds: 2), () {
+    _poll = Timer(delay ?? RequestBudget.reconnectDelay(_fallbackAttempts), () {
       _poll = null;
       if (mounted && _active && !_liveReady) { unawaited(_refresh()); }
     });
@@ -232,8 +233,9 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
     if (_liveReady) {
       _poll?.cancel();
       _poll = null;
-    } else {
-      _ensureFallbackPoll();
+      _fallbackAttempts = 0;
+    } else if (!_waiting) {
+      _ensureFallbackPoll(RequestBudget.reconnectDelay(_fallbackAttempts));
     }
     setState(() {});
   }
@@ -258,11 +260,16 @@ class _CasinoFruitPanelState extends State<CasinoFruitPanel> with WidgetsBinding
       // The remote service retains the actual error for the status/retry UI.
     } finally {
       if (mounted && _active) {
-        _failures = widget.snapshot().connected ? 0 : (_failures + 1).clamp(1, 3).toInt();
+        _poll?.cancel();
+        _poll = null;
+        if (_liveReady) {
+          _fallbackAttempts = 0;
+        } else {
+          final delay = RequestBudget.reconnectDelay(_fallbackAttempts);
+          _fallbackAttempts = (_fallbackAttempts + 1).clamp(0, 4).toInt();
+          _ensureFallbackPoll(delay);
+        }
         setState(() {});
-        _ensureFallbackPoll(
-          Duration(seconds: _failures == 0 ? 2 : 2 + _failures * 2),
-        );
       }
     }
   }

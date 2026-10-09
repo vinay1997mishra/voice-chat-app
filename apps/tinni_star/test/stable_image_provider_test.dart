@@ -61,9 +61,13 @@ void main() {
   test('automatic request budget cannot recreate the per-second polling storm', () {
     expect(const Duration(days: 1).inSeconds ~/ RequestBudget.homeRefresh.inSeconds, 720);
     expect(const Duration(days: 1).inSeconds ~/ RequestBudget.ribbonFallback.inSeconds, 1440);
-    expect(RequestBudget.reconnectDelay(20).inSeconds, 120);
-    expect(RequestBudget.presenceFallback(seated: false, failures: 0).inSeconds, 30);
-    expect(RequestBudget.presenceFallback(seated: true, failures: 0).inSeconds, 5);
-    expect(RequestBudget.presenceFallback(seated: true, failures: 10).inSeconds, 120);
+    expect([
+      for (var failures = 0; failures < 5; failures++)
+        RequestBudget.reconnectDelay(failures).inSeconds,
+    ], [3, 5, 10, 20, 30]);
+    expect(RequestBudget.reconnectDelay(20).inSeconds, 30);
+    expect(RequestBudget.presenceFallback(seated: false, failures: 0).inSeconds, 3);
+    expect(RequestBudget.presenceFallback(seated: true, failures: 1).inSeconds, 5);
+    expect(RequestBudget.presenceFallback(seated: true, failures: 10).inSeconds, 30);
   });
 }
