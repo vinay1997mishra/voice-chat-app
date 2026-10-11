@@ -1836,6 +1836,18 @@ export default {
         encodeURIComponent(key) +
         "?v=" +
         updatedAt;
+
+      // Avatar upload is the canonical DP change. Commit it to the account
+      // immediately so every server-backed surface (room presence, search,
+      // messages, rankings, profile cards) receives the new versioned URL
+      // without waiting for a second profile PATCH from the client.
+      if (slot === "avatar") {
+        await getAppDirectoryStore(env).updateUserProfile(
+          userId,
+          { avatar_data_url: mediaUrl },
+        );
+      }
+
       return json({ ok: true, slot, url: mediaUrl }, 201);
     }
 
