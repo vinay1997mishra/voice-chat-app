@@ -77,19 +77,19 @@ test('Enemy challenge requires acceptance and can be removed', async t => {
   const a = await r.user(97101);
   const b = await r.user(97102);
 
-  const requested = await r.request('/enemy/request', a.token, {
+  const requested = await r.request('/vs/request', a.token, {
     target_user_id: b.user_id,
   });
   assert.equal(requested.status, 201, JSON.stringify(requested.data));
   assert.equal(requested.data.enemy.state, 'pending');
 
-  const accepted = await r.request('/enemy/respond', b.token, {
+  const accepted = await r.request('/vs/respond', b.token, {
     accept: true,
   });
   assert.equal(accepted.status, 200, JSON.stringify(accepted.data));
   assert.equal(accepted.data.enemy.state, 'accepted');
 
-  const mine = await r.request('/enemy', a.token);
+  const mine = await r.request('/vs', a.token);
   assert.equal(mine.status, 200);
   assert.equal(mine.data.enemy.state, 'accepted');
 
