@@ -72,7 +72,19 @@ export function initColdStorage(store) {
 export function storageBudget(store) {
   const state=one(store,"SELECT * FROM storage_budget WHERE id=1");
   const limit=Math.min(R2_BYTE_LIMIT,Math.max(1,Number(store.env.R2_BYTE_LIMIT_BYTES)||R2_BYTE_LIMIT));
-  return { ...state,limit_bytes:limit,write_blocked:!state?.known||!!state?.scanning||Number(state.used_bytes)>=limit };
+  const used=Math.max(0,Number(state?.used_bytes)||0);
+  const scanned=state?.scanning?Math.max(0,Number(state.scan_bytes)||0):0;
+  const observed=Math.max(used,scanned);
+  return {
+    ...state,
+    limit_bytes:limit,
+    observed_bytes:observed,
+    inventory_pending:!state?.known||!!state?.scanning,
+    // Inventory work must never pause normal uploads. Only bytes already
+    // accounted for (or positively observed by an in-progress scan) can
+    // trip the safety limit.
+    write_blocked:observed>=limit,
+  };
 }
 export async function inventoryStorage(store, now=Date.now()) {
   const media=store.env.EFFECT_MEDIA,archives=store.env.USER_ARCHIVE;
@@ -128,11 +140,22 @@ export async function reserveMediaBudget(store, key, size, leaseId) {
   if(!Number.isSafeInteger(size)||size<1||size>maxSize||!key||!leaseId) throw new Error("Invalid media reservation");
   let state=storageBudget(store);
   if(!state.known&&!state.scanning) {
+    // Refresh opportunistically, but an unfinished/unavailable inventory is
+    // not a reason to reject a user upload.
     await store.ctx.blockConcurrencyWhile(()=>inventoryStorage(store));
     state=storageBudget(store);
   }
-  if(state.write_blocked||Number(state.used_bytes)+size>state.limit_bytes) {
-    throw new Error("Storage budget reached or inventory pending. Existing data is preserved; new uploads are paused.");
+  const observed=Math.max(0,Number(state.observed_bytes)||0);
+  if(state.write_blocked||observed+size>state.limit_bytes) {
+    throw new Error("Storage capacity limit reached. Existing data is preserved; new uploads are paused.");
+  }
+  if(state.scanning) {
+    // A write would make a multi-request inventory cursor stale. Drop only
+    // the pending scan state and let scheduled maintenance restart it later.
+    // Existing objects and the conservative used_bytes counter stay intact.
+    exec(store,`UPDATE storage_budget
+      SET known=0,scanning=0,cursor=NULL,scan_bytes=0,scan_bucket=0,next_run=MIN(next_run,?)
+      WHERE id=1`,Date.now()+60000);
   }
   return store.ctx.storage.transactionSync(()=>{
     exec(store,"INSERT INTO media_write_leases(id,object_key,size,created_at) VALUES(?,?,?,?)",leaseId,key,size,Date.now());
