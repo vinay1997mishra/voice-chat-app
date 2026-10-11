@@ -1439,10 +1439,14 @@ class AppBackendService {
           request.write(jsonEncode(body));
         }
 
-        final response = await closeBackendRequest(request).timeout(
-          responseTimeout,
+        final response = await closeBackendRequest(
+          request,
+          timeout: responseTimeout,
         );
-        final text = await readBackendResponse(response);
+        final text = await readBackendResponse(
+          response,
+          timeout: responseTimeout,
+        );
         Map<String, dynamic> data = <String, dynamic>{};
 
         if (text.trim().isNotEmpty) {
