@@ -273,15 +273,32 @@ class AppBackendService {
     required String slot,
     required String dataUrl,
   }) async {
-    final data = await _request(
-      'POST',
-      '/profile-media',
-      token,
-      body: {'slot': slot, 'data_url': dataUrl},
-    );
-    final url = data['url']?.toString() ?? '';
-    if (url.isEmpty) throw StateError('Server did not return profile media URL');
-    return url;
+    Object? lastError;
+    for (var attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        final data = await _request(
+          'POST',
+          '/profile-media',
+          token,
+          body: {'slot': slot, 'data_url': dataUrl},
+          responseTimeout: const Duration(seconds: 90),
+        );
+        final url = data['url']?.toString() ?? '';
+        if (url.isEmpty) {
+          throw StateError('Server did not return profile media URL');
+        }
+        return url;
+      } catch (error) {
+        lastError = error;
+        final safe = userSafeError(error).toLowerCase();
+        final retryable = safe.contains('connection interrupted') ||
+            safe.contains('response interrupted') ||
+            safe.contains('temporarily unavailable');
+        if (!retryable || attempt == 1) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 700));
+      }
+    }
+    throw StateError(userSafeError(lastError ?? StateError('Upload failed')));
   }
 
   Future<void> deleteProfileMedia(String token, String slot) async {
@@ -330,15 +347,30 @@ class AppBackendService {
     String token,
     Map<String, dynamic> values,
   ) async {
-    final data = await _request(
-      'PATCH',
-      '/app/profile',
-      token,
-      body: values,
-    );
-    final user = _map(data['user']);
-    if (user.isEmpty) throw StateError('Server returned invalid profile');
-    return user;
+    Object? lastError;
+    for (var attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        final data = await _request(
+          'PATCH',
+          '/app/profile',
+          token,
+          body: values,
+          responseTimeout: const Duration(seconds: 45),
+        );
+        final user = _map(data['user']);
+        if (user.isEmpty) throw StateError('Server returned invalid profile');
+        return user;
+      } catch (error) {
+        lastError = error;
+        final safe = userSafeError(error).toLowerCase();
+        final retryable = safe.contains('connection interrupted') ||
+            safe.contains('response interrupted') ||
+            safe.contains('temporarily unavailable');
+        if (!retryable || attempt == 1) rethrow;
+        await Future<void>.delayed(const Duration(milliseconds: 500));
+      }
+    }
+    throw StateError(userSafeError(lastError ?? StateError('Profile update failed')));
   }
 
   Future<List<RemoteNotification>> notifications(String token) async {
@@ -1368,6 +1400,7 @@ class AppBackendService {
     String token, {
     Map<String, dynamic>? body,
     Map<String, String>? queryParameters,
+    Duration responseTimeout = const Duration(seconds: 20),
   }) async {
     if (token.trim().isEmpty) throw StateError('Login session is required');
 
@@ -1407,7 +1440,7 @@ class AppBackendService {
         }
 
         final response = await closeBackendRequest(request).timeout(
-          const Duration(seconds: 20),
+          responseTimeout,
         );
         final text = await readBackendResponse(response);
         Map<String, dynamic> data = <String, dynamic>{};
