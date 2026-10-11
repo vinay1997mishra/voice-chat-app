@@ -221,6 +221,40 @@ class TinniState {
   bool _refreshingAccountIdentity = false;
   DateTime? _lastAccountIdentityRefreshAt;
 
+  Future<void> applyCurrentAvatarImmediately(String avatarUrl) async {
+    final account = auth.current;
+    final nextAvatar = avatarUrl.trim();
+    if (account == null || nextAvatar.isEmpty ||
+        account.avatarDataUrl == nextAvatar) {
+      return;
+    }
+
+    final updated = TinniAccount(
+      userId: account.userId,
+      email: account.email,
+      displayName: account.displayName,
+      age: account.age,
+      birthday: account.birthday,
+      signature: account.signature,
+      countryCode: account.countryCode,
+      countryName: account.countryName,
+      flagEmoji: account.flagEmoji,
+      gender: account.gender,
+      avatarDataUrl: nextAvatar,
+      providers: account.providers,
+      authToken: account.authToken,
+    );
+    auth.setAuthenticatedAccount(updated);
+    profile.loadFromAccount(updated);
+    realtimeChanges.value++;
+    try {
+      await authPersistence?.save(updated);
+    } catch (_) {
+      // The in-memory account remains authoritative for the current session;
+      // the server already owns the uploaded avatar URL.
+    }
+  }
+
   Future<bool> refreshAuthenticatedAccount({bool force = false}) async {
     final account = auth.current;
     if (account == null || _refreshingAccountIdentity) return false;
