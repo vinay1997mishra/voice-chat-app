@@ -422,6 +422,7 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
             };
           });
         }
+        await widget.state.applyCurrentAvatarImmediately(uploadedAvatar);
       }
       final row = await widget.state.backend.updateProfile(
         account.authToken,
