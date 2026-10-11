@@ -2978,7 +2978,7 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
-    if ((url.pathname === "/vs" || url.pathname === "/enemy") && request.method === "GET") {
+    if (url.pathname === "/vs" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
@@ -2987,7 +2987,7 @@ export default {
       });
     }
 
-    if ((url.pathname === "/vs/request" || url.pathname === "/enemy/request") && request.method === "POST") {
+    if (url.pathname === "/vs/request" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -3007,7 +3007,7 @@ export default {
       }
     }
 
-    if ((url.pathname === "/vs/respond" || url.pathname === "/enemy/respond") && request.method === "POST") {
+    if (url.pathname === "/vs/respond" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -3027,7 +3027,7 @@ export default {
       }
     }
 
-    if ((url.pathname === "/vs/disconnect" || url.pathname === "/enemy/disconnect") && request.method === "POST") {
+    if (url.pathname === "/vs/disconnect" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
