@@ -288,7 +288,8 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
     }
 
     final cover = _provider(media['cover']);
-    final avatar = _provider(account.avatarDataUrl);
+    // Prefer the R2-verified profile-media slot over a possibly stale saved URL.
+    final avatar = _provider(media['avatar'] ?? account.avatarDataUrl);
     final following = (stats['following_count'] as num?)?.toInt() ?? 0;
     final fans = (stats['followers_count'] as num?)?.toInt() ?? 0;
     final wealth = stats['wealth'] is Map
@@ -367,23 +368,10 @@ class _PublicProfileScreenState extends State<PublicProfileScreen> {
                           width: 1.4,
                         ),
                       ),
-                      child: CircleAvatar(
-                        radius: 38,
-                        backgroundColor: RoyalPalette.panel2,
-                        backgroundImage: avatar,
-                        child: avatar == null
-                            ? Text(
-                                account.displayName.isEmpty
-                                    ? '?'
-                                    : account.displayName.characters.first
-                                        .toUpperCase(),
-                                style: const TextStyle(
-                                  color: RoyalPalette.gold,
-                                  fontSize: 27,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              )
-                            : null,
+                      child: _ProfileAvatar(
+                        size: 76,
+                        image: avatar,
+                        displayName: account.displayName,
                       ),
                     ),
                   ),
@@ -1225,6 +1213,49 @@ class _ProfileTabButton extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+
+class _ProfileAvatar extends StatelessWidget {
+  const _ProfileAvatar({
+    required this.size,
+    required this.image,
+    required this.displayName,
+  });
+
+  final double size;
+  final ImageProvider? image;
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      color: RoyalPalette.panel2,
+      child: Text(
+        displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase(),
+        style: TextStyle(
+          color: RoyalPalette.gold,
+          fontSize: size * 0.36,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+    if (image == null) return ClipOval(child: fallback);
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Image(
+          image: image!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback,
         ),
       ),
     );
