@@ -2978,7 +2978,7 @@ export default {
       catch (error) { return json({ ok: false, error: String(error?.message || "Unable to add CP memory") }, 400); }
     }
 
-    if ((url.pathname === "/vs" || url.pathname === "/enemy") && request.method === "GET") {
+    if (url.pathname === "/vs" && request.method === "GET") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       return json({
@@ -2987,7 +2987,7 @@ export default {
       });
     }
 
-    if ((url.pathname === "/vs/request" || url.pathname === "/enemy/request") && request.method === "POST") {
+    if (url.pathname === "/vs/request" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -3007,7 +3007,7 @@ export default {
       }
     }
 
-    if ((url.pathname === "/vs/respond" || url.pathname === "/enemy/respond") && request.method === "POST") {
+    if (url.pathname === "/vs/respond" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -3027,7 +3027,7 @@ export default {
       }
     }
 
-    if ((url.pathname === "/vs/disconnect" || url.pathname === "/enemy/disconnect") && request.method === "POST") {
+    if (url.pathname === "/vs/disconnect" && request.method === "POST") {
       const appSession = await verifyAppSession(request, env);
       if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
       const body = await request.json().catch(() => ({}));
@@ -6377,51 +6377,6 @@ export default {
       });
     }
 
-    if (url.pathname === "/api/owner/inbox-threads" && request.method === "GET") {
-      if (
-        !sessionHasPermission(session, "users.full_dashboard") ||
-        !sessionHasPermission(session, "messaging.view_inbox")
-      ) {
-        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
-      }
-      const userId = String(url.searchParams.get("user_id") || "").trim();
-      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
-      try {
-        return json({
-          ok: true,
-          threads: await getAppDirectoryStore(env).ownerInboxThreads(userId),
-        });
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
-      }
-    }
-
-    if (url.pathname === "/api/owner/inbox-conversation" && request.method === "GET") {
-      if (
-        !sessionHasPermission(session, "users.full_dashboard") ||
-        !sessionHasPermission(session, "messaging.view_inbox")
-      ) {
-        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
-      }
-      const userId = String(url.searchParams.get("user_id") || "").trim();
-      const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
-      if (!userId || !peerUserId) {
-        return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
-      }
-      try {
-        return json({
-          ok: true,
-          messages: await getAppDirectoryStore(env).ownerInboxConversation(
-            userId,
-            peerUserId,
-            url.searchParams.get("limit") || 500,
-          ),
-        });
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
-      }
-    }
-
     if (url.pathname === "/api/owner/hierarchy-detail" && request.method === "GET") {
       if (!sessionHasPermission(session, "users.full_dashboard") ||
           !sessionHasPermission(session, "hierarchy.view_details")) {
@@ -6949,80 +6904,6 @@ export default {
         return json({ ok: true, ...result });
       } catch (error) {
         return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
-      }
-    }
-
-    if (url.pathname === "/wallet/coins/history" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json({
-        ok: true,
-        ...(await getAppDirectoryStore(env).coinsHistory(
-          appSession.user.user_id,
-          url.searchParams.get("limit") || 200,
-        )),
-      });
-    }
-
-    if (url.pathname === "/wallet/diamonds/convert" && request.method === "POST") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      try {
-        return json(await getAppDirectoryStore(env).convertDiamonds(
-          appSession.user.user_id,
-          body.diamonds,
-        ), 201);
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to convert diamonds") }, 400);
-      }
-    }
-
-    if (url.pathname === "/wallet/diamonds/history" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      return json({
-        ok: true,
-        ...(await getAppDirectoryStore(env).diamondHistory(
-          appSession.user.user_id,
-          url.searchParams.get("limit") || 200,
-        )),
-      });
-    }
-
-    if (url.pathname === "/wallet/role-detail" && request.method === "GET") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      try {
-        return json({
-          ok: true,
-          wallet: await getAppDirectoryStore(env).roleWalletDetail(
-            appSession.user.user_id,
-            url.searchParams.get("wallet_type") || "",
-            url.searchParams.get("limit") || 200,
-          ),
-        });
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to load role wallet") }, 400);
-      }
-    }
-
-    if (url.pathname === "/wallet/role-dollars/transfer" && request.method === "POST") {
-      const appSession = await verifyAppSession(request, env);
-      if (!appSession) return json({ ok: false, error: "Unauthorized" }, 401);
-      const body = await request.json().catch(() => ({}));
-      try {
-        return json(await getAppDirectoryStore(env).transferRoleDollars(
-          appSession.user.user_id,
-          body.wallet_type,
-          body.destination_type,
-          body.recipient_user_id,
-          body.usd_cents,
-          body.password,
-          body.request_id,
-        ), 201);
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to transfer dollars") }, 400);
       }
     }
 

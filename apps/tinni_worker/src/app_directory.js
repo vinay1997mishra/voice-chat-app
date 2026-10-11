@@ -5430,17 +5430,6 @@ export class AppDirectoryStore extends DurableObject {
     );
   }
 
-  async listUsers() {
-    return this.ctx.storage.sql.exec(
-      `SELECT user_id, google_sub, email, display_name, age, signature,
-              country_code, country_name, flag_emoji, gender, avatar_data_url,
-              created_at, updated_at
-         FROM app_users
-        ORDER BY created_at DESC
-        LIMIT 500`,
-    ).toArray().map(rowToUser);
-  }
-
   async updateUserProfile(userIdValue, input) {
     const userId = String(userIdValue || "").trim();
     const current = await this.getUserById(userId);
@@ -6264,16 +6253,6 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, ...this.roomMembershipState(roomId, userId) };
   }
 
-  isRoomMember(roomIdValue, userIdValue) {
-    const roomId = String(roomIdValue || "").trim();
-    const userId = String(userIdValue || "").trim();
-    if (!roomId || !userId) return false;
-    return Boolean(this.ctx.storage.sql.exec(
-      "SELECT 1 AS yes FROM room_memberships WHERE room_id = ? AND user_id = ? LIMIT 1", roomId, userId,
-    ).toArray()[0]);
-  }
-
-
   _ensureRocketTables() {
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS rocket_room_boosts (
@@ -7038,13 +7017,6 @@ export class AppDirectoryStore extends DurableObject {
       if (randomValue < cursor) return entry.multiplier;
     }
     return 0;
-  }
-
-  _rollLuckyMultiplier(configValue = null) {
-    const table = this._luckyMultiplierTable(configValue);
-    if (table.totalWeight <= 0) return 0;
-    const raw = crypto.getRandomValues(new Uint32Array(1))[0];
-    return this._pickLuckyMultiplier(raw, table);
   }
 
   _rollLuckyBatch(quantityValue, configValue = null) {
@@ -9187,10 +9159,6 @@ export class AppDirectoryStore extends DurableObject {
       status,
       wallet: this.roleWalletDetail(senderId, walletType),
     };
-  }
-
-  ownerCompanyDollarState(limitValue = 500) {
-    return this._companyDollarState(limitValue);
   }
 
   frameCatalog(countryCodeValue = "") {
