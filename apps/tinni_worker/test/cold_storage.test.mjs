@@ -80,14 +80,36 @@ test('capacity reservations serialize writes and stop before the conservative R2
   const r=runtime();t.after(r.close);await cold.inventoryStorage(r.directory);
   r.env.R2_BYTE_LIMIT_BYTES=100;
   await r.directory.reserveMediaBudget('test/a',60,'lease-a');
-  await assert.rejects(r.directory.reserveMediaBudget('test/b',60,'lease-b'),/Storage budget/);
+  await assert.rejects(r.directory.reserveMediaBudget('test/b',60,'lease-b'),/Storage capacity/);
   await assert.rejects(r.directory.reserveMediaBudget('test/a',10,'lease-c'),/UNIQUE/);
   r.directory.abortMediaBudget('lease-a',false);
   assert.equal(r.directory.storageStatus().used_bytes,0);
   await cold.managedMediaPut(r.env,'test/a',new Uint8Array(60),{});
-  await assert.rejects(cold.managedMediaPut(r.env,'test/b',new Uint8Array(60),{}),/Storage budget/);
+  await assert.rejects(cold.managedMediaPut(r.env,'test/b',new Uint8Array(60),{}),/Storage capacity/);
   assert.equal(r.mediaObjects.get('test/a').bytes.byteLength,60);
 });
+test('pending inventory does not pause media uploads through the shared storage gate',async t=>{
+  const r=runtime();t.after(r.close);await cold.inventoryStorage(r.directory);
+  r.env.R2_BYTE_LIMIT_BYTES=100;
+  sql(r,`UPDATE storage_budget
+    SET known=0,scanning=1,used_bytes=20,scan_bytes=30,cursor='next-page',scan_bucket=0
+    WHERE id=1`);
+  await cold.managedMediaPut(r.env,'profiles/test/cover',new Uint8Array(10),{});
+  const after=r.directory.storageStatus();
+  assert.equal(after.scanning,0);
+  assert.equal(after.known,0);
+  assert.equal(after.used_bytes,30);
+  assert.equal(r.mediaObjects.get('profiles/test/cover').bytes.byteLength,10);
+
+  sql(r,`UPDATE storage_budget
+    SET known=0,scanning=1,used_bytes=30,scan_bytes=95,cursor='next-page',scan_bucket=0
+    WHERE id=1`);
+  await assert.rejects(
+    cold.managedMediaPut(r.env,'profiles/test/life_1',new Uint8Array(10),{}),
+    /Storage capacity/,
+  );
+});
+
 test('failed or abandoned upload is reconciled before further writes',async t=>{
   const r=runtime();t.after(r.close);await cold.inventoryStorage(r.directory);
   const put=r.env.EFFECT_MEDIA.put;
@@ -203,6 +225,6 @@ test('new inline signup DP is verified in R2 before inserting small SQL profile 
   assert.equal(sql(r,"SELECT avatar_data_url FROM app_users WHERE user_id=?",account.user_id).one().avatar_data_url,account.avatar_data_url);
   assert.deepEqual([...r.mediaObjects.get('profiles/'+account.user_id+'/avatar').bytes],[1,2,3,4]);
   r.env.R2_BYTE_LIMIT_BYTES=1;
-  await assert.rejects(r.directory.createUser({...input,auth_subject:'over-budget-avatar',email:'other@example.test'}),/Storage budget/);
+  await assert.rejects(r.directory.createUser({...input,auth_subject:'over-budget-avatar',email:'other@example.test'}),/Storage capacity/);
   assert.equal(sql(r,"SELECT COUNT(*) n FROM app_users WHERE email='other@example.test'").one().n,0);
 });
