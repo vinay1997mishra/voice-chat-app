@@ -181,6 +181,35 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     return provider;
   }
 
+  Widget _roomPhotoAvatar({
+    required double radius,
+    required Widget fallback,
+    Color backgroundColor = const Color(0xFF171019),
+  }) {
+    final provider = _roomPhotoProvider;
+    final fallbackBox = Container(
+      width: radius * 2,
+      height: radius * 2,
+      alignment: Alignment.center,
+      color: backgroundColor,
+      child: fallback,
+    );
+    if (provider == null) {
+      return ClipOval(child: fallbackBox);
+    }
+    return ClipOval(
+      child: SizedBox.square(
+        dimension: radius * 2,
+        child: Image(
+          image: provider,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, _, _) => fallbackBox,
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -5185,21 +5214,18 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                   ),
                   child: Row(
                     children: [
-                      CircleAvatar(
+                      _roomPhotoAvatar(
                         radius: 25,
                         backgroundColor: const Color(0xFF151018),
-                        backgroundImage: _roomPhotoProvider,
-                        child: _roomPhotoProvider == null
-                            ? Text(
-                                _roomTitle.isEmpty
-                                    ? '?'
-                                    : _roomTitle.characters.first.toUpperCase(),
-                                style: const TextStyle(
-                                  color: RoyalPalette.cream,
-                                  fontWeight: FontWeight.w900,
-                                ),
-                              )
-                            : null,
+                        fallback: Text(
+                          _roomTitle.isEmpty
+                              ? '?'
+                              : _roomTitle.characters.first.toUpperCase(),
+                          style: const TextStyle(
+                            color: RoyalPalette.cream,
+                            fontWeight: FontWeight.w900,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 10),
                       Expanded(
@@ -6985,16 +7011,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             children: [
               ListTile(
                 contentPadding: EdgeInsets.zero,
-                leading: CircleAvatar(
+                leading: _roomPhotoAvatar(
                   radius: 29,
-                  backgroundColor: const Color(0xFF171019),
-                  backgroundImage: _roomPhotoProvider,
-                  child: _roomPhotoProvider == null
-                      ? const Icon(
-                          Icons.meeting_room_rounded,
-                          color: RoyalPalette.gold,
-                        )
-                      : null,
+                  fallback: const Icon(
+                    Icons.meeting_room_rounded,
+                    color: RoyalPalette.gold,
+                  ),
                 ),
                 title: Text(
                   _roomTitle,
@@ -7375,15 +7397,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             Widget ownerFallbackTile() {
               return ListTile(
                 key: const Key('room-owner-admin-row'),
-                leading: CircleAvatar(
-                  backgroundColor: const Color(0xFF171019),
-                  backgroundImage: _roomPhotoProvider,
-                  child: _roomPhotoProvider == null
-                      ? const Icon(
-                          Icons.person_rounded,
-                          color: RoyalPalette.cream,
-                        )
-                      : null,
+                leading: _roomPhotoAvatar(
+                  radius: 20,
+                  fallback: const Icon(
+                    Icons.person_rounded,
+                    color: RoyalPalette.cream,
+                  ),
                 ),
                 title: Text(
                   room.ownerName ?? 'Room Owner',
@@ -7649,10 +7668,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         builder: (pageContext) => StatefulBuilder(
           builder: (pageContext, setPageState) {
             ImageProvider? pendingPhotoProvider;
-            if (pendingPhoto != null &&
-                pendingPhoto!.startsWith('data:image/')) {
+            final pendingSource = pendingPhoto?.trim() ?? '';
+            if (pendingSource.startsWith('data:image/') ||
+                pendingSource.startsWith('https://') ||
+                pendingSource.startsWith('http://')) {
               try {
-                pendingPhotoProvider = stableImageProvider(pendingPhoto);
+                pendingPhotoProvider = stableImageProvider(pendingSource);
               } catch (_) {
                 pendingPhotoProvider = null;
               }
@@ -7703,17 +7724,36 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           pendingPhoto = dataUrl;
                         });
                       },
-                      child: CircleAvatar(
-                        radius: 46,
-                        backgroundColor: const Color(0xFF171019),
-                        backgroundImage: pendingPhotoProvider,
-                        child: pendingPhotoProvider == null
-                            ? const Icon(
-                                Icons.add_a_photo_rounded,
-                                color: RoyalPalette.cream,
-                                size: 28,
-                              )
-                            : null,
+                      child: ClipOval(
+                        child: SizedBox.square(
+                          dimension: 92,
+                          child: pendingPhotoProvider == null
+                              ? const ColoredBox(
+                                  color: Color(0xFF171019),
+                                  child: Center(
+                                    child: Icon(
+                                      Icons.add_a_photo_rounded,
+                                      color: RoyalPalette.cream,
+                                      size: 28,
+                                    ),
+                                  ),
+                                )
+                              : Image(
+                                  image: pendingPhotoProvider,
+                                  fit: BoxFit.cover,
+                                  gaplessPlayback: true,
+                                  errorBuilder: (_, _, _) => const ColoredBox(
+                                    color: Color(0xFF171019),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.add_a_photo_rounded,
+                                        color: RoyalPalette.cream,
+                                        size: 28,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                        ),
                       ),
                     ),
                   ),
@@ -8946,17 +8986,14 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   RepaintBoundary(
-                    child: CircleAvatar(
+                    child: _roomPhotoAvatar(
                       radius: 20,
                       backgroundColor: const Color(0xFF100A19),
-                      backgroundImage: _roomPhotoProvider,
-                      child: _roomPhotoProvider == null
-                          ? const Icon(
-                              Icons.meeting_room_rounded,
-                              color: Color(0xFFD7C7FF),
-                              size: 18,
-                            )
-                          : null,
+                      fallback: const Icon(
+                        Icons.meeting_room_rounded,
+                        color: Color(0xFFD7C7FF),
+                        size: 18,
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
