@@ -12452,7 +12452,7 @@ export class AppDirectoryStore extends DurableObject {
     };
   }
 
-    setRoomTheme(ownerIdValue, roomIdValue, input) {
+    async setRoomTheme(ownerIdValue, roomIdValue, input) {
     const ownerId = String(ownerIdValue || "").trim();
     const roomId = String(roomIdValue || "").trim();
     const themeId = String(input?.theme_id || "").trim();
@@ -12527,6 +12527,12 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
 
     this._notifyRoomChanged(roomId);
+    try {
+      await this.env.ROOM_PRESENCE
+        .get(this.env.ROOM_PRESENCE.idFromName(roomId))
+        .updateRoomDetails(rowToRoom(updated));
+    } catch {}
+
     return { ok: true, room: rowToRoom(updated) };
   }
 
