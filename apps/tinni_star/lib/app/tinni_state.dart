@@ -238,6 +238,21 @@ class TinniState {
       final serverUserId = user['user_id']?.toString().trim() ?? '';
       if (serverUserId.isEmpty) return false;
 
+      // The R2 profile-media slot is the canonical current-user avatar.
+      // Account/profile SQL can temporarily contain an older URL after
+      // replacement, ID migration or cache restoration, so refresh it here
+      // once and let every screen consume the same verified source.
+      String? verifiedAvatar =
+          user['avatar_data_url']?.toString() ?? account.avatarDataUrl;
+      try {
+        final media = await backend.profileMedia(account.authToken);
+        if (auth.current?.authToken != account.authToken) return false;
+        verifiedAvatar = media['avatar'];
+      } catch (_) {
+        // Keep the server account value if media verification is temporarily
+        // unavailable; normal account refresh must still succeed.
+      }
+
       int readInt(dynamic value, int fallback) {
         if (value is int) return value;
         if (value is num) return value.toInt();
@@ -255,8 +270,7 @@ class TinniState {
         countryName: user['country_name']?.toString() ?? account.countryName,
         flagEmoji: user['flag_emoji']?.toString() ?? account.flagEmoji,
         gender: user['gender']?.toString() ?? account.gender,
-        avatarDataUrl:
-            user['avatar_data_url']?.toString() ?? account.avatarDataUrl,
+        avatarDataUrl: verifiedAvatar,
         providers: account.providers,
         authToken: account.authToken,
       );
