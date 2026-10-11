@@ -4124,6 +4124,22 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
   }
 
+  _creditRoleDollars(userIdValue, walletTypeValue, usdCentsValue) {
+    const cents = Math.max(0, Math.floor(Number(usdCentsValue || 0)));
+    if (cents <= 0) return this._ensureRoleDollarBalance(userIdValue, walletTypeValue);
+    const row = this._ensureRoleDollarBalance(userIdValue, walletTypeValue);
+    this.ctx.storage.sql.exec(
+      "UPDATE role_dollar_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=? AND wallet_type=?",
+      cents, Date.now(), this._resolveOwnerUserId(userIdValue),
+      String(walletTypeValue || "").trim().toLowerCase(),
+    );
+    this._notifyAccountChanged(this._resolveOwnerUserId(userIdValue));
+    return {
+      before: Math.max(0, Number(row?.usd_cents || 0)),
+      after: Math.max(0, Number(row?.usd_cents || 0)) + cents,
+    };
+  }
+
   _recordHostEligibleGift(hostUserIdValue, receivedCoinsValue, nowValue = Date.now()) {
     const hostUserId = this._resolveOwnerUserId(hostUserIdValue);
     const receivedCoins = Math.max(0, Math.floor(Number(receivedCoinsValue || 0)));
@@ -8767,6 +8783,15 @@ export class AppDirectoryStore extends DurableObject {
     return this.ctx.storage.sql.exec(
       "SELECT provider,subject,created_at FROM app_user_identities WHERE user_id=? ORDER BY created_at ASC", userId,
     ).toArray().map((row)=>({provider:String(row.provider),subject:String(row.subject),created_at:Number(row.created_at)}));
+  }
+
+  async walletTransactions(userIdValue,limitValue=200,beforeValue=Number.MAX_SAFE_INTEGER) {
+    const userId=this._resolveOwnerUserId(userIdValue);
+    return (await coldStorage.walletHistory(this,userId,limitValue,beforeValue)).map(row=>({
+      id:String(row.id),kind:String(row.kind),coins_delta:Number(row.coins_delta||0),
+      diamonds_delta:Number(row.diamonds_delta||0),reference_id:row.reference_id?String(row.reference_id):null,
+      note:String(row.note||""),created_at:Number(row.created_at)
+    }));
   }
 
   coinsHistory(userIdValue, limitValue = 200) {
