@@ -39,6 +39,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
   bool loading = true;
   bool sending = false;
   bool sendingImage = false;
+  Uint8List? _pendingOutgoingImage;
+  DateTime? _pendingOutgoingImageAt;
   bool checkingIncoming = false;
   String? errorText;
   CallSession? incomingCall;
@@ -613,6 +615,8 @@ class _MessagesScreenState extends State<MessagesScreen> {
     if (account == null) return;
     setState(() {
       sendingImage = true;
+      _pendingOutgoingImage = bytes;
+      _pendingOutgoingImageAt = DateTime.now();
       errorText = null;
     });
     try {
@@ -622,11 +626,20 @@ class _MessagesScreenState extends State<MessagesScreen> {
         to: _targetUserId,
         dataUrl: 'data:' + mimeType + ';base64,' + base64Encode(bytes),
       );
-      if (mounted) setState(() {});
+      if (mounted) {
+        setState(() {
+          _pendingOutgoingImage = null;
+          _pendingOutgoingImageAt = null;
+        });
+      }
     } catch (error) {
       if (!mounted) return;
       final message = error.toString().replaceFirst('Bad state: ', '');
-      setState(() => errorText = message);
+      setState(() {
+        errorText = message;
+        _pendingOutgoingImage = null;
+        _pendingOutgoingImageAt = null;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(message)),
       );
@@ -1105,8 +1118,70 @@ class _MessagesScreenState extends State<MessagesScreen> {
                     onRefresh: _load,
                     child: ListView.builder(
                       padding: const EdgeInsets.all(12),
-                      itemCount: messages.length,
+                      itemCount: messages.length +
+                          (_pendingOutgoingImage == null ? 0 : 1),
                       itemBuilder: (_, index) {
+                        if (index == messages.length &&
+                            _pendingOutgoingImage != null) {
+                          return Align(
+                            alignment: Alignment.centerRight,
+                            child: Container(
+                              key: const Key('message-pending-photo'),
+                              constraints: const BoxConstraints(maxWidth: 300),
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(11),
+                              decoration: BoxDecoration(
+                                gradient: FeaturePalette.glow(
+                                  FeaturePalette.social,
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(
+                                  color: FeaturePalette.social
+                                      .withValues(alpha: 0.70),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Image.memory(
+                                      _pendingOutgoingImage!,
+                                      width: 230,
+                                      height: 250,
+                                      fit: BoxFit.cover,
+                                      gaplessPlayback: true,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _timeLabel(_pendingOutgoingImageAt),
+                                        style: const TextStyle(
+                                          color: RoyalPalette.muted,
+                                          fontSize: 9,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      const Text(
+                                        'Sending…',
+                                        style: TextStyle(
+                                          color: RoyalPalette.muted,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
                         final message = messages[index];
                         final mine = message.from == _myUserId;
                         final verificationNotice = _isOfficial &&
