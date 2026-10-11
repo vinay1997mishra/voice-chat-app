@@ -424,7 +424,12 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       widget.state.profile.loadFromAccount(updated);
       await widget.state.authPersistence?.save(updated);
       if (!mounted) return;
-      setState(() {});
+      setState(() {
+        media = <String, String?>{
+          ...media,
+          'avatar': updated.avatarDataUrl,
+        };
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Profile updated.')),
       );
@@ -447,7 +452,8 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       return const Scaffold(body: Center(child: Text('Login required')));
     }
 
-    final avatar = _provider(account.avatarDataUrl);
+    // Prefer the verified R2 media slot when available; the account URL can be stale.
+    final avatar = _provider(media['avatar'] ?? account.avatarDataUrl);
     final cover = _provider(media['cover']);
 
     return Scaffold(
@@ -495,23 +501,10 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
                     bottom: 12,
                     child: Row(
                       children: [
-                        CircleAvatar(
-                          radius: 34,
-                          backgroundColor: RoyalPalette.nearBlack,
-                          backgroundImage: avatar,
-                          child: avatar == null
-                              ? Text(
-                                  account.displayName.isEmpty
-                                      ? '?'
-                                      : account.displayName.characters.first
-                                          .toUpperCase(),
-                                  style: const TextStyle(
-                                    color: RoyalPalette.gold,
-                                    fontWeight: FontWeight.w900,
-                                    fontSize: 24,
-                                  ),
-                                )
-                              : null,
+                        _PersonalAvatar(
+                          size: 68,
+                          image: avatar,
+                          displayName: account.displayName,
                         ),
                         const SizedBox(width: 10),
                         Container(
@@ -855,6 +848,49 @@ class _InfoRow extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+
+class _PersonalAvatar extends StatelessWidget {
+  const _PersonalAvatar({
+    required this.size,
+    required this.image,
+    required this.displayName,
+  });
+
+  final double size;
+  final ImageProvider? image;
+  final String displayName;
+
+  @override
+  Widget build(BuildContext context) {
+    final fallback = Container(
+      width: size,
+      height: size,
+      alignment: Alignment.center,
+      color: RoyalPalette.nearBlack,
+      child: Text(
+        displayName.isEmpty ? '?' : displayName.characters.first.toUpperCase(),
+        style: TextStyle(
+          color: RoyalPalette.gold,
+          fontSize: size * 0.38,
+          fontWeight: FontWeight.w900,
+        ),
+      ),
+    );
+    if (image == null) return ClipOval(child: fallback);
+    return ClipOval(
+      child: SizedBox(
+        width: size,
+        height: size,
+        child: Image(
+          image: image!,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => fallback,
+        ),
       ),
     );
   }
