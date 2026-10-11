@@ -4124,22 +4124,6 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray()[0];
   }
 
-  _creditRoleDollars(userIdValue, walletTypeValue, usdCentsValue) {
-    const cents = Math.max(0, Math.floor(Number(usdCentsValue || 0)));
-    if (cents <= 0) return this._ensureRoleDollarBalance(userIdValue, walletTypeValue);
-    const row = this._ensureRoleDollarBalance(userIdValue, walletTypeValue);
-    this.ctx.storage.sql.exec(
-      "UPDATE role_dollar_balances SET usd_cents=usd_cents+?,updated_at=? WHERE user_id=? AND wallet_type=?",
-      cents, Date.now(), this._resolveOwnerUserId(userIdValue),
-      String(walletTypeValue || "").trim().toLowerCase(),
-    );
-    this._notifyAccountChanged(this._resolveOwnerUserId(userIdValue));
-    return {
-      before: Math.max(0, Number(row?.usd_cents || 0)),
-      after: Math.max(0, Number(row?.usd_cents || 0)) + cents,
-    };
-  }
-
   _recordHostEligibleGift(hostUserIdValue, receivedCoinsValue, nowValue = Date.now()) {
     const hostUserId = this._resolveOwnerUserId(hostUserIdValue);
     const receivedCoins = Math.max(0, Math.floor(Number(receivedCoinsValue || 0)));
@@ -5430,17 +5414,6 @@ export class AppDirectoryStore extends DurableObject {
     );
   }
 
-  async listUsers() {
-    return this.ctx.storage.sql.exec(
-      `SELECT user_id, google_sub, email, display_name, age, signature,
-              country_code, country_name, flag_emoji, gender, avatar_data_url,
-              created_at, updated_at
-         FROM app_users
-        ORDER BY created_at DESC
-        LIMIT 500`,
-    ).toArray().map(rowToUser);
-  }
-
   async updateUserProfile(userIdValue, input) {
     const userId = String(userIdValue || "").trim();
     const current = await this.getUserById(userId);
@@ -6264,16 +6237,6 @@ export class AppDirectoryStore extends DurableObject {
     return { ok: true, ...this.roomMembershipState(roomId, userId) };
   }
 
-  isRoomMember(roomIdValue, userIdValue) {
-    const roomId = String(roomIdValue || "").trim();
-    const userId = String(userIdValue || "").trim();
-    if (!roomId || !userId) return false;
-    return Boolean(this.ctx.storage.sql.exec(
-      "SELECT 1 AS yes FROM room_memberships WHERE room_id = ? AND user_id = ? LIMIT 1", roomId, userId,
-    ).toArray()[0]);
-  }
-
-
   _ensureRocketTables() {
     this.ctx.storage.sql.exec(`
       CREATE TABLE IF NOT EXISTS rocket_room_boosts (
@@ -7038,13 +7001,6 @@ export class AppDirectoryStore extends DurableObject {
       if (randomValue < cursor) return entry.multiplier;
     }
     return 0;
-  }
-
-  _rollLuckyMultiplier(configValue = null) {
-    const table = this._luckyMultiplierTable(configValue);
-    if (table.totalWeight <= 0) return 0;
-    const raw = crypto.getRandomValues(new Uint32Array(1))[0];
-    return this._pickLuckyMultiplier(raw, table);
   }
 
   _rollLuckyBatch(quantityValue, configValue = null) {
@@ -8813,15 +8769,6 @@ export class AppDirectoryStore extends DurableObject {
     ).toArray().map((row)=>({provider:String(row.provider),subject:String(row.subject),created_at:Number(row.created_at)}));
   }
 
-  async walletTransactions(userIdValue,limitValue=200,beforeValue=Number.MAX_SAFE_INTEGER) {
-    const userId=this._resolveOwnerUserId(userIdValue);
-    return (await coldStorage.walletHistory(this,userId,limitValue,beforeValue)).map(row=>({
-      id:String(row.id),kind:String(row.kind),coins_delta:Number(row.coins_delta||0),
-      diamonds_delta:Number(row.diamonds_delta||0),reference_id:row.reference_id?String(row.reference_id):null,
-      note:String(row.note||""),created_at:Number(row.created_at)
-    }));
-  }
-
   coinsHistory(userIdValue, limitValue = 200) {
     const userId = this._resolveOwnerUserId(userIdValue);
     const limit = Math.max(1, Math.min(500, Number(limitValue) || 200));
@@ -9187,10 +9134,6 @@ export class AppDirectoryStore extends DurableObject {
       status,
       wallet: this.roleWalletDetail(senderId, walletType),
     };
-  }
-
-  ownerCompanyDollarState(limitValue = 500) {
-    return this._companyDollarState(limitValue);
   }
 
   frameCatalog(countryCodeValue = "") {
