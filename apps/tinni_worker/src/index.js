@@ -6377,51 +6377,6 @@ export default {
       });
     }
 
-    if (url.pathname === "/api/owner/inbox-threads" && request.method === "GET") {
-      if (
-        !sessionHasPermission(session, "users.full_dashboard") ||
-        !sessionHasPermission(session, "messaging.view_inbox")
-      ) {
-        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
-      }
-      const userId = String(url.searchParams.get("user_id") || "").trim();
-      if (!userId) return json({ ok: false, error: "user_id is required" }, 400);
-      try {
-        return json({
-          ok: true,
-          threads: await getAppDirectoryStore(env).ownerInboxThreads(userId),
-        });
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to load inbox") }, 400);
-      }
-    }
-
-    if (url.pathname === "/api/owner/inbox-conversation" && request.method === "GET") {
-      if (
-        !sessionHasPermission(session, "users.full_dashboard") ||
-        !sessionHasPermission(session, "messaging.view_inbox")
-      ) {
-        return json({ ok: false, error: "Full ID inbox permission required" }, 403);
-      }
-      const userId = String(url.searchParams.get("user_id") || "").trim();
-      const peerUserId = String(url.searchParams.get("peer_user_id") || "").trim();
-      if (!userId || !peerUserId) {
-        return json({ ok: false, error: "user_id and peer_user_id are required" }, 400);
-      }
-      try {
-        return json({
-          ok: true,
-          messages: await getAppDirectoryStore(env).ownerInboxConversation(
-            userId,
-            peerUserId,
-            url.searchParams.get("limit") || 500,
-          ),
-        });
-      } catch (error) {
-        return json({ ok: false, error: String(error?.message || "Unable to load conversation") }, 400);
-      }
-    }
-
     if (url.pathname === "/api/owner/hierarchy-detail" && request.method === "GET") {
       if (!sessionHasPermission(session, "users.full_dashboard") ||
           !sessionHasPermission(session, "hierarchy.view_details")) {
