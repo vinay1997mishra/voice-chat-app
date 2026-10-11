@@ -80,9 +80,9 @@ export function storageBudget(store) {
     limit_bytes:limit,
     observed_bytes:observed,
     inventory_pending:!state?.known||!!state?.scanning,
-    // Inventory work must never pause normal uploads. Only bytes already
-    // accounted for (or positively observed by an in-progress scan) can
-    // trip the safety limit.
+    // Shared gate for every Tinni media surface: inventory work must never
+    // pause normal uploads. Only bytes already accounted for (or positively
+    // observed by an in-progress scan) can trip the safety limit.
     write_blocked:observed>=limit,
   };
 }
