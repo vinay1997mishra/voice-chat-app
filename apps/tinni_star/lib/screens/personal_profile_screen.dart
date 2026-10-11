@@ -889,7 +889,7 @@ class _PersonalAvatar extends StatelessWidget {
         child: Image(
           image: image!,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => fallback,
+          errorBuilder: (_, _, _) => fallback,
         ),
       ),
     );
