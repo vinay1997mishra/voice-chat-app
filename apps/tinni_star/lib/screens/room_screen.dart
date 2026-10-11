@@ -773,9 +773,13 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     }
 
     final account = widget.state.auth.current;
-    final avatarSource = member != null ? member.avatarDataUrl
-        : (message.userId != null && message.userId == account?.userId)
-            ? account?.avatarDataUrl : message.avatarDataUrl;
+    final isCurrentUser = message.userId != null &&
+        message.userId == account?.userId;
+    final avatarSource = isCurrentUser
+        ? account?.avatarDataUrl
+        : member != null
+            ? member.avatarDataUrl
+            : message.avatarDataUrl;
     final avatar = stableImageProvider(avatarSource);
     return Padding(
       padding: const EdgeInsets.only(bottom: 9),
@@ -1223,10 +1227,39 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
     );
   }
 
+  void _syncLiveRoomVisualState() {
+    final live = widget.state.roomSession.presence.latestRoomDetails;
+    if (live == null || live['id']?.toString() != widget.room.id) return;
+
+    final controls = widget.state.roomControls;
+    final seatTheme = live['seat_theme_id']?.toString() ?? '';
+    if (RoomControlService.availableSeatThemes.contains(seatTheme) &&
+        controls.seatThemeId != seatTheme) {
+      controls.setSeatTheme(seatTheme);
+    }
+
+    final themeId = live['theme_id']?.toString() ?? 'royal-dark';
+    final themeAsset = live['theme_asset']?.toString().trim() ?? '';
+    if (themeAsset.isNotEmpty) {
+      if (controls.themeId != themeId ||
+          controls.customThemeAsset != themeAsset) {
+        controls.setCustomTheme(themeId, themeAsset);
+        _cachedThemeSource = null;
+        _cachedThemeProvider = null;
+      }
+    } else if (RoomControlService.availableThemes.contains(themeId) &&
+        (controls.themeId != themeId || controls.customThemeAsset != null)) {
+      controls.setTheme(themeId);
+      _cachedThemeSource = null;
+      _cachedThemeProvider = null;
+    }
+  }
+
   void _refresh() {
     if (!mounted) return;
 
     final presence = widget.state.roomSession.presence;
+    _syncLiveRoomVisualState();
     widget.state.roomControls.setPublicScreenEnabled(
       presence.publicScreenEnabled,
     );
@@ -2227,6 +2260,17 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
 
     if (!mounted || selected == null) return;
 
+    final previousThemeId = controls.themeId;
+    final previousThemeAsset = controls.customThemeAsset;
+    if (selected.asset == null) {
+      controls.setTheme(selected.id);
+    } else {
+      controls.setCustomTheme(selected.id, selected.asset!);
+    }
+    _cachedThemeSource = null;
+    _cachedThemeProvider = null;
+    if (mounted) setState(() {});
+
     try {
       await widget.state.discovery.setRoomTheme(
         authToken: account.authToken,
@@ -2234,14 +2278,20 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
         themeId: selected.id,
         themeAsset: selected.asset,
       );
-      if (selected.asset == null) {
-        controls.setTheme(selected.id);
-      } else {
-        controls.setCustomTheme(selected.id, selected.asset!);
-      }
-      if (mounted) setState(() {});
       _snack('Room theme saved.');
     } catch (error) {
+      if (previousThemeAsset == null || previousThemeAsset.isEmpty) {
+        if (RoomControlService.availableThemes.contains(previousThemeId)) {
+          controls.setTheme(previousThemeId);
+        } else {
+          controls.setTheme('royal-dark');
+        }
+      } else {
+        controls.setCustomTheme(previousThemeId, previousThemeAsset);
+      }
+      _cachedThemeSource = null;
+      _cachedThemeProvider = null;
+      if (mounted) setState(() {});
       _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
   }
@@ -5659,16 +5709,33 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
       return;
     }
 
+    final previousPhoto = _roomPhotoDataUrl;
+    setState(() {
+      _roomPhotoOverride = dataUrl;
+      _cachedRoomPhotoSource = null;
+      _cachedRoomPhotoProvider = null;
+    });
     try {
       final updated = await widget.state.discovery.updateRoomRemote(
         authToken: account.authToken,
         roomId: widget.room.id,
         photoDataUrl: dataUrl,
       );
-      _roomPhotoOverride = updated.photoDataUrl;
+      if (!mounted) return;
+      setState(() {
+        _roomPhotoOverride = updated.photoDataUrl;
+        _cachedRoomPhotoSource = null;
+        _cachedRoomPhotoProvider = null;
+      });
       _snack('Room cover updated.');
-      if (mounted) setState(() {});
     } catch (error) {
+      if (mounted) {
+        setState(() {
+          _roomPhotoOverride = previousPhoto;
+          _cachedRoomPhotoSource = null;
+          _cachedRoomPhotoProvider = null;
+        });
+      }
       _snack(error.toString().replaceFirst('Bad state: ', ''));
     }
   }
@@ -7841,9 +7908,25 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                         return;
                       }
 
+                      final previousTitle = _roomTitle;
+                      final previousPhoto = _roomPhotoDataUrl;
+                      final previousAnnouncement = _roomAnnouncement;
+                      final photoChanged =
+                          pendingPhoto != _roomPhotoDataUrl;
+
+                      if (mounted) {
+                        setState(() {
+                          _roomTitleOverride = name;
+                          _roomAnnouncementOverride = notice;
+                          if (photoChanged) {
+                            _roomPhotoOverride = pendingPhoto;
+                            _cachedRoomPhotoSource = null;
+                            _cachedRoomPhotoProvider = null;
+                          }
+                        });
+                      }
+
                       try {
-                        final photoChanged =
-                            pendingPhoto != _roomPhotoDataUrl;
                         final updated =
                             await widget.state.discovery.updateRoomRemote(
                           authToken: account.authToken,
@@ -7853,17 +7936,31 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           photoDataUrl:
                               photoChanged ? pendingPhoto : null,
                         );
-                        _roomTitleOverride = updated.title;
-                        _roomPhotoOverride = updated.photoDataUrl;
-                        _roomAnnouncementOverride =
-                            updated.announcement;
-
-                        if (mounted) setState(() {});
+                        if (mounted) {
+                          setState(() {
+                            _roomTitleOverride = updated.title;
+                            _roomPhotoOverride = updated.photoDataUrl;
+                            _roomAnnouncementOverride =
+                                updated.announcement;
+                            _cachedRoomPhotoSource = null;
+                            _cachedRoomPhotoProvider = null;
+                          });
+                        }
                         if (pageContext.mounted) {
                           Navigator.pop(pageContext);
                         }
                         _snack('Room setup saved.');
                       } catch (error) {
+                        if (mounted) {
+                          setState(() {
+                            _roomTitleOverride = previousTitle;
+                            _roomPhotoOverride = previousPhoto;
+                            _roomAnnouncementOverride =
+                                previousAnnouncement;
+                            _cachedRoomPhotoSource = null;
+                            _cachedRoomPhotoProvider = null;
+                          });
+                        }
                         _snack(
                           error
                               .toString()
@@ -8509,10 +8606,12 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
             emoteUntil.isAfter(DateTime.now())
         ? presenceMember!.seatEmote
         : null;
-    final avatarData = (presenceMember?.avatarDataUrl?.trim().isNotEmpty ?? false)
-        ? presenceMember!.avatarDataUrl
-        : isMySeat
-            ? account?.avatarDataUrl
+    final ownAvatar = account?.avatarDataUrl?.trim() ?? '';
+    final memberAvatar = presenceMember?.avatarDataUrl?.trim() ?? '';
+    final avatarData = isMySeat && ownAvatar.isNotEmpty
+        ? account!.avatarDataUrl
+        : memberAvatar.isNotEmpty
+            ? presenceMember!.avatarDataUrl
             : null;
     final avatar = _roomAvatarProvider(avatarData);
     final compact = seatDiameter < 44;
@@ -9180,8 +9279,8 @@ class _RoomScreenState extends State<RoomScreen> with WidgetsBindingObserver {
                           'id': currentAccount.userId,
                           'name': currentMember?.displayName ??
                               currentAccount.displayName,
-                          'avatar': currentMember?.avatarDataUrl ??
-                              currentAccount.avatarDataUrl,
+                          'avatar': currentAccount.avatarDataUrl ??
+                              currentMember?.avatarDataUrl,
                         });
                       }
                       for (final member in live) {
