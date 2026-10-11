@@ -405,12 +405,23 @@ class _PersonalProfileScreenState extends State<PersonalProfileScreen> {
       final values = Map<String, dynamic>.from(result);
       final avatarValue = values['avatar_data_url']?.toString() ?? '';
       if (avatarValue.startsWith('data:image/')) {
-        values['avatar_data_url'] =
+        final uploadedAvatar =
             await widget.state.backend.uploadProfileMedia(
           account.authToken,
           slot: 'avatar',
           dataUrl: avatarValue,
         );
+        values['avatar_data_url'] = uploadedAvatar;
+        // The R2 slot is canonical. Show it immediately so a slower account
+        // profile PATCH cannot make a successfully uploaded DP look lost.
+        if (mounted) {
+          setState(() {
+            media = <String, String?>{
+              ...media,
+              'avatar': uploadedAvatar,
+            };
+          });
+        }
       }
       final row = await widget.state.backend.updateProfile(
         account.authToken,
