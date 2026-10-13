@@ -1,10 +1,9 @@
 name: TinniStar Artifact Cleanup
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - ".github/workflows/artifact-cleanup.yml"
+  workflow_run:
+    workflows: ["Tinni Star Android"]
+    types: [completed]
   workflow_dispatch:
   schedule:
     - cron: "23 2 * * *"
