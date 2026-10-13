@@ -272,15 +272,6 @@ jobs:
         working-directory: apps/tinni_star
         run: timeout --signal=TERM --kill-after=10s 600s flutter test --reporter expanded --timeout 45s --fail-fast
 
-      - name: Upload game layout previews
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: Tinni-Casino-Game-Previews
-          path: apps/tinni_star/build/game_previews/*.png
-          if-no-files-found: ignore
-
       - name: Publish Lucky effect review frames
         if: success()
         env:
@@ -414,15 +405,6 @@ jobs:
           path: apps/tinni_star/build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
           if-no-files-found: error
 
-      - name: Upload Tinni Star split APKs
-        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: Tinni-Star-Split-APKs
-          path: apps/tinni_star/build/app/outputs/flutter-apk/app-*-release.apk
-          if-no-files-found: error
-
       - name: Build separate Tinni Star Final APK
         if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
         working-directory: apps/tinni_star
@@ -458,33 +440,6 @@ jobs:
           python3 ../../tools/signing/verify_apk_certificate.py /tmp/tinni-final-apk-certs.txt
           "$AAPT" dump badging "$APK" | grep -F "package: name='com.tinnistar.tinni_star.finalapp'"
           "$AAPT" dump badging "$APK" | grep -F "application-label:'Tinni Star Final'"
-
-      - name: Upload one Tinni Star Final ARM64 APK
-        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: Tinni-Star-Final-ARM64
-          path: apps/tinni_star/build/final-apks/app-arm64-v8a-release.apk
-          if-no-files-found: error
-
-      - name: Upload separate Tinni Star Final APKs
-        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: Tinni-Star-Final-Separate-APKs
-          path: apps/tinni_star/build/final-apks/*.apk
-          if-no-files-found: error
-
-      - name: Upload provider readiness report
-        if: steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          overwrite: true
-          name: Tinni-Star-Final-Provider-Readiness
-          path: /tmp/tinni-app-readiness.json
-          if-no-files-found: error
 
       - name: Publish direct signed APK
         if: github.event_name == 'push' && github.ref == 'refs/heads/tinnistar' && steps.cinematic.outputs.ready == 'true' && steps.signing.outputs.ready == 'true'
