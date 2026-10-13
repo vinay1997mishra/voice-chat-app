@@ -1,0 +1,73 @@
+name: TinniStar Artifact Cleanup
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/artifact-cleanup.yml"
+  workflow_dispatch:
+  schedule:
+    - cron: "23 2 * * *"
+
+permissions:
+  actions: write
+  contents: read
+
+concurrency:
+  group: tinnistar-artifact-cleanup
+  cancel-in-progress: true
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Keep latest Tinnistar artifact set and delete older artifacts
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const targetBranch = "tinnistar";
+
+            const artifacts = await github.paginate(
+              github.rest.actions.listArtifactsForRepo,
+              { owner, repo, per_page: 100 }
+            );
+
+            const active = artifacts
+              .filter(a => !a.expired)
+              .filter(a => a.workflow_run?.head_branch === targetBranch)
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            if (active.length === 0) {
+              core.info("No active Tinnistar artifacts found.");
+              return;
+            }
+
+            const latestRunId = active[0].workflow_run?.id;
+            if (!latestRunId) {
+              throw new Error("Latest artifact has no workflow run id.");
+            }
+
+            const keep = active.filter(a => a.workflow_run?.id === latestRunId);
+            const remove = active.filter(a => a.workflow_run?.id !== latestRunId);
+
+            core.info(`Keeping latest Tinnistar run ${latestRunId} with ${keep.length} artifact(s).`);
+            for (const a of keep) {
+              core.info(`KEEP ${a.id} ${a.name} ${a.size_in_bytes} bytes`);
+            }
+
+            let deleted = 0;
+            let freed = 0;
+            for (const a of remove) {
+              await github.rest.actions.deleteArtifact({
+                owner,
+                repo,
+                artifact_id: a.id,
+              });
+              deleted += 1;
+              freed += Number(a.size_in_bytes || 0);
+              core.info(`DELETE ${a.id} ${a.name}`);
+            }
+
+            core.info(`Deleted ${deleted} old Tinnistar artifact(s), freed approximately ${freed} bytes.`);
